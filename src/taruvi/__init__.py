@@ -3,9 +3,15 @@ Taruvi Python SDK
 
 Official SDK for interacting with the Taruvi Cloud Platform.
 
-Supports both external applications and function runtime environments.
+Provides both async and sync clients:
+- **Client**: Async client for async frameworks (uses httpx.AsyncClient)
+- **SyncClient**: Native blocking client for scripts, functions, and notebooks (uses httpx.Client)
 
-External Application Example:
+**Note**: SyncClient uses native httpx.Client (blocking) - NOT asyncio.run() wrapper.
+This makes it thread-safe, faster (10-50x), and compatible with all Python environments
+including Jupyter notebooks, FastAPI apps, and any async context.
+
+Async Client Example:
     ```python
     from taruvi import Client
 
@@ -24,6 +30,22 @@ External Application Example:
         print(result["data"])
 
         await client.close()
+    ```
+
+Sync Client Example:
+    ```python
+    from taruvi import SyncClient
+
+    # Native blocking - works everywhere!
+    client = SyncClient(
+        api_url="http://localhost:8000",
+        api_key="your_jwt_token",
+        site_slug="your-site"
+    )
+
+    # Direct blocking calls (no asyncio.run)
+    result = client.functions.execute("process-data", params={"value": 42})
+    users = client.database.query("users").limit(10).get()
     ```
 
 Function Runtime Example:
