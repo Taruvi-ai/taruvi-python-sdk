@@ -225,3 +225,49 @@ class TaruviConfig(BaseSettings):
         if data.get("user_jwt"):
             data["user_jwt"] = "***REDACTED***"
         return data
+
+    @classmethod
+    def from_runtime_and_params(cls, **explicit_params) -> "TaruviConfig":
+        """
+        Create config from runtime environment and explicit parameters.
+
+        Merges configuration from three sources (priority order):
+        1. Explicit parameters (highest)
+        2. Environment variables
+        3. .env file
+        4. Default values (lowest)
+
+        Pydantic automatically handles precedence.
+
+        Args:
+            **explicit_params: Explicitly provided parameters
+
+        Returns:
+            TaruviConfig: Merged configuration
+
+        Example:
+            ```python
+            config = TaruviConfig.from_runtime_and_params(
+                api_key="explicit_token",  # Overrides env vars
+                site_slug=None  # Uses env var if available
+            )
+            ```
+        """
+        # Import here to avoid circular dependency
+        from taruvi.runtime import detect_runtime, load_config_from_runtime
+
+        runtime_mode = detect_runtime()
+
+        if runtime_mode == RuntimeMode.FUNCTION:
+            # Load runtime config from environment
+            runtime_config = load_config_from_runtime()
+
+            # Merge: explicit params override runtime config
+            # Filter None values from explicit params to allow runtime fallback
+            filtered_params = {k: v for k, v in explicit_params.items() if v is not None}
+            merged = {**runtime_config, **filtered_params}
+
+            return cls(**merged)
+        else:
+            # EXTERNAL mode - use explicit params + env vars (Pydantic handles it)
+            return cls(**explicit_params)

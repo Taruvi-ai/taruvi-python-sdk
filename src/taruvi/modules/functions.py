@@ -8,22 +8,75 @@ Provides methods for:
 - Managing function invocations
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, Optional
+
+from taruvi.models.functions import (
+    FunctionResponse,
+    FunctionExecutionResult,
+    FunctionListResponse,
+    InvocationResponse
+)
 
 if TYPE_CHECKING:
     from taruvi.client import Client
+    from taruvi.sync_client import SyncClient
 
+# API endpoint paths for functions
+_FUNCTIONS_BASE = "/api/apps/{app_slug}/functions/"
+_FUNCTION_DETAIL = "/api/apps/{app_slug}/functions/{function_slug}/"
+_FUNCTION_EXECUTE = "/api/apps/{app_slug}/functions/{function_slug}/execute/"
+_INVOCATIONS_LIST = "/api/apps/{app_slug}/invocations/"
+_INVOCATION_DETAIL = "/api/apps/{app_slug}/invocations/{invocation_id}/"
+
+
+# ============================================================================
+# Shared Implementation Logic
+# ============================================================================
+
+def _build_execute_request(
+    params: Optional[dict[str, Any]],
+    is_async: bool
+) -> dict[str, Any]:
+    """Build function execution request body."""
+    return {
+        "params": params or {},
+        "async": is_async,
+    }
+
+
+def _build_list_params(limit: int, offset: int) -> dict[str, int]:
+    """Build list request params."""
+    return {"limit": limit, "offset": offset}
+
+
+def _build_invocations_params(
+    function_slug: Optional[str],
+    status: Optional[str],
+    limit: int,
+    offset: int
+) -> dict[str, Any]:
+    """Build invocations list params."""
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    
+    if function_slug:
+        params["function_slug"] = function_slug
+    if status:
+        params["status"] = status
+    
+    return params
+
+
+# ============================================================================
+# Async Implementation
+# ============================================================================
 
 class FunctionsModule:
     """Functions API operations."""
 
     def __init__(self, client: "Client") -> None:
-        """
-        Initialize Functions module.
-
-        Args:
-            client: Taruvi client instance
-        """
+        """Initialize Functions module."""
         self.client = client
         self._http = client._http_client
         self._config = client._config
@@ -36,67 +89,40 @@ class FunctionsModule:
         app_slug: Optional[str] = None,
         is_async: bool = False,
         timeout: Optional[int] = None,
-    ) -> dict[str, Any]:
+    ) -> FunctionExecutionResult:
         """
         Execute a function.
 
         Args:
             function_slug: Function slug (e.g., "my-function")
-            params: Function parameters (passed to function's `params` argument)
+            params: Function parameters
             app_slug: App slug (defaults to client's app_slug)
             is_async: Whether to execute asynchronously (returns task_id)
-            timeout: Override default timeout for this request
+            timeout: Override default timeout
 
         Returns:
-            dict: Function execution result
-                - If sync: {"success": bool, "data": Any, "message": str}
-                - If async: {"task_id": str, "status": str}
-
-        Raises:
-            NotFoundError: If function not found
-            ValidationError: If parameters are invalid
-            FunctionExecutionError: If function execution fails
+            FunctionExecutionResult: Function execution result
 
         Example:
             ```python
-            # Synchronous execution
             result = await client.functions.execute(
                 "process-order",
-                params={"order_id": 123, "action": "ship"}
+                params={"order_id": 123}
             )
-            print(result["data"])
-
-            # Asynchronous execution
-            task = await client.functions.execute(
-                "long-running-job",
-                params={"batch_size": 1000},
-                is_async=True
-            )
-            print(f"Task ID: {task['task_id']}")
             ```
         """
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
-            raise ValueError("app_slug is required (provide via parameter or Client config)")
+            raise ValueError("app_slug is required")
 
-        # Build request path
-        path = f"/api/apps/{app_slug}/functions/{function_slug}/execute/"
+        path = _FUNCTION_EXECUTE.format(
+            app_slug=app_slug,
+            function_slug=function_slug
+        )
+        body = _build_execute_request(params, is_async)
 
-        # Build request body
-        body = {
-            "params": params or {},
-            "async": is_async,
-        }
-
-        # Execute request
-        headers = {}
-        if timeout:
-            # Note: httpx doesn't support per-request timeout via headers,
-            # but we can pass it to the request method
-            pass
-
-        response = await self._http.post(path, json=body, headers=headers)
-        return response
+        response = await self._http.post(path, json=body, headers={})
+        return FunctionExecutionResult.from_dict(response)
 
     async def list(
         self,
@@ -104,96 +130,47 @@ class FunctionsModule:
         app_slug: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> dict[str, Any]:
-        """
-        List functions in an app.
-
-        Args:
-            app_slug: App slug (defaults to client's app_slug)
-            limit: Maximum number of functions to return
-            offset: Offset for pagination
-
-        Returns:
-            dict: List of functions with pagination info
-
-        Example:
-            ```python
-            functions = await client.functions.list()
-            for func in functions["data"]:
-                print(f"{func['name']}: {func['slug']}")
-            ```
-        """
+    ) -> FunctionListResponse:
+        """List functions in an app."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = f"/api/apps/{app_slug}/functions/"
-        params = {"limit": limit, "offset": offset}
+        path = _FUNCTIONS_BASE.format(app_slug=app_slug)
+        params = _build_list_params(limit, offset)
 
         response = await self._http.get(path, params=params)
-        return response
+        return FunctionListResponse.from_dict(response)
 
     async def get(
         self,
         function_slug: str,
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """
-        Get function details.
-
-        Args:
-            function_slug: Function slug
-            app_slug: App slug (defaults to client's app_slug)
-
-        Returns:
-            dict: Function details
-
-        Example:
-            ```python
-            func = await client.functions.get("my-function")
-            print(f"Name: {func['name']}")
-            print(f"Mode: {func['execution_mode']}")
-            ```
-        """
+    ) -> FunctionResponse:
+        """Get function details."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = f"/api/apps/{app_slug}/functions/{function_slug}/"
+        path = _FUNCTION_DETAIL.format(app_slug=app_slug, function_slug=function_slug)
         response = await self._http.get(path)
-        return response
+        return FunctionResponse.from_dict(response)
 
     async def get_invocation(
         self,
         invocation_id: str,
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """
-        Get function invocation details.
-
-        Args:
-            invocation_id: Invocation ID or task ID
-            app_slug: App slug (defaults to client's app_slug)
-
-        Returns:
-            dict: Invocation details including status, result, logs
-
-        Example:
-            ```python
-            invocation = await client.functions.get_invocation("task_123")
-            print(f"Status: {invocation['status']}")
-            print(f"Result: {invocation['result']}")
-            ```
-        """
+    ) -> InvocationResponse:
+        """Get function invocation details."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = f"/api/apps/{app_slug}/invocations/{invocation_id}/"
+        path = _INVOCATION_DETAIL.format(app_slug=app_slug, invocation_id=invocation_id)
         response = await self._http.get(path)
-        return response
+        return InvocationResponse.from_dict(response)
 
     async def list_invocations(
         self,
@@ -204,40 +181,118 @@ class FunctionsModule:
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
-        """
-        List function invocations.
-
-        Args:
-            function_slug: Filter by function slug
-            app_slug: App slug (defaults to client's app_slug)
-            status: Filter by status (pending, running, completed, failed)
-            limit: Maximum number of invocations to return
-            offset: Offset for pagination
-
-        Returns:
-            dict: List of invocations with pagination info
-
-        Example:
-            ```python
-            invocations = await client.functions.list_invocations(
-                function_slug="my-function",
-                status="completed"
-            )
-            for inv in invocations["data"]:
-                print(f"{inv['id']}: {inv['status']}")
-            ```
-        """
+        """List function invocations."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = f"/api/apps/{app_slug}/invocations/"
-        params: dict[str, Any] = {"limit": limit, "offset": offset}
-
-        if function_slug:
-            params["function_slug"] = function_slug
-        if status:
-            params["status"] = status
+        path = _INVOCATIONS_LIST.format(app_slug=app_slug)
+        params = _build_invocations_params(function_slug, status, limit, offset)
 
         response = await self._http.get(path, params=params)
+        return response
+
+
+# ============================================================================
+# Sync Implementation
+# ============================================================================
+
+class SyncFunctionsModule:
+    """Synchronous Functions API operations (native blocking)."""
+
+    def __init__(self, client: "SyncClient") -> None:
+        """Initialize synchronous Functions module."""
+        self.client = client
+        self._http = client._http
+        self._config = client._config
+
+    def execute(
+        self,
+        function_slug: str,
+        params: Optional[dict[str, Any]] = None,
+        *,
+        app_slug: Optional[str] = None,
+        is_async: bool = False,
+        timeout: Optional[int] = None,
+    ) -> FunctionExecutionResult:
+        """Execute a function (blocking)."""
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _FUNCTION_EXECUTE.format(
+            app_slug=app_slug,
+            function_slug=function_slug
+        )
+        body = _build_execute_request(params, is_async)
+
+        response = self._http.post(path, json=body, headers={})
+        return FunctionExecutionResult.from_dict(response)
+
+    def list(
+        self,
+        *,
+        app_slug: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> FunctionListResponse:
+        """List functions in an app (blocking)."""
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _FUNCTIONS_BASE.format(app_slug=app_slug)
+        params = _build_list_params(limit, offset)
+
+        response = self._http.get(path, params=params)
+        return FunctionListResponse.from_dict(response)
+
+    def get(
+        self,
+        function_slug: str,
+        *,
+        app_slug: Optional[str] = None,
+    ) -> FunctionResponse:
+        """Get function details (blocking)."""
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _FUNCTION_DETAIL.format(app_slug=app_slug, function_slug=function_slug)
+        response = self._http.get(path)
+        return FunctionResponse.from_dict(response)
+
+    def get_invocation(
+        self,
+        invocation_id: str,
+        *,
+        app_slug: Optional[str] = None,
+    ) -> InvocationResponse:
+        """Get function invocation details (blocking)."""
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _INVOCATION_DETAIL.format(app_slug=app_slug, invocation_id=invocation_id)
+        response = self._http.get(path)
+        return InvocationResponse.from_dict(response)
+
+    def list_invocations(
+        self,
+        *,
+        function_slug: Optional[str] = None,
+        app_slug: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """List function invocations (blocking)."""
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _INVOCATIONS_LIST.format(app_slug=app_slug)
+        params = _build_invocations_params(function_slug, status, limit, offset)
+
+        response = self._http.get(path, params=params)
         return response

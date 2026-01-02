@@ -14,11 +14,10 @@ Provides synchronous interface for:
 from typing import Any, Optional
 
 from taruvi.config import TaruviConfig
-from taruvi.runtime import RuntimeMode, detect_runtime
 from taruvi.sync_http_client import SyncHTTPClient
-from taruvi.modules.sync_functions import SyncFunctionsModule
-from taruvi.modules.sync_database import SyncDatabaseModule
-from taruvi.modules.sync_auth import SyncAuthModule
+from taruvi.modules.functions import SyncFunctionsModule
+from taruvi.modules.database import SyncDatabaseModule
+from taruvi.modules.auth import SyncAuthModule
 
 
 class SyncClient:
@@ -87,20 +86,9 @@ class SyncClient:
             pool_maxsize: Maximum pool size
             **kwargs: Additional configuration options
         """
-        # Detect runtime mode and auto-configure if needed
-        runtime_mode = detect_runtime()
-
-        # Auto-configure from environment if no explicit config
-        if runtime_mode == RuntimeMode.FUNCTION and not (api_url or api_key):
-            runtime_config = self._load_config_from_runtime()
-            api_url = runtime_config.get("api_url") or api_url
-            api_key = runtime_config.get("api_key") or api_key
-            site_slug = runtime_config.get("site_slug") or site_slug
-            app_slug = runtime_config.get("app_slug") or app_slug
-
-        # Build configuration
-        self._config = TaruviConfig(
-            api_url=api_url or "http://localhost:8000",
+        # Use factory method - handles runtime detection and merging
+        self._config = TaruviConfig.from_runtime_and_params(
+            api_url=api_url,
             api_key=api_key,
             site_slug=site_slug,
             app_slug=app_slug,
@@ -111,7 +99,7 @@ class SyncClient:
             verify_ssl=verify_ssl,
             pool_connections=pool_connections,
             pool_maxsize=pool_maxsize,
-            **kwargs,
+            **kwargs
         )
 
         # Validate required fields
@@ -124,22 +112,11 @@ class SyncClient:
         self._functions = None
         self._database = None
         self._auth = None
-
-    def _load_config_from_runtime(self) -> dict[str, Optional[str]]:
-        """
-        Load configuration from runtime environment variables.
-
-        Returns:
-            dict: Configuration values from environment
-        """
-        import os
-
-        return {
-            "api_url": os.getenv("TARUVI_API_URL"),
-            "api_key": os.getenv("TARUVI_API_KEY"),
-            "site_slug": os.getenv("TARUVI_SITE_SLUG"),
-            "app_slug": os.getenv("TARUVI_APP_SLUG"),
-        }
+        self._storage = None
+        self._secrets = None
+        self._policy = None
+        self._app = None
+        self._settings = None
 
     @property
     def config(self) -> TaruviConfig:
@@ -181,6 +158,46 @@ class SyncClient:
         if self._auth is None:
             self._auth = SyncAuthModule(self)
         return self._auth
+
+    @property
+    def storage(self):
+        """Access Storage API (native blocking)."""
+        if self._storage is None:
+            from taruvi.modules.storage import SyncStorageModule
+            self._storage = SyncStorageModule(self)
+        return self._storage
+
+    @property
+    def secrets(self):
+        """Access Secrets API (native blocking)."""
+        if self._secrets is None:
+            from taruvi.modules.secrets import SyncSecretsModule
+            self._secrets = SyncSecretsModule(self)
+        return self._secrets
+
+    @property
+    def policy(self):
+        """Access Policy API (native blocking)."""
+        if self._policy is None:
+            from taruvi.modules.policy import SyncPolicyModule
+            self._policy = SyncPolicyModule(self)
+        return self._policy
+
+    @property
+    def app(self):
+        """Access App API (native blocking)."""
+        if self._app is None:
+            from taruvi.modules.app import SyncAppModule
+            self._app = SyncAppModule(self)
+        return self._app
+
+    @property
+    def settings(self):
+        """Access Settings API (native blocking)."""
+        if self._settings is None:
+            from taruvi.modules.settings import SyncSettingsModule
+            self._settings = SyncSettingsModule(self)
+        return self._settings
 
     def as_user(self, user_jwt: str) -> "SyncClient":
         """

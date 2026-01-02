@@ -7,38 +7,31 @@ Provides methods for:
 - CRUD operations on records
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING, Any, Optional
+
+from taruvi.models.database import DatabaseRecord
 
 if TYPE_CHECKING:
     from taruvi.client import Client
+    from taruvi.sync_client import SyncClient
+
+# API endpoint paths for database
+_DATATABLE_DATA = "/api/apps/{app_slug}/datatables/{table_name}/data/"
+_DATATABLE_RECORD = "/api/apps/{app_slug}/datatables/{table_name}/data/{record_id}/"
 
 
-class QueryBuilder:
-    """
-    Query builder for database operations.
+# ============================================================================
+# Shared Query Builder Logic
+# ============================================================================
 
-    Provides a fluent interface for building queries with filters, sorting, and pagination.
-    """
-
-    def __init__(self, client: "Client", table_name: str, app_slug: Optional[str] = None) -> None:
-        """
-        Initialize query builder.
-
-        Args:
-            client: Taruvi client instance
-            table_name: Table name to query
-            app_slug: App slug (defaults to client's app_slug)
-        """
-        self.client = client
-        self._http = client._http_client
-        self._config = client._config
+class _BaseQueryBuilder:
+    """Base query builder with shared logic."""
+    
+    def __init__(self, table_name: str, app_slug: str) -> None:
         self.table_name = table_name
-        self.app_slug = app_slug or self._config.app_slug
-
-        if not self.app_slug:
-            raise ValueError("app_slug is required")
-
-        # Query parameters
+        self.app_slug = app_slug
         self._filters: dict[str, Any] = {}
         self._sort_field: Optional[str] = None
         self._sort_order: str = "asc"
@@ -46,184 +39,115 @@ class QueryBuilder:
         self._offset_value: int = 0
         self._populate_fields: list[str] = []
 
-    def filter(self, field: str, operator: str, value: Any) -> "QueryBuilder":
-        """
-        Add a filter to the query.
-
-        Args:
-            field: Field name to filter on
-            operator: Filter operator (eq, gt, gte, lt, lte, in, contains, etc.)
-            value: Value to filter by
-
-        Returns:
-            QueryBuilder: Self for chaining
-
-        Example:
-            ```python
-            query.filter("status", "eq", "active")
-            query.filter("age", "gte", 18)
-            query.filter("tags", "contains", "python")
-            ```
-        """
+    def _add_filter(self, field: str, operator: str, value: Any) -> None:
+        """Add a filter (shared logic)."""
         if operator == "eq":
             self._filters[field] = value
         else:
             self._filters[f"{field}__{operator}"] = value
-        return self
 
-    def sort(self, field: str, order: str = "asc") -> "QueryBuilder":
-        """
-        Add sorting to the query.
-
-        Args:
-            field: Field name to sort by
-            order: Sort order ("asc" or "desc")
-
-        Returns:
-            QueryBuilder: Self for chaining
-
-        Example:
-            ```python
-            query.sort("created_at", "desc")
-            ```
-        """
+    def _set_sort(self, field: str, order: str) -> None:
+        """Set sort (shared logic)."""
         self._sort_field = field
         self._sort_order = order
-        return self
 
-    def limit(self, limit: int) -> "QueryBuilder":
-        """
-        Limit number of results.
-
-        Args:
-            limit: Maximum number of records to return
-
-        Returns:
-            QueryBuilder: Self for chaining
-
-        Example:
-            ```python
-            query.limit(10)
-            ```
-        """
+    def _set_limit(self, limit: int) -> None:
+        """Set limit (shared logic)."""
         self._limit_value = limit
-        return self
 
-    def offset(self, offset: int) -> "QueryBuilder":
-        """
-        Set offset for pagination.
-
-        Args:
-            offset: Number of records to skip
-
-        Returns:
-            QueryBuilder: Self for chaining
-
-        Example:
-            ```python
-            query.offset(20)
-            ```
-        """
+    def _set_offset(self, offset: int) -> None:
+        """Set offset (shared logic)."""
         self._offset_value = offset
-        return self
 
-    def populate(self, *fields: str) -> "QueryBuilder":
-        """
-        Populate related fields (foreign keys).
-
-        Args:
-            *fields: Field names to populate
-
-        Returns:
-            QueryBuilder: Self for chaining
-
-        Example:
-            ```python
-            query.populate("author", "comments")
-            ```
-        """
+    def _add_populate(self, *fields: str) -> None:
+        """Add populate fields (shared logic)."""
         self._populate_fields.extend(fields)
-        return self
 
-    def _build_params(self) -> dict[str, Any]:
+    def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
         params: dict[str, Any] = {}
-
-        # Add filters
         params.update(self._filters)
 
-        # Add sorting
         if self._sort_field:
             params["_sort"] = self._sort_field
             params["_order"] = self._sort_order
 
-        # Add pagination
         if self._limit_value is not None:
             params["limit"] = self._limit_value
         if self._offset_value:
             params["offset"] = self._offset_value
 
-        # Add population
         if self._populate_fields:
             params["populate"] = ",".join(self._populate_fields)
 
         return params
 
-    async def get(self) -> list[dict[str, Any]]:
-        """
-        Execute query and get results.
 
-        Returns:
-            list[dict]: List of records
+# ============================================================================
+# Async Implementation
+# ============================================================================
 
-        Example:
-            ```python
-            users = await client.database.query("users") \\
-                .filter("is_active", "eq", True) \\
-                .sort("created_at", "desc") \\
-                .limit(10) \\
-                .get()
-            ```
-        """
-        path = f"/api/apps/{self.app_slug}/datatables/{self.table_name}/data/"
-        params = self._build_params()
+class QueryBuilder(_BaseQueryBuilder):
+    """Query builder for database operations."""
+
+    def __init__(self, client: "Client", table_name: str, app_slug: Optional[str] = None) -> None:
+        self.client = client
+        self._http = client._http_client
+        self._config = client._config
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+        super().__init__(table_name, app_slug)
+
+    def filter(self, field: str, operator: str, value: Any) -> "QueryBuilder":
+        """Add a filter to the query."""
+        self._add_filter(field, operator, value)
+        return self
+
+    def sort(self, field: str, order: str = "asc") -> "QueryBuilder":
+        """Add sorting to the query."""
+        self._set_sort(field, order)
+        return self
+
+    def limit(self, limit: int) -> "QueryBuilder":
+        """Limit number of results."""
+        self._set_limit(limit)
+        return self
+
+    def offset(self, offset: int) -> "QueryBuilder":
+        """Set offset for pagination."""
+        self._set_offset(offset)
+        return self
+
+    def populate(self, *fields: str) -> "QueryBuilder":
+        """Populate related fields (foreign keys)."""
+        self._add_populate(*fields)
+        return self
+
+    async def get(self) -> list[DatabaseRecord]:
+        """Execute query and get results."""
+        path = _DATATABLE_DATA.format(
+            app_slug=self.app_slug,
+            table_name=self.table_name
+        )
+        params = self.build_params()
 
         response = await self._http.get(path, params=params)
-        return response.get("data", [])
+        records = response.get("data", [])
+        return [DatabaseRecord.from_dict(r) for r in records]
 
-    async def first(self) -> Optional[dict[str, Any]]:
-        """
-        Get first result.
-
-        Returns:
-            Optional[dict]: First record or None
-
-        Example:
-            ```python
-            user = await client.database.query("users") \\
-                .filter("email", "eq", "alice@example.com") \\
-                .first()
-            ```
-        """
+    async def first(self) -> Optional[DatabaseRecord]:
+        """Get first result."""
         results = await self.limit(1).get()
         return results[0] if results else None
 
     async def count(self) -> int:
-        """
-        Get count of matching records.
-
-        Returns:
-            int: Number of matching records
-
-        Example:
-            ```python
-            count = await client.database.query("users") \\
-                .filter("is_active", "eq", True) \\
-                .count()
-            ```
-        """
-        path = f"/api/apps/{self.app_slug}/datatables/{self.table_name}/data/"
-        params = self._build_params()
+        """Get count of matching records."""
+        path = _DATATABLE_DATA.format(
+            app_slug=self.app_slug,
+            table_name=self.table_name
+        )
+        params = self.build_params()
         params["_count"] = "true"
 
         response = await self._http.get(path, params=params)
@@ -234,47 +158,13 @@ class DatabaseModule:
     """Database API operations."""
 
     def __init__(self, client: "Client") -> None:
-        """
-        Initialize Database module.
-
-        Args:
-            client: Taruvi client instance
-        """
+        """Initialize Database module."""
         self.client = client
         self._http = client._http_client
         self._config = client._config
 
     def query(self, table_name: str, app_slug: Optional[str] = None) -> QueryBuilder:
-        """
-        Create a query builder for a table.
-
-        Args:
-            table_name: Table name to query
-            app_slug: App slug (defaults to client's app_slug)
-
-        Returns:
-            QueryBuilder: Query builder instance
-
-        Example:
-            ```python
-            # Build and execute query
-            users = await client.database.query("users") \\
-                .filter("status", "eq", "active") \\
-                .sort("created_at", "desc") \\
-                .limit(10) \\
-                .get()
-
-            # Get single record
-            user = await client.database.query("users") \\
-                .filter("email", "eq", "alice@example.com") \\
-                .first()
-
-            # Count records
-            count = await client.database.query("users") \\
-                .filter("is_active", "eq", True) \\
-                .count()
-            ```
-        """
+        """Create a query builder for a table."""
         return QueryBuilder(self.client, table_name, app_slug)
 
     async def create(
@@ -283,34 +173,16 @@ class DatabaseModule:
         data: dict[str, Any],
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """
-        Create a new record.
-
-        Args:
-            table_name: Table name
-            data: Record data
-            app_slug: App slug (defaults to client's app_slug)
-
-        Returns:
-            dict: Created record
-
-        Example:
-            ```python
-            user = await client.database.create("users", {
-                "name": "Alice",
-                "email": "alice@example.com",
-                "is_active": True
-            })
-            ```
-        """
+    ) -> DatabaseRecord:
+        """Create a new record."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/data/"
+        path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
         response = await self._http.post(path, json=data)
-        return response.get("data", {})
+        record = response.get("data", {})
+        return DatabaseRecord.from_dict(record)
 
     async def update(
         self,
@@ -319,33 +191,20 @@ class DatabaseModule:
         data: dict[str, Any],
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """
-        Update a record.
-
-        Args:
-            table_name: Table name
-            record_id: Record ID
-            data: Updated data
-            app_slug: App slug (defaults to client's app_slug)
-
-        Returns:
-            dict: Updated record
-
-        Example:
-            ```python
-            user = await client.database.update("users", 123, {
-                "is_active": False
-            })
-            ```
-        """
+    ) -> DatabaseRecord:
+        """Update a record."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/data/{record_id}/"
+        path = _DATATABLE_RECORD.format(
+            app_slug=app_slug,
+            table_name=table_name,
+            record_id=str(record_id)
+        )
         response = await self._http.put(path, json=data)
-        return response.get("data", {})
+        record = response.get("data", {})
+        return DatabaseRecord.from_dict(record)
 
     async def delete(
         self,
@@ -353,27 +212,158 @@ class DatabaseModule:
         record_id: str | int,
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """
-        Delete a record.
-
-        Args:
-            table_name: Table name
-            record_id: Record ID
-            app_slug: App slug (defaults to client's app_slug)
-
-        Returns:
-            dict: Deletion confirmation
-
-        Example:
-            ```python
-            await client.database.delete("users", 123)
-            ```
-        """
+    ) -> None:
+        """Delete a record."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/data/{record_id}/"
-        response = await self._http.delete(path)
-        return response
+        path = _DATATABLE_RECORD.format(
+            app_slug=app_slug,
+            table_name=table_name,
+            record_id=str(record_id)
+        )
+        await self._http.delete(path)
+
+
+# ============================================================================
+# Sync Implementation
+# ============================================================================
+
+class SyncQueryBuilder(_BaseQueryBuilder):
+    """Synchronous query builder for database operations."""
+
+    def __init__(self, client: "SyncClient", table_name: str, app_slug: Optional[str] = None) -> None:
+        self.client = client
+        self._http = client._http
+        self._config = client._config
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+        super().__init__(table_name, app_slug)
+
+    def filter(self, field: str, operator: str, value: Any) -> "SyncQueryBuilder":
+        """Add a filter to the query."""
+        self._add_filter(field, operator, value)
+        return self
+
+    def sort(self, field: str, order: str = "asc") -> "SyncQueryBuilder":
+        """Add sorting to the query."""
+        self._set_sort(field, order)
+        return self
+
+    def limit(self, limit: int) -> "SyncQueryBuilder":
+        """Limit number of results."""
+        self._set_limit(limit)
+        return self
+
+    def offset(self, offset: int) -> "SyncQueryBuilder":
+        """Set offset for pagination."""
+        self._set_offset(offset)
+        return self
+
+    def populate(self, *fields: str) -> "SyncQueryBuilder":
+        """Populate related fields (foreign keys)."""
+        self._add_populate(*fields)
+        return self
+
+    def get(self) -> list[DatabaseRecord]:
+        """Execute query and get results (blocking)."""
+        path = _DATATABLE_DATA.format(
+            app_slug=self.app_slug,
+            table_name=self.table_name
+        )
+        params = self.build_params()
+
+        response = self._http.get(path, params=params)
+        records = response.get("data", [])
+        return [DatabaseRecord.from_dict(r) for r in records]
+
+    def first(self) -> Optional[DatabaseRecord]:
+        """Get first result (blocking)."""
+        results = self.limit(1).get()
+        return results[0] if results else None
+
+    def count(self) -> int:
+        """Get count of matching records (blocking)."""
+        path = _DATATABLE_DATA.format(
+            app_slug=self.app_slug,
+            table_name=self.table_name
+        )
+        params = self.build_params()
+        params["_count"] = "true"
+
+        response = self._http.get(path, params=params)
+        return response.get("total", 0)
+
+
+class SyncDatabaseModule:
+    """Synchronous Database API operations."""
+
+    def __init__(self, client: "SyncClient") -> None:
+        """Initialize synchronous Database module."""
+        self.client = client
+        self._http = client._http
+        self._config = client._config
+
+    def query(self, table_name: str, app_slug: Optional[str] = None) -> SyncQueryBuilder:
+        """Create a query builder for a table."""
+        return SyncQueryBuilder(self.client, table_name, app_slug)
+
+    def create(
+        self,
+        table_name: str,
+        data: dict[str, Any],
+        *,
+        app_slug: Optional[str] = None,
+    ) -> DatabaseRecord:
+        """Create a new record (blocking)."""
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
+        response = self._http.post(path, json=data)
+        record = response.get("data", {})
+        return DatabaseRecord.from_dict(record)
+
+    def update(
+        self,
+        table_name: str,
+        record_id: str | int,
+        data: dict[str, Any],
+        *,
+        app_slug: Optional[str] = None,
+    ) -> DatabaseRecord:
+        """Update a record (blocking)."""
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _DATATABLE_RECORD.format(
+            app_slug=app_slug,
+            table_name=table_name,
+            record_id=str(record_id)
+        )
+        response = self._http.put(path, json=data)
+        record = response.get("data", {})
+        return DatabaseRecord.from_dict(record)
+
+    def delete(
+        self,
+        table_name: str,
+        record_id: str | int,
+        *,
+        app_slug: Optional[str] = None,
+    ) -> None:
+        """Delete a record (blocking)."""
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _DATATABLE_RECORD.format(
+            app_slug=app_slug,
+            table_name=table_name,
+            record_id=str(record_id)
+        )
+        self._http.delete(path)

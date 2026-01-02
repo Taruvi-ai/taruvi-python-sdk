@@ -5,14 +5,10 @@ Main client class for interacting with Taruvi API.
 Supports both external application mode and function runtime mode.
 """
 
-import logging
 from typing import Any, Optional
 
-from taruvi.config import RuntimeMode, TaruviConfig
+from taruvi.config import TaruviConfig
 from taruvi.http_client import HTTPClient
-from taruvi.runtime import detect_runtime, load_config_from_runtime
-
-logger = logging.getLogger(__name__)
 
 
 class Client:
@@ -71,27 +67,9 @@ class Client:
         Raises:
             ConfigurationError: If required configuration is missing
         """
-        # Auto-configure from runtime environment if no explicit config
-        if not (api_url or api_key):
-            runtime_mode = detect_runtime()
-
-            if runtime_mode == RuntimeMode.FUNCTION:
-                # Load config from function runtime environment
-                runtime_config = load_config_from_runtime()
-                if runtime_config:
-                    if debug:
-                        logger.info("Auto-configured from function runtime environment")
-
-                    # Merge runtime config with explicit params
-                    api_url = api_url or runtime_config.get("api_url")
-                    api_key = api_key or runtime_config.get("api_key")
-                    site_slug = site_slug or runtime_config.get("site_slug")
-                    app_slug = app_slug or runtime_config.get("app_slug")
-                    kwargs.update(runtime_config)
-
-        # Create configuration
-        self._config = TaruviConfig(
-            api_url=api_url or "http://localhost:8000",
+        # Use factory method - handles runtime detection and merging
+        self._config = TaruviConfig.from_runtime_and_params(
+            api_url=api_url,
             api_key=api_key,
             site_slug=site_slug,
             app_slug=app_slug,
@@ -99,7 +77,7 @@ class Client:
             max_retries=max_retries,
             retry_backoff_factor=retry_backoff_factor,
             debug=debug,
-            **kwargs,
+            **kwargs
         )
 
         # Validate configuration
@@ -112,6 +90,11 @@ class Client:
         self._functions = None
         self._database = None
         self._auth = None
+        self._storage = None
+        self._secrets = None
+        self._policy = None
+        self._app = None
+        self._settings = None
 
     @property
     def config(self) -> TaruviConfig:
@@ -144,6 +127,51 @@ class Client:
 
             self._auth = AuthModule(self)
         return self._auth
+
+    @property
+    def storage(self):
+        """Access Storage API."""
+        if self._storage is None:
+            from taruvi.modules.storage import StorageModule
+
+            self._storage = StorageModule(self)
+        return self._storage
+
+    @property
+    def secrets(self):
+        """Access Secrets API."""
+        if self._secrets is None:
+            from taruvi.modules.secrets import SecretsModule
+
+            self._secrets = SecretsModule(self)
+        return self._secrets
+
+    @property
+    def policy(self):
+        """Access Policy API."""
+        if self._policy is None:
+            from taruvi.modules.policy import PolicyModule
+
+            self._policy = PolicyModule(self)
+        return self._policy
+
+    @property
+    def app(self):
+        """Access App API."""
+        if self._app is None:
+            from taruvi.modules.app import AppModule
+
+            self._app = AppModule(self)
+        return self._app
+
+    @property
+    def settings(self):
+        """Access Settings API."""
+        if self._settings is None:
+            from taruvi.modules.settings import SettingsModule
+
+            self._settings = SettingsModule(self)
+        return self._settings
 
     def as_user(self, user_jwt: str) -> "Client":
         """
