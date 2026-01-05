@@ -5,15 +5,17 @@ Main client class for interacting with Taruvi API.
 Supports both external application mode and function runtime mode.
 """
 
-from typing import Any, Optional
+from typing import Any, Optional, Union, Literal, overload
 
 from taruvi.config import TaruviConfig
 from taruvi.http_client import HTTPClient
 
 
-class Client:
+class _AsyncClient:
     """
-    Async Taruvi API Client.
+    Internal async Taruvi API client implementation.
+
+    Note: This is an internal class. Users should use the `Client()` factory function instead.
 
     This client automatically detects whether it's running in an external application
     or inside a Taruvi function and configures itself accordingly.
@@ -40,10 +42,11 @@ class Client:
 
     def __init__(
         self,
-        api_url: Optional[str] = None,
-        api_key: Optional[str] = None,
+        api_url: str,
+        api_key: str,
+        app_slug: str,
+        *,
         site_slug: Optional[str] = None,
-        app_slug: Optional[str] = None,
         timeout: int = 30,
         max_retries: int = 3,
         retry_backoff_factor: float = 0.5,
@@ -51,13 +54,13 @@ class Client:
         **kwargs: Any,
     ) -> None:
         """
-        Initialize Taruvi client.
+        Initialize Taruvi async client.
 
         Args:
             api_url: Taruvi API base URL (e.g., "http://localhost:8000")
             api_key: JWT token for authentication
+            app_slug: Application slug (required)
             site_slug: Site slug for multi-tenant routing
-            app_slug: App slug (optional, for scoping operations)
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
             retry_backoff_factor: Backoff factor for retries
@@ -173,7 +176,7 @@ class Client:
             self._settings = SettingsModule(self)
         return self._settings
 
-    def as_user(self, user_jwt: str) -> "Client":
+    def as_user(self, user_jwt: str) -> "_AsyncClient":
         """
         Create a new client with user context (for permission-aware operations).
 
@@ -184,12 +187,12 @@ class Client:
             user_jwt: User's JWT token
 
         Returns:
-            Client: New client instance with user context
+            _AsyncClient: New client instance with user context
 
         Example:
             ```python
             # Service client (admin permissions)
-            service_client = Client(api_key="service_key", ...)
+            service_client = Client(mode='async', api_key="service_key", ...)
 
             # User-scoped client
             user_client = service_client.as_user(user_jwt="user_token")
@@ -198,7 +201,7 @@ class Client:
             result = await user_client.database.query("orders").get()
             ```
         """
-        return Client(
+        return _AsyncClient(
             api_url=self._config.api_url,
             api_key=user_jwt,  # Use user JWT as api_key
             site_slug=self._config.site_slug,
@@ -226,7 +229,102 @@ class Client:
         """String representation of client."""
         mode = self._config.runtime_mode.value
         return (
-            f"Client(api_url={self._config.api_url}, "
+            f"_AsyncClient(api_url={self._config.api_url}, "
             f"site_slug={self._config.site_slug}, "
             f"mode={mode})"
+        )
+
+
+# Unified Client Factory Function
+# ============================================================
+
+@overload
+def Client(
+    api_url: str,
+    api_key: str,
+    site_slug: str,
+    app_slug: str,
+    mode: Literal['async'],
+    *,
+    timeout: int = 30,
+    max_retries: int = 3,
+    retry_backoff_factor: float = 0.5,
+    debug: bool = False,
+    **kwargs: Any,
+) -> _AsyncClient: ...
+
+
+@overload
+def Client(
+    api_url: str,
+    api_key: str,
+    site_slug: str,
+    app_slug: str,
+    mode: Literal['sync'] = 'sync',
+    *,
+    timeout: int = 30,
+    max_retries: int = 3,
+    retry_backoff_factor: float = 0.5,
+    debug: bool = False,
+    verify_ssl: bool = True,
+    pool_connections: int = 10,
+    pool_maxsize: int = 10,
+    **kwargs: Any,
+) -> "_SyncClient": ...
+
+
+def Client(
+    api_url: str,
+    api_key: str,
+    site_slug: str,
+    app_slug: str,
+    mode: str = 'sync',
+    **config: Any
+) -> Union[_AsyncClient, "_SyncClient"]:
+    """
+    Create a Taruvi client.
+
+    Args:
+        api_url: Taruvi API base URL
+        api_key: API authentication key
+        site_slug: Site identifier (required)
+        app_slug: Application slug (required)
+        mode: Client mode - 'sync' (default) or 'async'
+        timeout: Request timeout in seconds
+        max_retries: Maximum retry attempts
+        retry_backoff_factor: Backoff factor for retries
+        debug: Enable debug logging
+        verify_ssl: Verify SSL certificates (sync mode only)
+        pool_connections: Connection pool size (sync mode only)
+        pool_maxsize: Max pool size (sync mode only)
+        **config: Additional configuration options
+
+    Returns:
+        Configured client instance (_AsyncClient or _SyncClient)
+
+    Examples:
+        # Sync mode (default)
+        client = Client("https://api.taruvi.com", "key", "my-site", "my-app")
+        result = client.functions.execute("my-function", params={})
+
+        # Async mode
+        client = Client("https://api.taruvi.com", "key", "my-site", "my-app", "async")
+        result = await client.functions.execute("my-function", params={})
+
+    Raises:
+        ValueError: If mode is not 'sync' or 'async'
+    """
+    if mode == 'async':
+        # Remove sync-only parameters if present
+        config.pop('verify_ssl', None)
+        config.pop('pool_connections', None)
+        config.pop('pool_maxsize', None)
+        return _AsyncClient(api_url, api_key, app_slug, site_slug=site_slug, **config)
+    elif mode == 'sync':
+        from taruvi.sync_client import _SyncClient
+        return _SyncClient(api_url, api_key, app_slug, site_slug=site_slug, **config)
+    else:
+        raise ValueError(
+            f"Invalid mode: '{mode}'. Must be 'sync' or 'async'. "
+            f"Use Client(mode='sync') for synchronous or Client(mode='async') for async/await."
         )

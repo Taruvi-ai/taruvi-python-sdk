@@ -3,11 +3,12 @@ Taruvi Python SDK
 
 Official SDK for interacting with the Taruvi Cloud Platform.
 
-Provides both async and sync clients:
-- **Client**: Async client for async frameworks (uses httpx.AsyncClient)
-- **SyncClient**: Native blocking client for scripts, functions, and notebooks (uses httpx.Client)
+Unified Client API with mode parameter:
+- **Client(mode='async')**: Async client for async frameworks (uses httpx.AsyncClient)
+- **Client(mode='sync')**: Native blocking client for scripts, functions, and notebooks (uses httpx.Client)
+- **Client()**: Defaults to sync mode
 
-**Note**: SyncClient uses native httpx.Client (blocking) - NOT asyncio.run() wrapper.
+**Note**: Sync mode uses native httpx.Client (blocking) - NOT asyncio.run() wrapper.
 This makes it thread-safe, faster (10-50x), and compatible with all Python environments
 including Jupyter notebooks, FastAPI apps, and any async context.
 
@@ -17,6 +18,8 @@ Async Client Example:
 
     async def main():
         client = Client(
+            mode='async',
+            app_slug="my-app",
             api_url="http://localhost:8000",
             api_key="your_jwt_token",
             site_slug="your-site"
@@ -34,10 +37,11 @@ Async Client Example:
 
 Sync Client Example:
     ```python
-    from taruvi import SyncClient
+    from taruvi import Client
 
-    # Native blocking - works everywhere!
-    client = SyncClient(
+    # Native blocking - works everywhere! (mode='sync' is default)
+    client = Client(
+        app_slug="my-app",
         api_url="http://localhost:8000",
         api_key="your_jwt_token",
         site_slug="your-site"
@@ -52,9 +56,9 @@ Function Runtime Example:
     ```python
     # Inside Taruvi function - auto-configured!
     def main(params, user_data):
-        from taruvi import SyncClient
+        from taruvi import Client
 
-        client = SyncClient()  # No config needed!
+        client = Client(app_slug="my-app")  # Defaults to sync mode
 
         # Call another function
         result = client.functions.execute("helper", {"test": True})
@@ -106,14 +110,12 @@ from taruvi.runtime import (
     get_function_context,
     is_inside_function,
 )
-from taruvi.sync_client import SyncClient
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
-    # Main clients
+    # Main client
     "Client",
-    "SyncClient",
     # Configuration
     "TaruviConfig",
     "RuntimeMode",

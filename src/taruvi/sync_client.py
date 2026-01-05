@@ -20,9 +20,11 @@ from taruvi.modules.database import SyncDatabaseModule
 from taruvi.modules.auth import SyncAuthModule
 
 
-class SyncClient:
+class _SyncClient:
     """
-    Native Synchronous Taruvi API Client.
+    Internal synchronous Taruvi API client implementation.
+
+    Note: This is an internal class. Users should use the `Client()` factory function instead.
 
     Uses httpx.Client (blocking) - NO asyncio.run() wrapper.
     Thread-safe and works in any Python environment.
@@ -56,10 +58,11 @@ class SyncClient:
 
     def __init__(
         self,
-        api_url: Optional[str] = None,
-        api_key: Optional[str] = None,
+        api_url: str,
+        api_key: str,
+        app_slug: str,
+        *,
         site_slug: Optional[str] = None,
-        app_slug: Optional[str] = None,
         timeout: int = 30,
         max_retries: int = 3,
         retry_backoff_factor: float = 0.5,
@@ -75,8 +78,8 @@ class SyncClient:
         Args:
             api_url: Taruvi API base URL
             api_key: JWT token for authentication
+            app_slug: Application slug (required)
             site_slug: Site slug for multi-tenant routing
-            app_slug: App slug (optional)
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
             retry_backoff_factor: Backoff factor for retries
@@ -199,7 +202,7 @@ class SyncClient:
             self._settings = SyncSettingsModule(self)
         return self._settings
 
-    def as_user(self, user_jwt: str) -> "SyncClient":
+    def as_user(self, user_jwt: str) -> "_SyncClient":
         """
         Create a new client with user context.
 
@@ -207,7 +210,7 @@ class SyncClient:
             user_jwt: User's JWT token
 
         Returns:
-            SyncClient: New client instance with user context
+            _SyncClient: New client instance with user context
 
         Example:
             ```python
@@ -215,7 +218,7 @@ class SyncClient:
             result = user_client.database.query("orders").get()
             ```
         """
-        return SyncClient(
+        return _SyncClient(
             api_url=self._config.api_url,
             api_key=user_jwt,
             site_slug=self._config.site_slug,
@@ -245,6 +248,6 @@ class SyncClient:
     def __repr__(self) -> str:
         """String representation of client."""
         return (
-            f"SyncClient(api_url={self._config.api_url!r}, "
+            f"_SyncClient(api_url={self._config.api_url!r}, "
             f"site_slug={self._config.site_slug!r})"
         )

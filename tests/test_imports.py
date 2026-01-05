@@ -3,11 +3,17 @@
 import pytest
 
 
-def test_import_main_clients():
-    """Test importing main client classes."""
-    from taruvi import Client, SyncClient
+def test_import_main_client():
+    """Test importing unified Client."""
+    from taruvi import Client
     assert Client is not None
-    assert SyncClient is not None
+    assert callable(Client)
+
+
+def test_syncclient_removed():
+    """Test that SyncClient is no longer exported (breaking change in v0.2.0)."""
+    with pytest.raises(ImportError):
+        from taruvi import SyncClient  # noqa: F401
 
 
 def test_import_all_async_modules():
