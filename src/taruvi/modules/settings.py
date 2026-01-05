@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from taruvi.models.settings import SiteSettings
 
 if TYPE_CHECKING:
     from taruvi.client import Client
@@ -33,7 +32,7 @@ class SettingsModule:
         self._http = client._http_client
         self._config = client._config
 
-    async def get(self) -> SiteSettings:
+    async def get(self) -> dict[str, Any]:
         """
         Get site metadata and settings.
 
@@ -47,7 +46,7 @@ class SettingsModule:
             ```
         """
         response = await self._http.get(_SETTINGS_METADATA)
-        return SiteSettings.from_dict(response)
+        return response
 
 
 class SyncSettingsModule:
@@ -64,7 +63,7 @@ class SyncSettingsModule:
         self._http = client._http
         self._config = client._config
 
-    def get(self) -> SiteSettings:
+    def get(self) -> dict[str, Any]:
         """
         Get site metadata and settings (blocking).
 
@@ -72,4 +71,4 @@ class SyncSettingsModule:
             SiteSettings: Site settings/metadata
         """
         response = self._http.get(_SETTINGS_METADATA)
-        return SiteSettings.from_dict(response)
+        return response

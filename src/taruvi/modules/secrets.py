@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from taruvi.models.secrets import Secret, SecretListResponse
 
 if TYPE_CHECKING:
     from taruvi.client import Client
@@ -35,7 +34,7 @@ class SecretsModule:
         self._http = client._http_client
         self._config = client._config
 
-    async def list(self) -> SecretListResponse:
+    async def list(self) -> dict[str, Any]ListResponse:
         """
         List all secrets.
 
@@ -50,9 +49,9 @@ class SecretsModule:
             ```
         """
         response = await self._http.get(_SECRETS_BASE)
-        return SecretListResponse.from_dict(response)
+        return response
 
-    async def get(self, key: str) -> Secret:
+    async def get(self, key: str) -> dict[str, Any]:
         """
         Get a specific secret by key.
 
@@ -73,9 +72,9 @@ class SecretsModule:
         """
         path = _SECRET_DETAIL.format(key=key)
         response = await self._http.get(path)
-        return Secret.from_dict(response)
+        return response
 
-    async def update(self, key: str, value: str) -> Secret:
+    async def update(self, key: str, value: str) -> dict[str, Any]:
         """
         Update a secret's value.
 
@@ -97,7 +96,7 @@ class SecretsModule:
         """
         path = _SECRET_DETAIL.format(key=key)
         response = await self._http.put(path, json={"value": value})
-        return Secret.from_dict(response)
+        return response
 
 
 # ============================================================================
@@ -113,19 +112,19 @@ class SyncSecretsModule:
         self._http = client._http
         self._config = client._config
 
-    def list(self) -> SecretListResponse:
+    def list(self) -> dict[str, Any]ListResponse:
         """List all secrets (blocking)."""
         response = self._http.get(_SECRETS_BASE)
-        return SecretListResponse.from_dict(response)
+        return response
 
-    def get(self, key: str) -> Secret:
+    def get(self, key: str) -> dict[str, Any]:
         """Get a specific secret by key (blocking)."""
         path = _SECRET_DETAIL.format(key=key)
         response = self._http.get(path)
-        return Secret.from_dict(response)
+        return response
 
-    def update(self, key: str, value: str) -> Secret:
+    def update(self, key: str, value: str) -> dict[str, Any]:
         """Update a secret's value (blocking)."""
         path = _SECRET_DETAIL.format(key=key)
         response = self._http.put(path, json={"value": value})
-        return Secret.from_dict(response)
+        return response

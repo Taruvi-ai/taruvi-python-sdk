@@ -12,13 +12,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from taruvi.models.functions import (
-    FunctionResponse,
-    FunctionExecutionResult,
-    FunctionListResponse,
-    InvocationResponse
-)
-
 if TYPE_CHECKING:
     from taruvi.client import Client
     from taruvi.sync_client import SyncClient
@@ -89,7 +82,7 @@ class FunctionsModule:
         app_slug: Optional[str] = None,
         is_async: bool = False,
         timeout: Optional[int] = None,
-    ) -> FunctionExecutionResult:
+    ) -> dict[str, Any]:
         """
         Execute a function.
 
@@ -122,7 +115,7 @@ class FunctionsModule:
         body = _build_execute_request(params, is_async)
 
         response = await self._http.post(path, json=body, headers={})
-        return FunctionExecutionResult.from_dict(response)
+        return response
 
     async def list(
         self,
@@ -130,7 +123,7 @@ class FunctionsModule:
         app_slug: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> FunctionListResponse:
+    ) -> dict[str, Any]:
         """List functions in an app."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -140,14 +133,14 @@ class FunctionsModule:
         params = _build_list_params(limit, offset)
 
         response = await self._http.get(path, params=params)
-        return FunctionListResponse.from_dict(response)
+        return response
 
     async def get(
         self,
         function_slug: str,
         *,
         app_slug: Optional[str] = None,
-    ) -> FunctionResponse:
+    ) -> dict[str, Any]:
         """Get function details."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -155,14 +148,14 @@ class FunctionsModule:
 
         path = _FUNCTION_DETAIL.format(app_slug=app_slug, function_slug=function_slug)
         response = await self._http.get(path)
-        return FunctionResponse.from_dict(response)
+        return response
 
     async def get_invocation(
         self,
         invocation_id: str,
         *,
         app_slug: Optional[str] = None,
-    ) -> InvocationResponse:
+    ) -> dict[str, Any]:
         """Get function invocation details."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -170,7 +163,7 @@ class FunctionsModule:
 
         path = _INVOCATION_DETAIL.format(app_slug=app_slug, invocation_id=invocation_id)
         response = await self._http.get(path)
-        return InvocationResponse.from_dict(response)
+        return response
 
     async def list_invocations(
         self,
@@ -214,7 +207,7 @@ class SyncFunctionsModule:
         app_slug: Optional[str] = None,
         is_async: bool = False,
         timeout: Optional[int] = None,
-    ) -> FunctionExecutionResult:
+    ) -> dict[str, Any]:
         """Execute a function (blocking)."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -227,7 +220,7 @@ class SyncFunctionsModule:
         body = _build_execute_request(params, is_async)
 
         response = self._http.post(path, json=body, headers={})
-        return FunctionExecutionResult.from_dict(response)
+        return response
 
     def list(
         self,
@@ -235,7 +228,7 @@ class SyncFunctionsModule:
         app_slug: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> FunctionListResponse:
+    ) -> dict[str, Any]:
         """List functions in an app (blocking)."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -245,14 +238,14 @@ class SyncFunctionsModule:
         params = _build_list_params(limit, offset)
 
         response = self._http.get(path, params=params)
-        return FunctionListResponse.from_dict(response)
+        return response
 
     def get(
         self,
         function_slug: str,
         *,
         app_slug: Optional[str] = None,
-    ) -> FunctionResponse:
+    ) -> dict[str, Any]:
         """Get function details (blocking)."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -260,14 +253,14 @@ class SyncFunctionsModule:
 
         path = _FUNCTION_DETAIL.format(app_slug=app_slug, function_slug=function_slug)
         response = self._http.get(path)
-        return FunctionResponse.from_dict(response)
+        return response
 
     def get_invocation(
         self,
         invocation_id: str,
         *,
         app_slug: Optional[str] = None,
-    ) -> InvocationResponse:
+    ) -> dict[str, Any]:
         """Get function invocation details (blocking)."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -275,7 +268,7 @@ class SyncFunctionsModule:
 
         path = _INVOCATION_DETAIL.format(app_slug=app_slug, invocation_id=invocation_id)
         response = self._http.get(path)
-        return InvocationResponse.from_dict(response)
+        return response
 
     def list_invocations(
         self,

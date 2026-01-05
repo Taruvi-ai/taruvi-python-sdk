@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from taruvi.models.database import DatabaseRecord
 
 if TYPE_CHECKING:
     from taruvi.client import Client
@@ -124,7 +123,7 @@ class QueryBuilder(_BaseQueryBuilder):
         self._add_populate(*fields)
         return self
 
-    async def get(self) -> list[DatabaseRecord]:
+    async def get(self) -> list[dict[str, Any]]:
         """Execute query and get results."""
         path = _DATATABLE_DATA.format(
             app_slug=self.app_slug,
@@ -134,9 +133,9 @@ class QueryBuilder(_BaseQueryBuilder):
 
         response = await self._http.get(path, params=params)
         records = response.get("data", [])
-        return [DatabaseRecord.from_dict(r) for r in records]
+        return records
 
-    async def first(self) -> Optional[DatabaseRecord]:
+    async def first(self) -> Optional[dict[str, Any]]:
         """Get first result."""
         results = await self.limit(1).get()
         return results[0] if results else None
@@ -173,7 +172,7 @@ class DatabaseModule:
         data: dict[str, Any],
         *,
         app_slug: Optional[str] = None,
-    ) -> DatabaseRecord:
+    ) -> dict[str, Any]:
         """Create a new record."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -182,7 +181,7 @@ class DatabaseModule:
         path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
         response = await self._http.post(path, json=data)
         record = response.get("data", {})
-        return DatabaseRecord.from_dict(record)
+        return record
 
     async def update(
         self,
@@ -191,7 +190,7 @@ class DatabaseModule:
         data: dict[str, Any],
         *,
         app_slug: Optional[str] = None,
-    ) -> DatabaseRecord:
+    ) -> dict[str, Any]:
         """Update a record."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -204,7 +203,7 @@ class DatabaseModule:
         )
         response = await self._http.put(path, json=data)
         record = response.get("data", {})
-        return DatabaseRecord.from_dict(record)
+        return record
 
     async def delete(
         self,
@@ -267,7 +266,7 @@ class SyncQueryBuilder(_BaseQueryBuilder):
         self._add_populate(*fields)
         return self
 
-    def get(self) -> list[DatabaseRecord]:
+    def get(self) -> list[dict[str, Any]]:
         """Execute query and get results (blocking)."""
         path = _DATATABLE_DATA.format(
             app_slug=self.app_slug,
@@ -277,9 +276,9 @@ class SyncQueryBuilder(_BaseQueryBuilder):
 
         response = self._http.get(path, params=params)
         records = response.get("data", [])
-        return [DatabaseRecord.from_dict(r) for r in records]
+        return records
 
-    def first(self) -> Optional[DatabaseRecord]:
+    def first(self) -> Optional[dict[str, Any]]:
         """Get first result (blocking)."""
         results = self.limit(1).get()
         return results[0] if results else None
@@ -316,7 +315,7 @@ class SyncDatabaseModule:
         data: dict[str, Any],
         *,
         app_slug: Optional[str] = None,
-    ) -> DatabaseRecord:
+    ) -> dict[str, Any]:
         """Create a new record (blocking)."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -325,7 +324,7 @@ class SyncDatabaseModule:
         path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
         response = self._http.post(path, json=data)
         record = response.get("data", {})
-        return DatabaseRecord.from_dict(record)
+        return record
 
     def update(
         self,
@@ -334,7 +333,7 @@ class SyncDatabaseModule:
         data: dict[str, Any],
         *,
         app_slug: Optional[str] = None,
-    ) -> DatabaseRecord:
+    ) -> dict[str, Any]:
         """Update a record (blocking)."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -347,7 +346,7 @@ class SyncDatabaseModule:
         )
         response = self._http.put(path, json=data)
         record = response.get("data", {})
-        return DatabaseRecord.from_dict(record)
+        return record
 
     def delete(
         self,

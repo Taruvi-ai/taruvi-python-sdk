@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any, Optional, BinaryIO
 from urllib.parse import urlencode
 import json
 
-from taruvi.models.storage import StorageObject, StorageListResponse
 
 if TYPE_CHECKING:
     from taruvi.client import Client
@@ -25,6 +24,14 @@ _STORAGE_BASE = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects"
 _STORAGE_OBJECT = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/{path}"
 _STORAGE_BATCH_UPLOAD = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/batch-upload/"
 _STORAGE_BATCH_DELETE = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/batch-delete/"
+
+# API endpoint paths for bucket management
+_STORAGE_BUCKETS = "/api/apps/{app_slug}/storage/buckets/"
+_STORAGE_BUCKET = "/api/apps/{app_slug}/storage/buckets/{slug}/"
+
+# API endpoint paths for object operations
+_STORAGE_COPY = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/copy/"
+_STORAGE_MOVE = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/move/"
 
 
 # ============================================================================
@@ -128,7 +135,7 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         )
         return self
 
-    async def list(self) -> StorageListResponse:
+    async def list(self) -> dict[str, Any]:
         """List files in the bucket with current filters."""
         path = _STORAGE_BASE.format(
             app_slug=self.app_slug,
@@ -137,14 +144,14 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         path += self.build_query_string()
 
         response = await self._http.get(path)
-        return StorageListResponse.from_dict(response)
+        return response
 
     async def upload(
         self,
         files: list[tuple[str, BinaryIO]],
         paths: list[str],
         metadatas: Optional[list[dict[str, Any]]] = None
-    ) -> list[StorageObject]:
+    ) -> list[dict[str, Any]]:
         """Upload multiple files to the bucket."""
         import aiohttp
 
@@ -184,7 +191,7 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
 
         data = response.json()
         files_data = data.get("data", [])
-        return [StorageObject.from_dict(f) for f in files_data]
+        return files_data
 
     async def download(self, file_path: str) -> bytes:
         """Download a file from the bucket."""
@@ -205,7 +212,7 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         file_path: str,
         metadata: Optional[dict[str, Any]] = None,
         visibility: Optional[str] = None
-    ) -> StorageObject:
+    ) -> dict[str, Any]:
         """Update file metadata or visibility."""
         path = _STORAGE_OBJECT.format(
             app_slug=self.app_slug,
@@ -215,7 +222,7 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
 
         body = _build_update_body(metadata, visibility)
         response = await self._http.put(path, json=body)
-        return StorageObject.from_dict(response.get("data", {}))
+        return response.get("data", {})
 
     async def delete(self, paths: list[str]) -> None:
         """Delete multiple files from the bucket."""
@@ -225,6 +232,90 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         )
 
         await self._http.post(path, json={"paths": paths})
+
+    async def copy_object(
+        self,
+        source_path: str,
+        destination_path: str,
+        destination_bucket: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Copy an object to a new location.
+
+        Args:
+            source_path: Path to source object
+            destination_path: Path for copied object
+            destination_bucket: Target bucket slug (defaults to current bucket)
+
+        Returns:
+            Dict with new object metadata
+
+        Examples:
+            # Copy within same bucket
+            new_obj = await storage.from_("my-bucket").copy_object(
+                "users/123/avatar.jpg",
+                "users/456/avatar.jpg"
+            )
+
+            # Copy to different bucket
+            new_obj = await storage.from_("uploads").copy_object(
+                "temp/file.pdf",
+                "archive/file.pdf",
+                destination_bucket="archives"
+            )
+        """
+        path = _STORAGE_COPY.format(
+            app_slug=self.app_slug,
+            bucket=self.bucket
+        )
+
+        body: dict[str, Any] = {
+            "source_path": source_path,
+            "destination_path": destination_path
+        }
+
+        if destination_bucket:
+            body["destination_bucket"] = destination_bucket
+
+        response = await self._http.post(path, json=body)
+        return response.get("data", {})
+
+    async def move_object(
+        self,
+        source_path: str,
+        destination_path: str
+    ) -> dict[str, Any]:
+        """
+        Move or rename an object within the bucket.
+
+        WARNING: This copies the file to new location then deletes original.
+        Large files may take several seconds.
+
+        Args:
+            source_path: Path to source object
+            destination_path: New path for object
+
+        Returns:
+            Dict with updated object metadata
+
+        Example:
+            obj = await storage.from_("my-bucket").move_object(
+                "temp/document.pdf",
+                "archive/2024/document.pdf"
+            )
+        """
+        path = _STORAGE_MOVE.format(
+            app_slug=self.app_slug,
+            bucket=self.bucket
+        )
+
+        body = {
+            "source_path": source_path,
+            "destination_path": destination_path
+        }
+
+        response = await self._http.post(path, json=body)
+        return response.get("data", {})
 
 
 class StorageModule:
@@ -239,6 +330,242 @@ class StorageModule:
     def from_(self, bucket: str, app_slug: Optional[str] = None) -> StorageQueryBuilder:
         """Select a bucket for storage operations."""
         return StorageQueryBuilder(self.client, bucket, app_slug)
+
+    async def list_buckets(
+        self,
+        *,
+        search: Optional[str] = None,
+        visibility: Optional[str] = None,
+        app_category: Optional[str] = None,
+        ordering: Optional[str] = None,
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
+        app_slug: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        List all buckets in the app with optional filters.
+
+        Args:
+            search: Search by name or slug
+            visibility: Filter by visibility ("public" or "private")
+            app_category: Filter by category ("assets" or "attachments")
+            ordering: Sort order (e.g., "-created_at", "name")
+            page: Page number for pagination
+            page_size: Items per page (max 100)
+            app_slug: Override app_slug
+
+        Returns:
+            Dict with paginated bucket results:
+            {
+                "count": 42,
+                "next": "...",
+                "previous": "...",
+                "results": [...]
+            }
+
+        Examples:
+            # List all buckets
+            response = await storage.list_buckets()
+            buckets = response["results"]
+
+            # Search and filter
+            response = await storage.list_buckets(
+                search="images",
+                visibility="public",
+                ordering="-created_at",
+                page=1,
+                page_size=20
+            )
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKETS.format(app_slug=app_slug)
+        params: dict[str, Any] = {}
+
+        if search:
+            params["search"] = search
+        if visibility:
+            params["visibility"] = visibility
+        if app_category:
+            params["app_category"] = app_category
+        if ordering:
+            params["ordering"] = ordering
+        if page is not None:
+            params["page"] = page
+        if page_size is not None:
+            params["page_size"] = page_size
+
+        response = await self._http.get(path, params=params)
+        return response.get("data", {})
+
+    async def create_bucket(
+        self,
+        name: str,
+        *,
+        slug: Optional[str] = None,
+        visibility: str = "private",
+        file_size_limit: Optional[int] = None,
+        allowed_mime_types: Optional[list[str]] = None,
+        app_category: Optional[str] = None,
+        app_slug: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Create a new storage bucket.
+
+        Args:
+            name: Bucket display name (required)
+            slug: URL-friendly identifier (auto-generated if not provided)
+            visibility: "public" or "private" (default: "private")
+            file_size_limit: Max file size in bytes
+            allowed_mime_types: List of allowed MIME types (e.g., ["image/*", "video/*"])
+            app_category: "assets" or "attachments"
+            app_slug: Override app_slug
+
+        Returns:
+            Dict with new bucket metadata
+
+        Examples:
+            # Simple bucket
+            bucket = await storage.create_bucket("My Images")
+
+            # With options
+            bucket = await storage.create_bucket(
+                "User Uploads",
+                slug="user-uploads",
+                visibility="private",
+                file_size_limit=10485760,  # 10MB
+                allowed_mime_types=["image/jpeg", "image/png"],
+                app_category="assets"
+            )
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKETS.format(app_slug=app_slug)
+        body: dict[str, Any] = {"name": name}
+
+        if slug:
+            body["slug"] = slug
+        if visibility:
+            body["visibility"] = visibility
+        if file_size_limit is not None:
+            body["file_size_limit"] = file_size_limit
+        if allowed_mime_types:
+            body["allowed_mime_types"] = allowed_mime_types
+        if app_category:
+            body["app_category"] = app_category
+
+        response = await self._http.post(path, json=body)
+        return response.get("data", {})
+
+    async def get_bucket(
+        self,
+        slug: str,
+        *,
+        app_slug: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Get a specific bucket by slug.
+
+        Args:
+            slug: Bucket slug identifier
+            app_slug: Override app_slug
+
+        Returns:
+            Dict with bucket metadata
+
+        Example:
+            bucket = await storage.get_bucket("my-bucket")
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
+        response = await self._http.get(path)
+        return response.get("data", {})
+
+    async def update_bucket(
+        self,
+        slug: str,
+        *,
+        name: Optional[str] = None,
+        visibility: Optional[str] = None,
+        file_size_limit: Optional[int] = None,
+        allowed_mime_types: Optional[list[str]] = None,
+        app_category: Optional[str] = None,
+        app_slug: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Update bucket settings.
+
+        Args:
+            slug: Bucket slug identifier
+            name: New bucket name
+            visibility: "public" or "private"
+            file_size_limit: New max file size in bytes
+            allowed_mime_types: New list of allowed MIME types
+            app_category: "assets" or "attachments"
+            app_slug: Override app_slug
+
+        Returns:
+            Dict with updated bucket metadata
+
+        Example:
+            bucket = await storage.update_bucket(
+                "my-bucket",
+                visibility="public",
+                file_size_limit=104857600  # 100MB
+            )
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
+        body: dict[str, Any] = {}
+
+        if name is not None:
+            body["name"] = name
+        if visibility is not None:
+            body["visibility"] = visibility
+        if file_size_limit is not None:
+            body["file_size_limit"] = file_size_limit
+        if allowed_mime_types is not None:
+            body["allowed_mime_types"] = allowed_mime_types
+        if app_category is not None:
+            body["app_category"] = app_category
+
+        response = await self._http.patch(path, json=body)
+        return response.get("data", {})
+
+    async def delete_bucket(
+        self,
+        slug: str,
+        *,
+        app_slug: Optional[str] = None
+    ) -> None:
+        """
+        Delete a bucket and all its objects.
+
+        WARNING: This permanently deletes all files in the bucket.
+
+        Args:
+            slug: Bucket slug identifier
+            app_slug: Override app_slug
+
+        Example:
+            await storage.delete_bucket("old-bucket")
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
+        await self._http.delete(path)
 
 
 # ============================================================================
@@ -280,7 +607,7 @@ class SyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         )
         return self
 
-    def list(self) -> StorageListResponse:
+    def list(self) -> dict[str, Any]:
         """List files in the bucket with current filters (blocking)."""
         path = _STORAGE_BASE.format(
             app_slug=self.app_slug,
@@ -289,14 +616,14 @@ class SyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         path += self.build_query_string()
 
         response = self._http.get(path)
-        return StorageListResponse.from_dict(response)
+        return response
 
     def upload(
         self,
         files: list[tuple[str, BinaryIO]],
         paths: list[str],
         metadatas: Optional[list[dict[str, Any]]] = None
-    ) -> list[StorageObject]:
+    ) -> list[dict[str, Any]]:
         """Upload multiple files to the bucket (blocking)."""
         path = _STORAGE_BATCH_UPLOAD.format(
             app_slug=self.app_slug,
@@ -326,7 +653,7 @@ class SyncStorageQueryBuilder(_BaseStorageQueryBuilder):
 
         response_data = response.json()
         files_list = response_data.get("data", [])
-        return [StorageObject.from_dict(f) for f in files_list]
+        return files_list
 
     def download(self, file_path: str) -> bytes:
         """Download a file from the bucket (blocking)."""
@@ -347,7 +674,7 @@ class SyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         file_path: str,
         metadata: Optional[dict[str, Any]] = None,
         visibility: Optional[str] = None
-    ) -> StorageObject:
+    ) -> dict[str, Any]:
         """Update file metadata or visibility (blocking)."""
         path = _STORAGE_OBJECT.format(
             app_slug=self.app_slug,
@@ -357,7 +684,7 @@ class SyncStorageQueryBuilder(_BaseStorageQueryBuilder):
 
         body = _build_update_body(metadata, visibility)
         response = self._http.put(path, json=body)
-        return StorageObject.from_dict(response.get("data", {}))
+        return response.get("data", {})
 
     def delete(self, paths: list[str]) -> None:
         """Delete multiple files from the bucket (blocking)."""
@@ -367,6 +694,90 @@ class SyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         )
 
         self._http.post(path, json={"paths": paths})
+
+    def copy_object(
+        self,
+        source_path: str,
+        destination_path: str,
+        destination_bucket: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Copy an object to a new location (blocking).
+
+        Args:
+            source_path: Path to source object
+            destination_path: Path for copied object
+            destination_bucket: Target bucket slug (defaults to current bucket)
+
+        Returns:
+            Dict with new object metadata
+
+        Examples:
+            # Copy within same bucket
+            new_obj = storage.from_("my-bucket").copy_object(
+                "users/123/avatar.jpg",
+                "users/456/avatar.jpg"
+            )
+
+            # Copy to different bucket
+            new_obj = storage.from_("uploads").copy_object(
+                "temp/file.pdf",
+                "archive/file.pdf",
+                destination_bucket="archives"
+            )
+        """
+        path = _STORAGE_COPY.format(
+            app_slug=self.app_slug,
+            bucket=self.bucket
+        )
+
+        body: dict[str, Any] = {
+            "source_path": source_path,
+            "destination_path": destination_path
+        }
+
+        if destination_bucket:
+            body["destination_bucket"] = destination_bucket
+
+        response = self._http.post(path, json=body)
+        return response.get("data", {})
+
+    def move_object(
+        self,
+        source_path: str,
+        destination_path: str
+    ) -> dict[str, Any]:
+        """
+        Move or rename an object within the bucket (blocking).
+
+        WARNING: This copies the file to new location then deletes original.
+        Large files may take several seconds.
+
+        Args:
+            source_path: Path to source object
+            destination_path: New path for object
+
+        Returns:
+            Dict with updated object metadata
+
+        Example:
+            obj = storage.from_("my-bucket").move_object(
+                "temp/document.pdf",
+                "archive/2024/document.pdf"
+            )
+        """
+        path = _STORAGE_MOVE.format(
+            app_slug=self.app_slug,
+            bucket=self.bucket
+        )
+
+        body = {
+            "source_path": source_path,
+            "destination_path": destination_path
+        }
+
+        response = self._http.post(path, json=body)
+        return response.get("data", {})
 
 
 class SyncStorageModule:
@@ -381,3 +792,239 @@ class SyncStorageModule:
     def from_(self, bucket: str, app_slug: Optional[str] = None) -> SyncStorageQueryBuilder:
         """Select a bucket for storage operations (blocking)."""
         return SyncStorageQueryBuilder(self.client, bucket, app_slug)
+
+    def list_buckets(
+        self,
+        *,
+        search: Optional[str] = None,
+        visibility: Optional[str] = None,
+        app_category: Optional[str] = None,
+        ordering: Optional[str] = None,
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
+        app_slug: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        List all buckets in the app with optional filters (blocking).
+
+        Args:
+            search: Search by name or slug
+            visibility: Filter by visibility ("public" or "private")
+            app_category: Filter by category ("assets" or "attachments")
+            ordering: Sort order (e.g., "-created_at", "name")
+            page: Page number for pagination
+            page_size: Items per page (max 100)
+            app_slug: Override app_slug
+
+        Returns:
+            Dict with paginated bucket results:
+            {
+                "count": 42,
+                "next": "...",
+                "previous": "...",
+                "results": [...]
+            }
+
+        Examples:
+            # List all buckets
+            response = storage.list_buckets()
+            buckets = response["results"]
+
+            # Search and filter
+            response = storage.list_buckets(
+                search="images",
+                visibility="public",
+                ordering="-created_at",
+                page=1,
+                page_size=20
+            )
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKETS.format(app_slug=app_slug)
+        params: dict[str, Any] = {}
+
+        if search:
+            params["search"] = search
+        if visibility:
+            params["visibility"] = visibility
+        if app_category:
+            params["app_category"] = app_category
+        if ordering:
+            params["ordering"] = ordering
+        if page is not None:
+            params["page"] = page
+        if page_size is not None:
+            params["page_size"] = page_size
+
+        response = self._http.get(path, params=params)
+        return response.get("data", {})
+
+    def create_bucket(
+        self,
+        name: str,
+        *,
+        slug: Optional[str] = None,
+        visibility: str = "private",
+        file_size_limit: Optional[int] = None,
+        allowed_mime_types: Optional[list[str]] = None,
+        app_category: Optional[str] = None,
+        app_slug: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Create a new storage bucket (blocking).
+
+        Args:
+            name: Bucket display name (required)
+            slug: URL-friendly identifier (auto-generated if not provided)
+            visibility: "public" or "private" (default: "private")
+            file_size_limit: Max file size in bytes
+            allowed_mime_types: List of allowed MIME types (e.g., ["image/*", "video/*"])
+            app_category: "assets" or "attachments"
+            app_slug: Override app_slug
+
+        Returns:
+            Dict with new bucket metadata
+
+        Examples:
+            # Simple bucket
+            bucket = storage.create_bucket("My Images")
+
+            # With options
+            bucket = storage.create_bucket(
+                "User Uploads",
+                slug="user-uploads",
+                visibility="private",
+                file_size_limit=10485760,  # 10MB
+                allowed_mime_types=["image/jpeg", "image/png"],
+                app_category="assets"
+            )
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKETS.format(app_slug=app_slug)
+        body: dict[str, Any] = {"name": name}
+
+        if slug:
+            body["slug"] = slug
+        if visibility:
+            body["visibility"] = visibility
+        if file_size_limit is not None:
+            body["file_size_limit"] = file_size_limit
+        if allowed_mime_types:
+            body["allowed_mime_types"] = allowed_mime_types
+        if app_category:
+            body["app_category"] = app_category
+
+        response = self._http.post(path, json=body)
+        return response.get("data", {})
+
+    def get_bucket(
+        self,
+        slug: str,
+        *,
+        app_slug: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Get a specific bucket by slug (blocking).
+
+        Args:
+            slug: Bucket slug identifier
+            app_slug: Override app_slug
+
+        Returns:
+            Dict with bucket metadata
+
+        Example:
+            bucket = storage.get_bucket("my-bucket")
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
+        response = self._http.get(path)
+        return response.get("data", {})
+
+    def update_bucket(
+        self,
+        slug: str,
+        *,
+        name: Optional[str] = None,
+        visibility: Optional[str] = None,
+        file_size_limit: Optional[int] = None,
+        allowed_mime_types: Optional[list[str]] = None,
+        app_category: Optional[str] = None,
+        app_slug: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Update bucket settings (blocking).
+
+        Args:
+            slug: Bucket slug identifier
+            name: New bucket name
+            visibility: "public" or "private"
+            file_size_limit: New max file size in bytes
+            allowed_mime_types: New list of allowed MIME types
+            app_category: "assets" or "attachments"
+            app_slug: Override app_slug
+
+        Returns:
+            Dict with updated bucket metadata
+
+        Example:
+            bucket = storage.update_bucket(
+                "my-bucket",
+                visibility="public",
+                file_size_limit=104857600  # 100MB
+            )
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
+        body: dict[str, Any] = {}
+
+        if name is not None:
+            body["name"] = name
+        if visibility is not None:
+            body["visibility"] = visibility
+        if file_size_limit is not None:
+            body["file_size_limit"] = file_size_limit
+        if allowed_mime_types is not None:
+            body["allowed_mime_types"] = allowed_mime_types
+        if app_category is not None:
+            body["app_category"] = app_category
+
+        response = self._http.patch(path, json=body)
+        return response.get("data", {})
+
+    def delete_bucket(
+        self,
+        slug: str,
+        *,
+        app_slug: Optional[str] = None
+    ) -> None:
+        """
+        Delete a bucket and all its objects (blocking).
+
+        WARNING: This permanently deletes all files in the bucket.
+
+        Args:
+            slug: Bucket slug identifier
+            app_slug: Override app_slug
+
+        Example:
+            storage.delete_bucket("old-bucket")
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
+        self._http.delete(path)

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from taruvi.models.policy import PolicyCheckResponse, ResourceCheckRequest
 
 if TYPE_CHECKING:
     from taruvi.client import Client
@@ -63,7 +62,7 @@ def _parse_check_response(response: Any) -> list[PolicyCheckResponse]:
     if isinstance(response, dict):
         return [PolicyCheckResponse.from_dict(response)]
     else:
-        return [PolicyCheckResponse.from_dict(r) for r in response]
+        return response
 
 
 # ============================================================================
@@ -87,7 +86,7 @@ class PolicyModule:
         actions: list[str],
         attributes: Optional[dict[str, Any]] = None,
         app_slug: Optional[str] = None
-    ) -> PolicyCheckResponse:
+    ) -> dict[str, Any]:
         """
         Check if current user can perform actions on a resource.
 
@@ -125,7 +124,7 @@ class PolicyModule:
         )
 
         response = await self._http.post(path, json=body)
-        return PolicyCheckResponse.from_dict(response)
+        return response
 
     async def check_resources(
         self,
@@ -192,7 +191,7 @@ class SyncPolicyModule:
         actions: list[str],
         attributes: Optional[dict[str, Any]] = None,
         app_slug: Optional[str] = None
-    ) -> PolicyCheckResponse:
+    ) -> dict[str, Any]:
         """Check if current user can perform actions on a resource (blocking)."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -204,7 +203,7 @@ class SyncPolicyModule:
         )
 
         response = self._http.post(path, json=body)
-        return PolicyCheckResponse.from_dict(response)
+        return response
 
     def check_resources(
         self,

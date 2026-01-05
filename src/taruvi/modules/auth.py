@@ -13,8 +13,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlencode
 
-from taruvi.models.auth import TokenResponse, UserResponse, UserListResponse
-from taruvi.models.app import UserApp
 
 if TYPE_CHECKING:
     from taruvi.client import Client
@@ -38,6 +36,40 @@ def _build_refresh_request(refresh_token: str) -> tuple[str, dict[str, str]]:
 def _build_verify_request(token: str) -> tuple[str, dict[str, str]]:
     """Build token verify request."""
     return "/api/cloud/auth/jwt/token/verify/", {"token": token}
+
+
+def _build_get_user_path(username: str) -> str:
+    """Build get user request path."""
+    return f"/api/users/{username}/"
+
+
+def _build_assign_roles_request(
+    roles: list[str],
+    usernames: list[str],
+    expires_at: Optional[str]
+) -> tuple[str, dict[str, Any]]:
+    """Build bulk assign roles request."""
+    body: dict[str, Any] = {
+        "roles": roles,
+        "usernames": usernames
+    }
+    if expires_at is not None:
+        body["expires_at"] = expires_at
+
+    return "/api/assign/roles", body
+
+
+def _build_revoke_roles_request(
+    roles: list[str],
+    usernames: list[str]
+) -> tuple[str, dict[str, Any]]:
+    """Build bulk revoke roles request."""
+    body: dict[str, Any] = {
+        "roles": roles,
+        "usernames": usernames
+    }
+
+    return "/api/revoke/roles", body
 
 
 def _build_user_create_request(
@@ -110,6 +142,7 @@ def _build_user_list_path(
     is_staff: Optional[bool],
     is_superuser: Optional[bool],
     is_deleted: Optional[bool],
+    roles: Optional[str],
     ordering: Optional[str],
     page: Optional[int],
     page_size: Optional[int]
@@ -128,6 +161,8 @@ def _build_user_list_path(
         filters["is_superuser"] = is_superuser
     if is_deleted is not None:
         filters["is_deleted"] = is_deleted
+    if roles is not None:
+        filters["roles"] = roles
     if ordering is not None:
         filters["ordering"] = ordering
     if page is not None:
@@ -141,13 +176,13 @@ def _build_user_list_path(
     return path
 
 
-def _parse_user_apps(response: Any) -> list[UserApp]:
+def _parse_user_apps(response: Any) -> list[dict[str, Any]]:
     """Parse user apps response."""
     if isinstance(response, list):
-        return [UserApp.from_dict(app) for app in response]
+        return response
     else:
         apps_list = response.get("data", [])
-        return [UserApp.from_dict(app) for app in apps_list]
+        return apps_list
 
 
 # ============================================================================
@@ -163,7 +198,7 @@ class AuthModule:
         self._http = client._http_client
         self._config = client._config
 
-    async def login(self, username: str, password: str) -> TokenResponse:
+    async def login(self, username: str, password: str) -> dict[str, Any]:
         """
         Login with username and password to get JWT tokens.
 
@@ -182,9 +217,9 @@ class AuthModule:
         """
         path, body = _build_login_request(username, password)
         response = await self._http.post(path, json=body)
-        return TokenResponse.from_dict(response)
+        return response
 
-    async def refresh_token(self, refresh_token: str) -> TokenResponse:
+    async def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         """
         Refresh access token using refresh token.
 
@@ -196,7 +231,7 @@ class AuthModule:
         """
         path, body = _build_refresh_request(refresh_token)
         response = await self._http.post(path, json=body)
-        return TokenResponse.from_dict(response)
+        return response
 
     async def verify_token(self, token: str) -> dict[str, Any]:
         """
@@ -212,7 +247,7 @@ class AuthModule:
         response = await self._http.post(path, json=body)
         return response
 
-    async def get_current_user(self) -> UserResponse:
+    async def get_current_user(self) -> dict[str, Any]:
         """
         Get current authenticated user details.
 
@@ -220,7 +255,27 @@ class AuthModule:
             UserResponse: User details
         """
         response = await self._http.get("/api/users/me/")
-        return UserResponse.from_dict(response)
+        return response
+
+    async def get_user(self, username: str) -> dict[str, Any]:
+        """
+        Get user details by username.
+
+        Args:
+            username: Username to retrieve
+
+        Returns:
+            dict: User details response
+
+        Example:
+            ```python
+            user = await client.auth.get_user("alice")
+            print(f"Email: {user['data']['email']}")
+            ```
+        """
+        path = _build_get_user_path(username)
+        response = await self._http.get(path)
+        return response
 
     async def create_user(
         self,
@@ -233,14 +288,14 @@ class AuthModule:
         is_active: bool = True,
         is_staff: bool = False,
         attributes: Optional[str] = None
-    ) -> UserResponse:
+    ) -> dict[str, Any]:
         """Create a new user."""
         path, body = _build_user_create_request(
             username, email, password, confirm_password,
             first_name, last_name, is_active, is_staff, attributes
         )
         response = await self._http.post(path, json=body)
-        return UserResponse.from_dict(response)
+        return response
 
     async def update_user(
         self,
@@ -253,14 +308,14 @@ class AuthModule:
         is_active: Optional[bool] = None,
         is_staff: Optional[bool] = None,
         attributes: Optional[str] = None
-    ) -> UserResponse:
+    ) -> dict[str, Any]:
         """Update an existing user."""
         path, body = _build_user_update_request(
             username, email, password, confirm_password,
             first_name, last_name, is_active, is_staff, attributes
         )
         response = await self._http.put(path, json=body)
-        return UserResponse.from_dict(response)
+        return response
 
     async def delete_user(self, username: str) -> None:
         """Delete a user."""
@@ -273,22 +328,117 @@ class AuthModule:
         is_staff: Optional[bool] = None,
         is_superuser: Optional[bool] = None,
         is_deleted: Optional[bool] = None,
+        roles: Optional[str] = None,
         ordering: Optional[str] = None,
         page: Optional[int] = None,
         page_size: Optional[int] = None
-    ) -> UserListResponse:
-        """List users with optional filters."""
+    ) -> dict[str, Any]:
+        """
+        List users with optional filters.
+
+        Args:
+            search: Search by username/email/name
+            is_active: Filter by active status
+            is_staff: Filter by staff status
+            is_superuser: Filter by superuser status
+            is_deleted: Filter by deleted status
+            roles: Comma-separated role slugs (e.g., "admin,manager")
+            ordering: Sort field (e.g., "-created_at")
+            page: Page number
+            page_size: Items per page
+
+        Returns:
+            dict: User list response with pagination
+        """
         path = _build_user_list_path(
             search, is_active, is_staff, is_superuser,
-            is_deleted, ordering, page, page_size
+            is_deleted, roles, ordering, page, page_size
         )
         response = await self._http.get(path)
-        return UserListResponse.from_dict(response)
+        return response
 
-    async def get_user_apps(self, username: str) -> list[UserApp]:
+    async def get_user_apps(self, username: str) -> list[dict[str, Any]]:
         """Get apps associated with a user."""
         response = await self._http.get(f"/api/users/{username}/apps/")
         return _parse_user_apps(response)
+
+    async def assign_roles(
+        self,
+        roles: list[str],
+        usernames: list[str],
+        expires_at: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Bulk assign roles to users.
+
+        Args:
+            roles: List of role slugs to assign (max 100)
+            usernames: List of usernames to assign roles to (max 100)
+            expires_at: Optional ISO 8601 timestamp for role expiration
+
+        Returns:
+            dict: Assignment result response
+
+        Example:
+            ```python
+            # Assign multiple roles to multiple users
+            result = await client.auth.assign_roles(
+                roles=["admin", "manager"],
+                usernames=["alice", "bob"],
+                expires_at="2025-06-15T23:59:59Z"  # Optional
+            )
+            print(result["message"])  # "Assigned 4 roles successfully"
+
+            # Permanent assignment (no expiration)
+            result = await client.auth.assign_roles(
+                roles=["viewer"],
+                usernames=["charlie"]
+            )
+            ```
+
+        Note:
+            - Can mix AppRole and SiteRole slugs
+            - Creates UserRoleMembership records
+            - Max 100 roles and 100 usernames per request
+        """
+        path, body = _build_assign_roles_request(roles, usernames, expires_at)
+        response = await self._http.post(path, json=body)
+        return response
+
+    async def revoke_roles(
+        self,
+        roles: list[str],
+        usernames: list[str]
+    ) -> dict[str, Any]:
+        """
+        Bulk revoke roles from users.
+
+        Args:
+            roles: List of role slugs to revoke (max 100)
+            usernames: List of usernames to revoke roles from (max 100)
+
+        Returns:
+            dict: Revocation result response
+
+        Example:
+            ```python
+            # Revoke multiple roles from multiple users
+            result = await client.auth.revoke_roles(
+                roles=["admin", "manager"],
+                usernames=["alice", "bob"]
+            )
+            print(result["message"])  # "Revoked 4 roles successfully"
+            ```
+
+        Note:
+            - Works with both AppRole and SiteRole
+            - Deletes UserRoleMembership records
+            - Max 100 roles and 100 usernames per request
+        """
+        path, body = _build_revoke_roles_request(roles, usernames)
+        # Use request() directly as delete() convenience method doesn't support JSON body
+        response = await self._http.request("DELETE", path, json=body)
+        return response
 
 
 # ============================================================================
@@ -304,17 +454,17 @@ class SyncAuthModule:
         self._http = client._http
         self._config = client._config
 
-    def login(self, username: str, password: str) -> TokenResponse:
+    def login(self, username: str, password: str) -> dict[str, Any]:
         """Login with username and password to get JWT tokens (blocking)."""
         path, body = _build_login_request(username, password)
         response = self._http.post(path, json=body)
-        return TokenResponse.from_dict(response)
+        return response
 
-    def refresh_token(self, refresh_token: str) -> TokenResponse:
+    def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         """Refresh access token using refresh token (blocking)."""
         path, body = _build_refresh_request(refresh_token)
         response = self._http.post(path, json=body)
-        return TokenResponse.from_dict(response)
+        return response
 
     def verify_token(self, token: str) -> dict[str, Any]:
         """Verify JWT token validity (blocking)."""
@@ -322,10 +472,24 @@ class SyncAuthModule:
         response = self._http.post(path, json=body)
         return response
 
-    def get_current_user(self) -> UserResponse:
+    def get_current_user(self) -> dict[str, Any]:
         """Get current authenticated user details (blocking)."""
         response = self._http.get("/api/users/me/")
-        return UserResponse.from_dict(response)
+        return response
+
+    def get_user(self, username: str) -> dict[str, Any]:
+        """
+        Get user details by username (blocking).
+
+        Args:
+            username: Username to retrieve
+
+        Returns:
+            dict: User details response
+        """
+        path = _build_get_user_path(username)
+        response = self._http.get(path)
+        return response
 
     def create_user(
         self,
@@ -338,14 +502,14 @@ class SyncAuthModule:
         is_active: bool = True,
         is_staff: bool = False,
         attributes: Optional[str] = None
-    ) -> UserResponse:
+    ) -> dict[str, Any]:
         """Create a new user (blocking)."""
         path, body = _build_user_create_request(
             username, email, password, confirm_password,
             first_name, last_name, is_active, is_staff, attributes
         )
         response = self._http.post(path, json=body)
-        return UserResponse.from_dict(response)
+        return response
 
     def update_user(
         self,
@@ -358,14 +522,14 @@ class SyncAuthModule:
         is_active: Optional[bool] = None,
         is_staff: Optional[bool] = None,
         attributes: Optional[str] = None
-    ) -> UserResponse:
+    ) -> dict[str, Any]:
         """Update an existing user (blocking)."""
         path, body = _build_user_update_request(
             username, email, password, confirm_password,
             first_name, last_name, is_active, is_staff, attributes
         )
         response = self._http.put(path, json=body)
-        return UserResponse.from_dict(response)
+        return response
 
     def delete_user(self, username: str) -> None:
         """Delete a user (blocking)."""
@@ -378,19 +542,61 @@ class SyncAuthModule:
         is_staff: Optional[bool] = None,
         is_superuser: Optional[bool] = None,
         is_deleted: Optional[bool] = None,
+        roles: Optional[str] = None,
         ordering: Optional[str] = None,
         page: Optional[int] = None,
         page_size: Optional[int] = None
-    ) -> UserListResponse:
+    ) -> dict[str, Any]:
         """List users with optional filters (blocking)."""
         path = _build_user_list_path(
             search, is_active, is_staff, is_superuser,
-            is_deleted, ordering, page, page_size
+            is_deleted, roles, ordering, page, page_size
         )
         response = self._http.get(path)
-        return UserListResponse.from_dict(response)
+        return response
 
-    def get_user_apps(self, username: str) -> list[UserApp]:
+    def get_user_apps(self, username: str) -> list[dict[str, Any]]:
         """Get apps associated with a user (blocking)."""
         response = self._http.get(f"/api/users/{username}/apps/")
         return _parse_user_apps(response)
+
+    def assign_roles(
+        self,
+        roles: list[str],
+        usernames: list[str],
+        expires_at: Optional[str] = None
+    ) -> dict[str, Any]:
+        """
+        Bulk assign roles to users (blocking).
+
+        Args:
+            roles: List of role slugs to assign (max 100)
+            usernames: List of usernames to assign roles to (max 100)
+            expires_at: Optional ISO 8601 timestamp for role expiration
+
+        Returns:
+            dict: Assignment result response
+        """
+        path, body = _build_assign_roles_request(roles, usernames, expires_at)
+        response = self._http.post(path, json=body)
+        return response
+
+    def revoke_roles(
+        self,
+        roles: list[str],
+        usernames: list[str]
+    ) -> dict[str, Any]:
+        """
+        Bulk revoke roles from users (blocking).
+
+        Args:
+            roles: List of role slugs to revoke (max 100)
+            usernames: List of usernames to revoke roles from (max 100)
+
+        Returns:
+            dict: Revocation result response
+        """
+        path, body = _build_revoke_roles_request(roles, usernames)
+        # Use request() directly as delete() convenience method doesn't support JSON body
+        response = self._http.request("DELETE", path, json=body)
+        return response

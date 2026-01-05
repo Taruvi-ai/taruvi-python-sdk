@@ -8,80 +8,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Pydantic response models** for all API responses
-  - `TokenResponse`, `UserResponse` for auth
-  - `FunctionExecutionResult`, `FunctionResponse`, `InvocationResponse`, `FunctionListResponse` for functions
-  - `DatabaseRecord` for database
-  - Full type safety and IDE autocomplete
-  - Runtime validation of API responses
-- **Module-level endpoint constants** for better organization
-  - Each module defines its own API endpoint paths
-  - Follows separation of concerns principle
-  - Easier to maintain and understand
+- **Unified Client API** with `mode` parameter
+  - `Client(mode='sync')` - Native blocking client (default)
+  - `Client(mode='async')` - Async client for async frameworks
+  - Single import, consistent API across both modes
+- **Additional API modules**
+  - Storage API for file/object storage operations
+  - Secrets API for secure credential management
+  - Policy API for Cerbos policy checks
+  - App API for role and user management
+  - Settings API for site configuration
 - **TaruviConfig.from_runtime_and_params()** factory method
   - Consistent configuration merging for both async and sync clients
   - Leverages Pydantic's built-in field precedence
+  - Simplified client initialization
 
 ### Changed
-- **REFACTOR**: SyncClient now uses native `httpx.Client` (blocking) instead of `asyncio.run()` wrapper
+- **REFACTOR**: Native blocking implementation for sync mode
+  - Uses `httpx.Client` (blocking) instead of `asyncio.run()` wrapper
   - 10-50x performance improvement for high-frequency usage
   - Eliminates event loop creation overhead (~10-50ms per call)
   - Now thread-safe and works in all Python environments
   - Compatible with Jupyter notebooks, FastAPI apps, and any async context
   - No longer crashes with `RuntimeError: asyncio.run() cannot be called from a running event loop`
-- Created native synchronous modules: `SyncHTTPClient`, `SyncFunctionsModule`, `SyncDatabaseModule`, `SyncAuthModule`
-- All sync modules use direct blocking HTTP calls (no asyncio wrappers)
-- **BREAKING**: Return types now use Pydantic models instead of raw dicts
-  - `auth.login()` returns `TokenResponse` (was `dict[str, Any]`)
-  - `auth.get_current_user()` returns `UserResponse` (was `dict[str, Any]`)
-  - `functions.execute()` returns `FunctionExecutionResult` (was `dict[str, Any]`)
-  - `functions.list()` returns `FunctionListResponse` (was `dict[str, Any]`)
-  - `functions.get()` returns `FunctionResponse` (was `dict[str, Any]`)
-  - `functions.get_invocation()` returns `InvocationResponse` (was `dict[str, Any]`)
-  - `database.query().get()` returns `list[DatabaseRecord]` (was `list[dict[str, Any]]`)
-  - `database.query().first()` returns `Optional[DatabaseRecord]` (was `Optional[dict[str, Any]]`)
-  - `database.create()` returns `DatabaseRecord` (was `dict[str, Any]`)
-  - `database.update()` returns `DatabaseRecord` (was `dict[str, Any]`)
-- **Config merging** now uses Pydantic factory method
-  - Simplified client initialization code
-  - Consistent merge logic between `Client` and `SyncClient`
-  - Runtime detection handled internally by factory method
+- **Unified module structure** - Single set of modules work for both sync/async
+  - Removed separate `sync_*` module files
+  - Cleaner codebase with shared implementation logic
+- **Config merging** now uses factory method
+  - Runtime detection handled internally
+  - Consistent merge logic between sync and async clients
 
 ### Internal
-- Added `sync_http_client.py` - Native blocking HTTP client using `httpx.Client`
-- Added `modules/sync_functions.py` - Native blocking functions module
-- Added `modules/sync_database.py` - Native blocking database module with `SyncQueryBuilder`
-- Added `modules/sync_auth.py` - Native blocking auth module
-- Added `models/` directory with Pydantic response models
-  - `models/auth.py` - Auth response models
-  - `models/functions.py` - Functions response models
-  - `models/database.py` - Database response models
-- Refactored `sync_client.py` to use native sync modules and config factory method
-- Refactored `client.py` to use config factory method
-- All modules now use module-level endpoint constants
+- Refactored to internal `_AsyncClient` and `_SyncClient` classes
+- Public `Client()` factory function for mode selection
+- Improved type hints with `@overload` decorators
+- Comprehensive test suite added
 
 ### Migration Notes
-- **BREAKING CHANGE**: Return types changed from `dict` to Pydantic models
-- **Migration path**:
-  ```python
-  # Before (v0.1.0)
-  result = client.functions.execute("func", {})
-  success = result["success"]  # dict access
-
-  # After (v0.2.0)
-  result = client.functions.execute("func", {})
-  success = result.success  # typed attribute access
-
-  # If you need dict, use .model_dump()
-  result_dict = result.model_dump()
-  ```
-- Most code will continue to work due to Pydantic's dict-like behavior
-- Update code to use attribute access for better type safety and IDE autocomplete
-- Benefits: Full type hints, runtime validation, better developer experience
-- **No breaking changes** for SyncClient refactor - Public API remains identical
-- `SyncClient` methods work exactly the same way
-- Internal implementation changed from asyncio wrapper to native blocking
-- Users will experience performance improvements and better compatibility automatically
+- **No breaking changes** - Public API remains identical
+- Module methods work exactly the same way (still return `dict[str, Any]`)
+- Internal implementation improved for better performance
+- Users will experience performance improvements automatically
 
 ## [0.1.0] - 2025-12-26
 

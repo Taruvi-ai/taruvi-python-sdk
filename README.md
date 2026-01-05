@@ -202,6 +202,120 @@ await client.database.delete(
 )
 ```
 
+#### Storage API
+
+```python
+# =====================================
+# Bucket Management
+# =====================================
+
+# List all buckets
+response = await client.storage.list_buckets()
+buckets = response["results"]
+total = response["count"]
+
+# List buckets with filters
+response = await client.storage.list_buckets(
+    search="images",
+    visibility="public",  # public or private
+    app_category="assets",  # assets or attachments
+    ordering="-created_at",  # Sort by created_at descending
+    page=1,
+    page_size=20
+)
+
+# Create a new bucket
+bucket = await client.storage.create_bucket(
+    name="User Uploads",
+    slug="user-uploads",  # Optional, auto-generated if not provided
+    visibility="private",  # public or private (default: private)
+    file_size_limit=10485760,  # 10MB in bytes
+    allowed_mime_types=["image/jpeg", "image/png", "image/webp"],
+    app_category="assets"  # assets or attachments
+)
+
+# Get bucket details
+bucket = await client.storage.get_bucket("my-bucket")
+print(f"Bucket: {bucket['name']}")
+print(f"Objects: {bucket['object_count']}")
+
+# Update bucket settings
+updated_bucket = await client.storage.update_bucket(
+    "my-bucket",
+    visibility="public",
+    file_size_limit=104857600  # 100MB
+)
+
+# Delete a bucket (and all its objects)
+await client.storage.delete_bucket("old-bucket")
+
+# =====================================
+# Object Operations
+# =====================================
+
+# Upload files
+with open("avatar.jpg", "rb") as f1, open("banner.jpg", "rb") as f2:
+    uploaded_files = await client.storage.from_("my-bucket").upload(
+        files=[("avatar.jpg", f1), ("banner.jpg", f2)],
+        paths=["users/123/avatar.jpg", "users/123/banner.jpg"],
+        metadatas=[
+            {"description": "User avatar"},
+            {"description": "Profile banner"}
+        ]
+    )
+
+# Download a file
+file_content = await client.storage.from_("my-bucket").download(
+    "users/123/avatar.jpg"
+)
+
+# List objects in bucket with filters
+response = await client.storage.from_("my-bucket").filter(
+    search="avatar",
+    mimetype="image/jpeg",
+    visibility="public",
+    ordering="-created_at",
+    page=1,
+    page_size=50
+).list()
+
+objects = response["data"]
+total = response["total"]
+
+# Copy object within same bucket
+new_obj = await client.storage.from_("my-bucket").copy_object(
+    source_path="users/123/avatar.jpg",
+    destination_path="users/456/avatar.jpg"
+)
+
+# Copy object to different bucket
+new_obj = await client.storage.from_("uploads").copy_object(
+    source_path="temp/document.pdf",
+    destination_path="archive/2024/document.pdf",
+    destination_bucket="archives"
+)
+
+# Move/rename object
+moved_obj = await client.storage.from_("my-bucket").move_object(
+    source_path="temp/document.pdf",
+    destination_path="archive/2024/document.pdf"
+)
+
+# Update object metadata
+updated_obj = await client.storage.from_("my-bucket").update(
+    "users/123/avatar.jpg",
+    metadata={"description": "Updated avatar"},
+    visibility="public"
+)
+
+# Delete objects (bulk delete)
+await client.storage.from_("my-bucket").delete([
+    "temp/file1.txt",
+    "temp/file2.txt",
+    "temp/file3.txt"
+])
+```
+
 #### Auth API
 
 ```python

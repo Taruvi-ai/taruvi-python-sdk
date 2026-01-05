@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
-from taruvi.models.app import Role, RoleListResponse
 
 if TYPE_CHECKING:
     from taruvi.client import Client
@@ -33,7 +32,7 @@ class AppModule:
         self._http = client._http_client
         self._config = client._config
 
-    async def roles(self, app_slug: Optional[str] = None) -> RoleListResponse:
+    async def roles(self, app_slug: Optional[str] = None) -> dict[str, Any]ListResponse:
         """
         Get app roles.
 
@@ -56,7 +55,7 @@ class AppModule:
 
         path = _APP_ROLES.format(app_slug=app_slug)
         response = await self._http.get(path)
-        return RoleListResponse.from_dict(response)
+        return response
 
 
 # ============================================================================
@@ -72,7 +71,7 @@ class SyncAppModule:
         self._http = client._http
         self._config = client._config
 
-    def roles(self, app_slug: Optional[str] = None) -> RoleListResponse:
+    def roles(self, app_slug: Optional[str] = None) -> dict[str, Any]ListResponse:
         """Get app roles (blocking)."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -80,4 +79,4 @@ class SyncAppModule:
 
         path = _APP_ROLES.format(app_slug=app_slug)
         response = self._http.get(path)
-        return RoleListResponse.from_dict(response)
+        return response
