@@ -32,7 +32,7 @@ class AppModule:
         self._http = client._http_client
         self._config = client._config
 
-    async def roles(self, app_slug: Optional[str] = None) -> dict[str, Any]ListResponse:
+    async def roles(self, app_slug: Optional[str] = None) -> dict[str, Any]:
         """
         Get app roles.
 
@@ -71,7 +71,7 @@ class SyncAppModule:
         self._http = client._http
         self._config = client._config
 
-    def roles(self, app_slug: Optional[str] = None) -> dict[str, Any]ListResponse:
+    def roles(self, app_slug: Optional[str] = None) -> dict[str, Any]:
         """Get app roles (blocking)."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:

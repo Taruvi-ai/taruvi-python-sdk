@@ -2,7 +2,8 @@
 Functions API Module
 
 Provides methods for:
-- Executing functions
+- Executing functions (sync/async)
+- Getting function execution results by task ID
 - Listing functions
 - Getting function details
 - Managing function invocations
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 _FUNCTIONS_BASE = "/api/apps/{app_slug}/functions/"
 _FUNCTION_DETAIL = "/api/apps/{app_slug}/functions/{function_slug}/"
 _FUNCTION_EXECUTE = "/api/apps/{app_slug}/functions/{function_slug}/execute/"
+_FUNCTION_RESULT = "/api/result/{task_id}/"
 _INVOCATIONS_LIST = "/api/apps/{app_slug}/invocations/"
 _INVOCATION_DETAIL = "/api/apps/{app_slug}/invocations/{invocation_id}/"
 
@@ -115,6 +117,46 @@ class FunctionsModule:
         body = _build_execute_request(params, is_async)
 
         response = await self._http.post(path, json=body, headers={})
+        return response
+
+    async def get_result(
+        self,
+        task_id: str,
+    ) -> dict[str, Any]:
+        """
+        Get the result of a function execution by task ID.
+
+        Args:
+            task_id: Celery task ID returned from async execution
+
+        Returns:
+            Dict containing:
+                - task_id: The task identifier
+                - status: Task status (SUCCESS, FAILURE, PENDING, etc.)
+                - result: Task result data (if completed successfully)
+                - traceback: Error traceback (if failed)
+                - date_created: Task creation timestamp
+                - date_done: Task completion timestamp
+                - params: User-provided execution parameters
+
+        Example:
+            ```python
+            # Execute function asynchronously
+            result = await client.functions.execute(
+                "process-order",
+                params={"order_id": 123},
+                is_async=True
+            )
+            task_id = result['invocation']['celery_task_id']
+
+            # Get result later
+            task_result = await client.functions.get_result(task_id)
+            print(task_result['status'])  # 'SUCCESS', 'FAILURE', etc.
+            print(task_result['result'])  # Actual function output
+            ```
+        """
+        path = _FUNCTION_RESULT.format(task_id=task_id)
+        response = await self._http.get(path)
         return response
 
     async def list(
@@ -220,6 +262,46 @@ class SyncFunctionsModule:
         body = _build_execute_request(params, is_async)
 
         response = self._http.post(path, json=body, headers={})
+        return response
+
+    def get_result(
+        self,
+        task_id: str,
+    ) -> dict[str, Any]:
+        """
+        Get the result of a function execution by task ID (blocking).
+
+        Args:
+            task_id: Celery task ID returned from async execution
+
+        Returns:
+            Dict containing:
+                - task_id: The task identifier
+                - status: Task status (SUCCESS, FAILURE, PENDING, etc.)
+                - result: Task result data (if completed successfully)
+                - traceback: Error traceback (if failed)
+                - date_created: Task creation timestamp
+                - date_done: Task completion timestamp
+                - params: User-provided execution parameters
+
+        Example:
+            ```python
+            # Execute function asynchronously
+            result = client.functions.execute(
+                "process-order",
+                params={"order_id": 123},
+                is_async=True
+            )
+            task_id = result['invocation']['celery_task_id']
+
+            # Get result later
+            task_result = client.functions.get_result(task_id)
+            print(task_result['status'])  # 'SUCCESS', 'FAILURE', etc.
+            print(task_result['result'])  # Actual function output
+            ```
+        """
+        path = _FUNCTION_RESULT.format(task_id=task_id)
+        response = self._http.get(path)
         return response
 
     def list(

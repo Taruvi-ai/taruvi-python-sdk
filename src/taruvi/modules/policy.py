@@ -23,46 +23,18 @@ _POLICY_CHECK_RESOURCES = "/api/apps/{app_slug}/check/resources"
 # Shared Implementation Logic
 # ============================================================================
 
-def _build_single_resource_check(
-    entity_type: str,
-    table_name: str,
-    record_id: str,
-    actions: list[str],
-    attributes: Optional[dict[str, Any]]
+def _build_check_resources_request(
+    resources: list[dict[str, Any]],
+    principal: Optional[dict[str, Any]],
+    aux_data: Optional[dict[str, Any]]
 ) -> dict[str, Any]:
-    """Build a single resource check request body."""
-    request = ResourceCheckRequest(
-        entity_type=entity_type,
-        table_name=table_name,
-        record_id=record_id,
-        actions=actions,
-        attributes=attributes or {}
-    )
-    return {"resources": [request.to_api_format()]}
-
-
-def _build_multiple_resources_check(resources: list[dict[str, Any]]) -> dict[str, Any]:
-    """Build a multiple resources check request body."""
-    requests = []
-    for resource in resources:
-        req = ResourceCheckRequest(
-            entity_type=resource["entity_type"],
-            table_name=resource["table_name"],
-            record_id=resource["record_id"],
-            actions=resource["actions"],
-            attributes=resource.get("attributes", {})
-        )
-        requests.append(req.to_api_format())
-
-    return {"resources": requests}
-
-
-def _parse_check_response(response: Any) -> list[PolicyCheckResponse]:
-    """Parse policy check response - handles both single and multiple results."""
-    if isinstance(response, dict):
-        return [PolicyCheckResponse.from_dict(response)]
-    else:
-        return response
+    """Build check resources request body."""
+    body: dict[str, Any] = {"resources": resources}
+    if principal:
+        body["principal"] = principal
+    if aux_data:
+        body["auxData"] = aux_data
+    return body
 
 
 # ============================================================================
@@ -78,85 +50,43 @@ class PolicyModule:
         self._http = client._http_client
         self._config = client._config
 
-    async def check_resource(
-        self,
-        entity_type: str,
-        table_name: str,
-        record_id: str,
-        actions: list[str],
-        attributes: Optional[dict[str, Any]] = None,
-        app_slug: Optional[str] = None
-    ) -> dict[str, Any]:
-        """
-        Check if current user can perform actions on a resource.
-
-        Args:
-            entity_type: Entity type (e.g., "database", "storage")
-            table_name: Table/resource name
-            record_id: Record/resource ID
-            actions: Actions to check (e.g., ["read", "write", "delete"])
-            attributes: Additional resource attributes
-            app_slug: App slug (defaults to client's app_slug)
-
-        Returns:
-            PolicyCheckResponse: Authorization result
-
-        Example:
-            ```python
-            result = await client.policy.check_resource(
-                entity_type="database",
-                table_name="orders",
-                record_id="order_123",
-                actions=["delete"]
-            )
-
-            if result.allowed:
-                await client.database.delete("orders", "order_123")
-            ```
-        """
-        app_slug = app_slug or self._config.app_slug
-        if not app_slug:
-            raise ValueError("app_slug is required")
-
-        path = _POLICY_CHECK_RESOURCES.format(app_slug=app_slug)
-        body = _build_single_resource_check(
-            entity_type, table_name, record_id, actions, attributes
-        )
-
-        response = await self._http.post(path, json=body)
-        return response
-
     async def check_resources(
         self,
         resources: list[dict[str, Any]],
+        principal: Optional[dict[str, Any]] = None,
+        aux_data: Optional[dict[str, Any]] = None,
         app_slug: Optional[str] = None
-    ) -> list[PolicyCheckResponse]:
+    ) -> dict[str, Any]:
         """
-        Check permissions for multiple resources at once.
+        Check permissions for multiple resources.
 
         Args:
-            resources: List of resource check requests
+            resources: List of resource check requests, each with:
+                - resource: Dict with kind, id, attr (optional)
+                - actions: List of actions to check
+            principal: Optional principal override (defaults to authenticated user)
+            aux_data: Optional auxiliary data for policy evaluation
             app_slug: App slug (defaults to client's app_slug)
 
         Returns:
-            list[PolicyCheckResponse]: List of authorization results
+            dict with keys:
+                - requestId: str
+                - results: list[dict] - each with resource, actions, validationErrors
 
         Example:
             ```python
-            results = await client.policy.check_resources([
+            result = await client.policy.check_resources([
                 {
-                    "entity_type": "database",
-                    "table_name": "orders",
-                    "record_id": "order_123",
+                    "resource": {
+                        "kind": "datatable",
+                        "id": "orders"
+                    },
                     "actions": ["read", "write"]
-                },
-                {
-                    "entity_type": "database",
-                    "table_name": "users",
-                    "record_id": "user_456",
-                    "actions": ["delete"]
                 }
             ])
+
+            # Check if action is allowed
+            is_allowed = result["results"][0]["actions"]["read"] == "EFFECT_ALLOW"
             ```
         """
         app_slug = app_slug or self._config.app_slug
@@ -164,10 +94,10 @@ class PolicyModule:
             raise ValueError("app_slug is required")
 
         path = _POLICY_CHECK_RESOURCES.format(app_slug=app_slug)
-        body = _build_multiple_resources_check(resources)
+        body = _build_check_resources_request(resources, principal, aux_data)
 
         response = await self._http.post(path, json=body)
-        return _parse_check_response(response)
+        return response
 
 
 # ============================================================================
@@ -183,40 +113,33 @@ class SyncPolicyModule:
         self._http = client._http
         self._config = client._config
 
-    def check_resource(
-        self,
-        entity_type: str,
-        table_name: str,
-        record_id: str,
-        actions: list[str],
-        attributes: Optional[dict[str, Any]] = None,
-        app_slug: Optional[str] = None
-    ) -> dict[str, Any]:
-        """Check if current user can perform actions on a resource (blocking)."""
-        app_slug = app_slug or self._config.app_slug
-        if not app_slug:
-            raise ValueError("app_slug is required")
-
-        path = _POLICY_CHECK_RESOURCES.format(app_slug=app_slug)
-        body = _build_single_resource_check(
-            entity_type, table_name, record_id, actions, attributes
-        )
-
-        response = self._http.post(path, json=body)
-        return response
-
     def check_resources(
         self,
         resources: list[dict[str, Any]],
+        principal: Optional[dict[str, Any]] = None,
+        aux_data: Optional[dict[str, Any]] = None,
         app_slug: Optional[str] = None
-    ) -> list[PolicyCheckResponse]:
-        """Check permissions for multiple resources at once (blocking)."""
+    ) -> dict[str, Any]:
+        """
+        Check permissions for multiple resources (blocking).
+
+        Args:
+            resources: List of resource check requests
+            principal: Optional principal override
+            aux_data: Optional auxiliary data
+            app_slug: App slug (defaults to client's app_slug)
+
+        Returns:
+            dict with keys:
+                - requestId: str
+                - results: list[dict] - each with resource, actions, validationErrors
+        """
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
 
         path = _POLICY_CHECK_RESOURCES.format(app_slug=app_slug)
-        body = _build_multiple_resources_check(resources)
+        body = _build_check_resources_request(resources, principal, aux_data)
 
         response = self._http.post(path, json=body)
-        return _parse_check_response(response)
+        return response
