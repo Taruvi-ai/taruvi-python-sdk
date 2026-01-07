@@ -27,15 +27,15 @@ _DATATABLE_RECORD = "/api/apps/{app_slug}/datatables/{table_name}/data/{record_i
 
 class _BaseQueryBuilder:
     """Base query builder with shared logic."""
-    
+
     def __init__(self, table_name: str, app_slug: str) -> None:
         self.table_name = table_name
         self.app_slug = app_slug
         self._filters: dict[str, Any] = {}
         self._sort_field: Optional[str] = None
         self._sort_order: str = "asc"
-        self._limit_value: Optional[int] = None
-        self._offset_value: int = 0
+        self._page_size: Optional[int] = None
+        self._page: int = 1
         self._populate_fields: list[str] = []
 
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
@@ -50,13 +50,13 @@ class _BaseQueryBuilder:
         self._sort_field = field
         self._sort_order = order
 
-    def _set_limit(self, limit: int) -> None:
-        """Set limit (shared logic)."""
-        self._limit_value = limit
+    def _set_page_size(self, page_size: int) -> None:
+        """Set page size (shared logic)."""
+        self._page_size = page_size
 
-    def _set_offset(self, offset: int) -> None:
-        """Set offset (shared logic)."""
-        self._offset_value = offset
+    def _set_page(self, page: int) -> None:
+        """Set page number (shared logic)."""
+        self._page = page
 
     def _add_populate(self, *fields: str) -> None:
         """Add populate fields (shared logic)."""
@@ -71,10 +71,10 @@ class _BaseQueryBuilder:
             params["_sort"] = self._sort_field
             params["_order"] = self._sort_order
 
-        if self._limit_value is not None:
-            params["limit"] = self._limit_value
-        if self._offset_value:
-            params["offset"] = self._offset_value
+        if self._page_size is not None:
+            params["page_size"] = self._page_size
+        if self._page != 1:
+            params["page"] = self._page
 
         if self._populate_fields:
             params["populate"] = ",".join(self._populate_fields)
@@ -108,14 +108,14 @@ class QueryBuilder(_BaseQueryBuilder):
         self._set_sort(field, order)
         return self
 
-    def limit(self, limit: int) -> "QueryBuilder":
-        """Limit number of results."""
-        self._set_limit(limit)
+    def page_size(self, page_size: int) -> "QueryBuilder":
+        """Set number of records per page."""
+        self._set_page_size(page_size)
         return self
 
-    def offset(self, offset: int) -> "QueryBuilder":
-        """Set offset for pagination."""
-        self._set_offset(offset)
+    def page(self, page: int) -> "QueryBuilder":
+        """Set page number (1-indexed)."""
+        self._set_page(page)
         return self
 
     def populate(self, *fields: str) -> "QueryBuilder":
@@ -137,7 +137,7 @@ class QueryBuilder(_BaseQueryBuilder):
 
     async def first(self) -> Optional[dict[str, Any]]:
         """Get first result."""
-        results = await self.limit(1).get()
+        results = await self.page_size(1).get()
         return results[0] if results else None
 
     async def count(self) -> int:
@@ -404,14 +404,14 @@ class SyncQueryBuilder(_BaseQueryBuilder):
         self._set_sort(field, order)
         return self
 
-    def limit(self, limit: int) -> "SyncQueryBuilder":
-        """Limit number of results."""
-        self._set_limit(limit)
+    def page_size(self, page_size: int) -> "SyncQueryBuilder":
+        """Set number of records per page."""
+        self._set_page_size(page_size)
         return self
 
-    def offset(self, offset: int) -> "SyncQueryBuilder":
-        """Set offset for pagination."""
-        self._set_offset(offset)
+    def page(self, page: int) -> "SyncQueryBuilder":
+        """Set page number (1-indexed)."""
+        self._set_page(page)
         return self
 
     def populate(self, *fields: str) -> "SyncQueryBuilder":
@@ -433,7 +433,7 @@ class SyncQueryBuilder(_BaseQueryBuilder):
 
     def first(self) -> Optional[dict[str, Any]]:
         """Get first result (blocking)."""
-        results = self.limit(1).get()
+        results = self.page_size(1).get()
         return results[0] if results else None
 
     def count(self) -> int:

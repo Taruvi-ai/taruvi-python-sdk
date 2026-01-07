@@ -55,7 +55,7 @@ async def main():
     users = await client.database.query("users") \
         .filter("is_active", "eq", True) \
         .sort("created_at", "desc") \
-        .limit(10) \
+        .page_size(10) \
         .get()
 
     for user in users:
@@ -164,8 +164,8 @@ users = await client.database.query("users") \
     .filter("is_active", "eq", True) \
     .filter("age", "gte", 18) \
     .sort("created_at", "desc") \
-    .limit(10) \
-    .offset(0) \
+    .page_size(10) \
+    .page(1) \
     .populate("profile", "orders") \
     .get()
 
@@ -370,7 +370,7 @@ def main(params, user_data):
 
     # All operations are synchronous
     result = client.functions.execute("func", {"test": True})
-    users = client.database.query("users").limit(10).get()
+    users = client.database.query("users").page_size(10).get()
 
     return {"result": result}
 ```

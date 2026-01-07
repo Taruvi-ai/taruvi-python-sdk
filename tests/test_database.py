@@ -98,8 +98,8 @@ async def test_async_query_builder_chaining(mock_async_client):
                     .filter("status", "eq", "active")
                     .filter("age", "gte", 18)
                     .sort("created_at", "desc")
-                    .limit(10)
-                    .offset(20))
+                    .page_size(10)
+                    .page(2))
 
     # Should return same instance for chaining
     assert isinstance(result_query, QueryBuilder)
@@ -108,7 +108,8 @@ async def test_async_query_builder_chaining(mock_async_client):
     assert result_query._filters["status"] == "active"
     assert result_query._filters["age__gte"] == 18
     assert result_query._sort_field == "created_at"
-    assert result_query._limit_value == 10
+    assert result_query._page_size == 10
+    assert result_query._page == 2
 
 
 @pytest.mark.asyncio
@@ -262,7 +263,7 @@ def test_sync_query_builder_chaining(mock_sync_client):
     result_query = (query
                     .filter("status", "eq", "active")
                     .sort("created_at", "desc")
-                    .limit(10))
+                    .page_size(10))
 
     # Should return same instance for chaining
     assert isinstance(result_query, SyncQueryBuilder)
@@ -270,6 +271,7 @@ def test_sync_query_builder_chaining(mock_sync_client):
     # Check internal state
     assert result_query._filters["status"] == "active"
     assert result_query._sort_field == "created_at"
+    assert result_query._page_size == 10
 
 
 def test_sync_query_builder_get(mock_sync_client):

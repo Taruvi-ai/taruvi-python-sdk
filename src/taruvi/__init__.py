@@ -95,7 +95,7 @@ Sync Client Example:
 
     # Direct blocking calls (no asyncio.run)
     result = client.functions.execute("process-data", params={"value": 42})
-    users = client.database.query("users").limit(10).get()
+    users = client.database.query("users").page_size(10).get()
     ```
 
 Function Runtime Example:
@@ -110,7 +110,7 @@ Function Runtime Example:
         result = client.functions.execute("helper", {"test": True})
 
         # Query database
-        users = client.database.query("users").limit(10).get()
+        users = client.database.query("users").page_size(10).get()
 
         return {"result": result, "user_count": len(users)}
     ```
