@@ -46,17 +46,17 @@ class HTTPClient:
         """
         self.config = config
 
-        # Create httpx client with connection pooling
+        # Create httpx client with connection pooling (use defaults)
         limits = httpx.Limits(
-            max_connections=config.pool_connections,
-            max_keepalive_connections=config.pool_maxsize,
+            max_connections=10,
+            max_keepalive_connections=10,
         )
 
         self.client = httpx.AsyncClient(
             base_url=config.api_url,
             timeout=config.timeout,
             limits=limits,
-            verify=config.verify_ssl,
+            verify=True,  # Always verify SSL
             follow_redirects=True,
         )
 

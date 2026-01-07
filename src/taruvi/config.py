@@ -40,28 +40,54 @@ class TaruviConfig(BaseSettings):
         extra="ignore",
     )
 
-    # Core Configuration
+    # Core Configuration (Mandatory)
     api_url: str = Field(
         default="http://localhost:8000",
         description="Taruvi API base URL",
     )
 
+    app_slug: str = Field(
+        default="",
+        description="Application slug (required)",
+    )
+
+    # Authentication Methods (All Optional)
+    # Method 1: Knox API-Key
     api_key: Optional[str] = Field(
         default=None,
-        description="API key (JWT token) for authentication",
+        description="Knox API key for authentication",
     )
 
+    # Method 2: JWT Bearer Token
+    jwt: Optional[str] = Field(
+        default=None,
+        description="JWT token (from any source: user-provided, login, or function runtime)",
+    )
+
+    # Method 3: Session Token
+    session_token: Optional[str] = Field(
+        default=None,
+        description="Allauth session token",
+    )
+
+    # Method 4: Username+Password (for auto-login)
+    username: Optional[str] = Field(
+        default=None,
+        description="Username for auto-login",
+    )
+
+    password: Optional[str] = Field(
+        default=None,
+        description="Password for auto-login",
+    )
+
+    # Legacy/Optional Configuration
     site_slug: Optional[str] = Field(
         default=None,
-        description="Site slug for multi-tenant routing",
+        description="Site slug for multi-tenant routing (optional)",
     )
 
-    # Optional Configuration
-    app_slug: Optional[str] = Field(
-        default=None,
-        description="App slug (for scoping operations)",
-    )
-
+    # Configuration
     timeout: int = Field(
         default=30,
         description="Request timeout in seconds",
@@ -74,25 +100,6 @@ class TaruviConfig(BaseSettings):
         description="Maximum number of retry attempts",
         ge=0,
         le=10,
-    )
-
-    retry_backoff_factor: float = Field(
-        default=0.5,
-        description="Backoff factor for retries (exponential backoff)",
-        ge=0.0,
-    )
-
-    # Connection Pool Settings
-    pool_connections: int = Field(
-        default=10,
-        description="Number of connection pool connections",
-        ge=1,
-    )
-
-    pool_maxsize: int = Field(
-        default=10,
-        description="Maximum size of connection pool",
-        ge=1,
     )
 
     # Function Runtime Configuration (auto-detected)
@@ -137,17 +144,6 @@ class TaruviConfig(BaseSettings):
         description="User JWT token (for user context switching)",
     )
 
-    # Development/Debug
-    debug: bool = Field(
-        default=False,
-        description="Enable debug mode",
-    )
-
-    verify_ssl: bool = Field(
-        default=True,
-        description="Verify SSL certificates",
-    )
-
     def __init__(self, **kwargs):
         """Initialize configuration with runtime mode detection."""
         # Auto-detect function runtime mode
@@ -175,11 +171,22 @@ class TaruviConfig(BaseSettings):
             "Accept": "application/json",
         }
 
-        # Add API key (JWT token)
+        # AUTHENTICATION PRIORITY:
+        # 1. Knox API-Key → Authorization: Api-Key {key}
         if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
+            headers["Authorization"] = f"Api-Key {self.api_key}"
 
-        # Add site slug for multi-tenant routing
+        # 2. JWT (from any source) → Authorization: Bearer {jwt}
+        elif self.jwt:
+            headers["Authorization"] = f"Bearer {self.jwt}"
+
+        # 3. Session token → X-Session-Token header (can combine with above)
+        if self.session_token:
+            headers["X-Session-Token"] = self.session_token
+
+        # 4. No auth → Django session cookies (httpx automatic)
+
+        # Add site slug for multi-tenant routing (if provided)
         if self.site_slug:
             headers["Host"] = f"{self.site_slug}.localhost"
 
@@ -204,17 +211,10 @@ class TaruviConfig(BaseSettings):
         if not self.api_url:
             raise ConfigurationError("api_url is required")
 
-        if not self.api_key and self.runtime_mode == RuntimeMode.EXTERNAL:
-            raise ConfigurationError(
-                "api_key is required for external applications. "
-                "Provide it via Client(api_key=...) or TARUVI_API_KEY environment variable."
-            )
+        if not self.app_slug:
+            raise ConfigurationError("app_slug is required")
 
-        if not self.site_slug:
-            raise ConfigurationError(
-                "site_slug is required. "
-                "Provide it via Client(site_slug=...) or TARUVI_SITE_SLUG environment variable."
-            )
+        # All authentication is optional!
 
     def model_dump_safe(self) -> dict:
         """Dump configuration without sensitive data."""
@@ -222,8 +222,14 @@ class TaruviConfig(BaseSettings):
         # Redact sensitive fields
         if data.get("api_key"):
             data["api_key"] = "***REDACTED***"
+        if data.get("jwt"):
+            data["jwt"] = "***REDACTED***"
         if data.get("user_jwt"):
             data["user_jwt"] = "***REDACTED***"
+        if data.get("password"):
+            data["password"] = "***REDACTED***"
+        if data.get("session_token"):
+            data["session_token"] = "***REDACTED***"
         return data
 
     @classmethod

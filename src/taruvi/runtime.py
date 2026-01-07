@@ -120,7 +120,7 @@ def load_config_from_runtime() -> dict[str, Any]:
 
     return {
         "api_url": context.get("api_url"),
-        "api_key": context.get("function_key"),
+        "jwt": context.get("function_key"),  # Load function JWT into jwt field
         "site_slug": context.get("site_slug"),
         "app_slug": context.get("app_slug"),
         "function_runtime": True,

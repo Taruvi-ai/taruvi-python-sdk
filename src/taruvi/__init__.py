@@ -3,7 +3,7 @@ Taruvi Python SDK
 
 Official SDK for interacting with the Taruvi Cloud Platform.
 
-Unified Client API with mode parameter:
+Unified Client API with flexible authentication:
 - **Client(mode='async')**: Async client for async frameworks (uses httpx.AsyncClient)
 - **Client(mode='sync')**: Native blocking client for scripts, functions, and notebooks (uses httpx.Client)
 - **Client()**: Defaults to sync mode
@@ -12,6 +12,54 @@ Unified Client API with mode parameter:
 This makes it thread-safe, faster (10-50x), and compatible with all Python environments
 including Jupyter notebooks, FastAPI apps, and any async context.
 
+Authentication Methods (All Optional):
+1. **Knox API-Key**: Pass `api_key` parameter
+2. **JWT Bearer**: Pass `jwt` parameter
+3. **Session Token**: Pass `session_token` parameter
+4. **Username+Password**: Pass `username` and `password` (auto-login)
+5. **Django Session**: No auth parameters (httpx handles cookies automatically)
+
+Authentication Examples:
+    ```python
+    from taruvi import Client
+
+    # Method 1: Knox API-Key
+    client = Client(
+        api_url="http://localhost:8000",
+        app_slug="my-app",
+        api_key="knox_api_key_here"
+    )
+
+    # Method 2: JWT Bearer Token
+    client = Client(
+        api_url="http://localhost:8000",
+        app_slug="my-app",
+        jwt="jwt_token_here"
+    )
+
+    # Method 3: Session Token
+    client = Client(
+        api_url="http://localhost:8000",
+        app_slug="my-app",
+        session_token="session_token_here"
+    )
+
+    # Method 4: Username+Password (Auto-Login)
+    client = Client(
+        api_url="http://localhost:8000",
+        app_slug="my-app",
+        username="alice@example.com",
+        password="secret123"
+    )
+
+    # Method 5: Django Session (No Auth)
+    client = Client(
+        api_url="http://localhost:8000",
+        app_slug="my-app"
+    )
+    # httpx automatically sends session cookies
+    ```
+
 Async Client Example:
     ```python
     from taruvi import Client
@@ -19,10 +67,9 @@ Async Client Example:
     async def main():
         client = Client(
             mode='async',
-            app_slug="my-app",
             api_url="http://localhost:8000",
-            api_key="your_jwt_token",
-            site_slug="your-site"
+            app_slug="my-app",
+            jwt="your_jwt_token"
         )
 
         # Execute a function
@@ -41,10 +88,9 @@ Sync Client Example:
 
     # Native blocking - works everywhere! (mode='sync' is default)
     client = Client(
-        app_slug="my-app",
         api_url="http://localhost:8000",
-        api_key="your_jwt_token",
-        site_slug="your-site"
+        app_slug="my-app",
+        jwt="your_jwt_token"
     )
 
     # Direct blocking calls (no asyncio.run)
@@ -58,7 +104,7 @@ Function Runtime Example:
     def main(params, user_data):
         from taruvi import Client
 
-        client = Client(app_slug="my-app")  # Defaults to sync mode
+        client = Client()  # Auto-detects from environment
 
         # Call another function
         result = client.functions.execute("helper", {"test": True})

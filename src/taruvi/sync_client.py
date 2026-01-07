@@ -59,49 +59,66 @@ class _SyncClient:
     def __init__(
         self,
         api_url: str,
-        api_key: str,
         app_slug: str,
         *,
-        site_slug: Optional[str] = None,
+        # Authentication Methods (All Optional)
+        api_key: Optional[str] = None,
+        jwt: Optional[str] = None,
+        session_token: Optional[str] = None,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        # Configuration
         timeout: int = 30,
         max_retries: int = 3,
-        retry_backoff_factor: float = 0.5,
-        debug: bool = False,
-        verify_ssl: bool = True,
-        pool_connections: int = 10,
-        pool_maxsize: int = 10,
         **kwargs: Any,
     ) -> None:
         """
-        Initialize native synchronous Taruvi client.
+        Initialize native synchronous Taruvi client with flexible authentication.
 
         Args:
             api_url: Taruvi API base URL
-            api_key: JWT token for authentication
             app_slug: Application slug (required)
-            site_slug: Site slug for multi-tenant routing
+            api_key: Knox API key for authentication (optional)
+            jwt: JWT token for authentication (optional)
+            session_token: Allauth session token (optional)
+            username: Username for auto-login (optional)
+            password: Password for auto-login (optional)
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
-            retry_backoff_factor: Backoff factor for retries
-            debug: Enable debug logging
-            verify_ssl: Verify SSL certificates
-            pool_connections: Connection pool size
-            pool_maxsize: Maximum pool size
             **kwargs: Additional configuration options
         """
+        import os
+
+        # Auto-login if username+password provided (synchronous HTTP call)
+        if username and password:
+            import httpx
+            with httpx.Client() as client:
+                login_response = client.post(
+                    f"{api_url}/api/auth/login",
+                    json={"username": username, "password": password}
+                )
+                login_response.raise_for_status()
+                login_data = login_response.json()
+                # Store JWT in jwt parameter (overrides any user-provided jwt)
+                jwt = login_data.get("access") or login_data.get("token")
+
+        # Load from function runtime if NO auth provided
+        elif not any([api_key, jwt, session_token]):
+            if os.getenv("TARUVI_FUNCTION_RUNTIME") == "true":
+                jwt = os.getenv("TARUVI_FUNCTION_KEY")
+                # Also load other function context if not provided
+                api_url = api_url or os.getenv("TARUVI_API_URL")
+                app_slug = app_slug or os.getenv("TARUVI_APP_SLUG")
+
         # Use factory method - handles runtime detection and merging
         self._config = TaruviConfig.from_runtime_and_params(
             api_url=api_url,
-            api_key=api_key,
-            site_slug=site_slug,
             app_slug=app_slug,
+            api_key=api_key,
+            jwt=jwt,  # JWT from: user, login, or function runtime
+            session_token=session_token,
             timeout=timeout,
             max_retries=max_retries,
-            retry_backoff_factor=retry_backoff_factor,
-            debug=debug,
-            verify_ssl=verify_ssl,
-            pool_connections=pool_connections,
-            pool_maxsize=pool_maxsize,
             **kwargs
         )
 
@@ -201,37 +218,6 @@ class _SyncClient:
             from taruvi.modules.settings import SyncSettingsModule
             self._settings = SyncSettingsModule(self)
         return self._settings
-
-    def as_user(self, user_jwt: str) -> "_SyncClient":
-        """
-        Create a new client with user context.
-
-        Args:
-            user_jwt: User's JWT token
-
-        Returns:
-            _SyncClient: New client instance with user context
-
-        Example:
-            ```python
-            user_client = service_client.as_user(user_jwt="user_token")
-            result = user_client.database.query("orders").get()
-            ```
-        """
-        return _SyncClient(
-            api_url=self._config.api_url,
-            api_key=user_jwt,
-            site_slug=self._config.site_slug,
-            app_slug=self._config.app_slug,
-            timeout=self._config.timeout,
-            max_retries=self._config.max_retries,
-            retry_backoff_factor=self._config.retry_backoff_factor,
-            debug=self._config.debug,
-            verify_ssl=self._config.verify_ssl,
-            pool_connections=self._config.pool_connections,
-            pool_maxsize=self._config.pool_maxsize,
-            user_jwt=user_jwt,
-        )
 
     def close(self) -> None:
         """Close the HTTP client and release resources."""
