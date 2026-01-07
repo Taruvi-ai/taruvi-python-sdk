@@ -3,7 +3,7 @@ Taruvi Python SDK
 
 Official SDK for interacting with the Taruvi Cloud Platform.
 
-Unified Client API with flexible authentication:
+Unified Client API:
 - **Client(mode='async')**: Async client for async frameworks (uses httpx.AsyncClient)
 - **Client(mode='sync')**: Native blocking client for scripts, functions, and notebooks (uses httpx.Client)
 - **Client()**: Defaults to sync mode
@@ -12,52 +12,48 @@ Unified Client API with flexible authentication:
 This makes it thread-safe, faster (10-50x), and compatible with all Python environments
 including Jupyter notebooks, FastAPI apps, and any async context.
 
-Authentication Methods (All Optional):
-1. **Knox API-Key**: Pass `api_key` parameter
-2. **JWT Bearer**: Pass `jwt` parameter
-3. **Session Token**: Pass `session_token` parameter
-4. **Username+Password**: Pass `username` and `password` (auto-login)
-5. **Django Session**: No auth parameters (httpx handles cookies automatically)
+Authentication via AuthManager:
+All authentication is handled through the AuthManager after client creation.
+This provides a clean separation between client initialization and authentication.
 
 Authentication Examples:
     ```python
     from taruvi import Client
 
-    # Method 1: Knox API-Key
-    client = Client(
-        api_url="http://localhost:8000",
-        app_slug="my-app",
-        api_key="knox_api_key_here"
-    )
-
-    # Method 2: JWT Bearer Token
-    client = Client(
-        api_url="http://localhost:8000",
-        app_slug="my-app",
-        jwt="jwt_token_here"
-    )
-
-    # Method 3: Session Token
-    client = Client(
-        api_url="http://localhost:8000",
-        app_slug="my-app",
-        session_token="session_token_here"
-    )
-
-    # Method 4: Username+Password (Auto-Login)
-    client = Client(
-        api_url="http://localhost:8000",
-        app_slug="my-app",
-        username="alice@example.com",
-        password="secret123"
-    )
-
-    # Method 5: Django Session (No Auth)
+    # Step 1: Create unauthenticated client
     client = Client(
         api_url="http://localhost:8000",
         app_slug="my-app"
     )
-    # httpx automatically sends session cookies
+
+    # Step 2: Authenticate using AuthManager
+
+    # Method 1: JWT Bearer Token
+    auth_client = client.auth.signInWithToken(
+        token="jwt_token_here",
+        token_type="jwt"
+    )
+
+    # Method 2: Knox API-Key
+    auth_client = client.auth.signInWithToken(
+        token="knox_api_key_here",
+        token_type="api_key"
+    )
+
+    # Method 3: Session Token
+    auth_client = client.auth.signInWithToken(
+        token="session_token_here",
+        token_type="session_token"
+    )
+
+    # Method 4: Username+Password
+    auth_client = client.auth.signInWithPassword(
+        username="alice@example.com",
+        password="secret123"
+    )
+
+    # Now use auth_client for authenticated requests
+    result = auth_client.functions.execute("my-func", params={})
     ```
 
 Async Client Example:
@@ -116,6 +112,7 @@ Function Runtime Example:
     ```
 """
 
+from taruvi.auth import AuthManager
 from taruvi.client import Client
 from taruvi.config import RuntimeMode, TaruviConfig
 from taruvi.exceptions import (
@@ -127,6 +124,7 @@ from taruvi.exceptions import (
     ConnectionError,
     FunctionExecutionError,
     NetworkError,
+    NotAuthenticatedError,
     NotFoundError,
     RateLimitError,
     ResponseError,
@@ -149,6 +147,8 @@ __version__ = "0.2.0"
 __all__ = [
     # Main client
     "Client",
+    # Authentication
+    "AuthManager",
     # Configuration
     "TaruviConfig",
     "RuntimeMode",
@@ -163,6 +163,7 @@ __all__ = [
     "APIError",
     "ValidationError",
     "AuthenticationError",
+    "NotAuthenticatedError",
     "AuthorizationError",
     "NotFoundError",
     "ConflictError",

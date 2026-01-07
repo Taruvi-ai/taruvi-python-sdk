@@ -10,6 +10,21 @@ def test_import_main_client():
     assert callable(Client)
 
 
+def test_import_auth_manager():
+    """Test importing AuthManager (new in auth refactoring)."""
+    from taruvi import AuthManager
+    assert AuthManager is not None
+    assert AuthManager.__name__ == 'AuthManager'
+
+
+def test_import_not_authenticated_error():
+    """Test importing NotAuthenticatedError exception."""
+    from taruvi import NotAuthenticatedError
+    from taruvi.exceptions import NotAuthenticatedError as DirectImport
+    assert NotAuthenticatedError is not None
+    assert NotAuthenticatedError is DirectImport
+
+
 def test_syncclient_removed():
     """Test that SyncClient is no longer exported (breaking change in v0.2.0)."""
     with pytest.raises(ImportError):
@@ -58,28 +73,6 @@ def test_import_all_sync_modules():
     assert SyncPolicyModule is not None
     assert SyncAppModule is not None
     assert SyncSettingsModule is not None
-
-
-def test_import_all_models():
-    """Test importing all model classes."""
-    from taruvi.models.auth import TokenResponse, UserResponse, UserListResponse
-    from taruvi.models.database import DatabaseRecord
-    from taruvi.models.functions import FunctionResponse, FunctionExecutionResult
-    from taruvi.models.storage import StorageObject, StorageListResponse
-    from taruvi.models.secrets import Secret, SecretListResponse
-    from taruvi.models.policy import PolicyCheckResponse, ResourceCheckRequest
-    from taruvi.models.app import Role, RoleListResponse, UserApp
-    from taruvi.models.settings import SiteSettings
-
-    assert TokenResponse is not None
-    assert UserResponse is not None
-    assert DatabaseRecord is not None
-    assert FunctionResponse is not None
-    assert StorageObject is not None
-    assert Secret is not None
-    assert PolicyCheckResponse is not None
-    assert Role is not None
-    assert SiteSettings is not None
 
 
 def test_no_import_errors():

@@ -61,62 +61,36 @@ class _SyncClient:
         api_url: str,
         app_slug: str,
         *,
-        # Authentication Methods (All Optional)
-        api_key: Optional[str] = None,
-        jwt: Optional[str] = None,
-        session_token: Optional[str] = None,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-        # Configuration
+        # Configuration (project-level only)
         timeout: int = 30,
         max_retries: int = 3,
         **kwargs: Any,
     ) -> None:
         """
-        Initialize native synchronous Taruvi client with flexible authentication.
+        Initialize Taruvi sync client (project-level configuration).
+
+        Authentication is handled separately via the auth property.
 
         Args:
             api_url: Taruvi API base URL
             app_slug: Application slug (required)
-            api_key: Knox API key for authentication (optional)
-            jwt: JWT token for authentication (optional)
-            session_token: Allauth session token (optional)
-            username: Username for auto-login (optional)
-            password: Password for auto-login (optional)
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
             **kwargs: Additional configuration options
+
+        Example:
+            >>> client = Client(
+            ...     api_url='https://app.taruvi.com',
+            ...     app_slug='my-app',
+            ...     mode='sync'
+            ... )
+            >>> # Authenticate using auth module
+            >>> auth_client = client.auth.signInWithToken(token='...', token_type='jwt')
         """
-        import os
-
-        # Auto-login if username+password provided (synchronous HTTP call)
-        if username and password:
-            import httpx
-            with httpx.Client() as client:
-                login_response = client.post(
-                    f"{api_url}/api/auth/login",
-                    json={"username": username, "password": password}
-                )
-                login_response.raise_for_status()
-                login_data = login_response.json()
-                # Store JWT in jwt parameter (overrides any user-provided jwt)
-                jwt = login_data.get("access") or login_data.get("token")
-
-        # Load from function runtime if NO auth provided
-        elif not any([api_key, jwt, session_token]):
-            if os.getenv("TARUVI_FUNCTION_RUNTIME") == "true":
-                jwt = os.getenv("TARUVI_FUNCTION_KEY")
-                # Also load other function context if not provided
-                api_url = api_url or os.getenv("TARUVI_API_URL")
-                app_slug = app_slug or os.getenv("TARUVI_APP_SLUG")
-
         # Use factory method - handles runtime detection and merging
         self._config = TaruviConfig.from_runtime_and_params(
             api_url=api_url,
             app_slug=app_slug,
-            api_key=api_key,
-            jwt=jwt,  # JWT from: user, login, or function runtime
-            session_token=session_token,
             timeout=timeout,
             max_retries=max_retries,
             **kwargs
@@ -168,16 +142,52 @@ class _SyncClient:
         return self._database
 
     @property
-    def auth(self) -> SyncAuthModule:
+    def auth(self):
         """
-        Access Auth API (native blocking).
+        Authentication manager for user-level auth operations.
 
         Returns:
-            SyncAuthModule: Auth API module
+            AuthManager instance for this client
+
+        Example:
+            >>> # Sign in with JWT
+            >>> auth_client = client.auth.signInWithToken(token='jwt_token', token_type='jwt')
+
+            >>> # Sign in with username/password
+            >>> auth_client = client.auth.signInWithPassword(username='...', password='...')
+
+            >>> # Refresh token
+            >>> new_client = client.auth.refreshToken(refresh_token='...')
+
+            >>> # Sign out
+            >>> unauth_client = auth_client.auth.signOut()
         """
         if self._auth is None:
-            self._auth = SyncAuthModule(self)
+            from taruvi.auth import AuthManager
+            self._auth = AuthManager(self)
         return self._auth
+
+    @property
+    def is_authenticated(self) -> bool:
+        """
+        Check if client has authentication credentials.
+
+        Returns:
+            True if client has jwt, api_key, or session_token configured
+
+        Example:
+            >>> client = Client(api_url='...', app_slug='...', mode='sync')
+            >>> client.is_authenticated
+            False
+            >>> auth_client = client.auth.signInWithToken(token='...', token_type='jwt')
+            >>> auth_client.is_authenticated
+            True
+        """
+        return any([
+            self._config.jwt is not None,
+            self._config.api_key is not None,
+            self._config.session_token is not None,
+        ])
 
     @property
     def storage(self):

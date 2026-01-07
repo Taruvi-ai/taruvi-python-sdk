@@ -28,13 +28,13 @@ class TaruviConfig(BaseSettings):
     Configuration precedence (highest to lowest):
     1. Explicit parameters passed to Client()
     2. Environment variables
-    3. .env file
+    3. .env file (disabled in test mode)
     4. Default values
     """
 
     model_config = SettingsConfigDict(
         env_prefix="TARUVI_",
-        env_file=".env",
+        env_file=".env" if os.getenv("TARUVI_TEST_MODE") != "true" else None,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -150,6 +150,15 @@ class TaruviConfig(BaseSettings):
         if os.getenv("TARUVI_FUNCTION_RUNTIME") == "true":
             kwargs.setdefault("function_runtime", True)
 
+        # In test mode, explicitly set auth fields to None if not provided
+        # This prevents Pydantic from loading them from environment/.env file
+        if os.getenv("TARUVI_TEST_MODE") == "true":
+            kwargs.setdefault('api_key', None)
+            kwargs.setdefault('jwt', None)
+            kwargs.setdefault('session_token', None)
+            kwargs.setdefault('username', None)
+            kwargs.setdefault('password', None)
+
         super().__init__(**kwargs)
 
     @property
@@ -240,7 +249,7 @@ class TaruviConfig(BaseSettings):
         Merges configuration from three sources (priority order):
         1. Explicit parameters (highest)
         2. Environment variables
-        3. .env file
+        3. .env file (disabled in test mode)
         4. Default values (lowest)
 
         Pydantic automatically handles precedence.
@@ -263,6 +272,19 @@ class TaruviConfig(BaseSettings):
         from taruvi.runtime import detect_runtime, load_config_from_runtime
 
         runtime_mode = detect_runtime()
+
+        # In test mode, explicitly set auth fields to None if not provided
+        # This prevents Pydantic from loading them from environment/env file
+        if os.getenv("TARUVI_TEST_MODE") == "true":
+            test_defaults = {
+                'api_key': None,
+                'jwt': None,
+                'session_token': None,
+                'username': None,
+                'password': None,
+            }
+            # Apply test defaults first, then override with explicit params
+            explicit_params = {**test_defaults, **explicit_params}
 
         if runtime_mode == RuntimeMode.FUNCTION:
             # Load runtime config from environment

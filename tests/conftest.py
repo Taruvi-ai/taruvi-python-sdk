@@ -28,6 +28,34 @@ def test_config():
     }
 
 
+@pytest.fixture
+def unauth_test_config(monkeypatch):
+    """
+    Test configuration without authentication.
+
+    Enables test mode to disable .env file loading and clears auth environment variables.
+    Use this fixture for tests that need unauthenticated clients.
+    """
+    # Enable test mode to disable .env file loading in TaruviConfig
+    monkeypatch.setenv('TARUVI_TEST_MODE', 'true')
+
+    # Clear auth environment variables
+    monkeypatch.delenv('TARUVI_JWT', raising=False)
+    monkeypatch.delenv('TARUVI_API_KEY', raising=False)
+    monkeypatch.delenv('TARUVI_SESSION_TOKEN', raising=False)
+    monkeypatch.delenv('TARUVI_USERNAME', raising=False)
+    monkeypatch.delenv('TARUVI_PASSWORD', raising=False)
+
+    return {
+        "api_url": os.getenv("TARUVI_API_URL", "http://localhost:8000"),
+        "app_slug": os.getenv("TARUVI_TEST_APP_SLUG", "test-app"),
+        "api_key": None,
+        "username": None,
+        "password": None,
+        "jwt": None,
+    }
+
+
 # ============================================================================
 # Real Client Fixtures (NO MOCKS)
 # ============================================================================
@@ -37,19 +65,38 @@ async def async_client(test_config):
     """
     Real async Taruvi client for integration tests.
     Makes ACTUAL API calls to the backend.
+
+    Uses new auth pattern: Create client, then authenticate via auth module.
     """
     from taruvi import Client
 
-    # Create client with environment configuration
-    client = Client(
+    # Create base client (project-level configuration)
+    base_client = Client(
         api_url=test_config["api_url"],
         app_slug=test_config["app_slug"],
-        api_key=test_config["api_key"],
-        username=test_config["username"],
-        password=test_config["password"],
-        jwt=test_config["jwt"],
         mode="async"
     )
+
+    # Authenticate if credentials provided (user-level authentication)
+    # Priority: api_key > jwt > username+password
+    if test_config.get("api_key"):
+        client = base_client.auth.signInWithToken(
+            token=test_config["api_key"],
+            token_type='api_key'
+        )
+    elif test_config.get("jwt"):
+        client = base_client.auth.signInWithToken(
+            token=test_config["jwt"],
+            token_type='jwt'
+        )
+    elif test_config.get("username") and test_config.get("password"):
+        client = base_client.auth.signInWithPassword(
+            username=test_config["username"],
+            password=test_config["password"]
+        )
+    else:
+        # No authentication - use base client
+        client = base_client
 
     yield client
 
@@ -62,19 +109,38 @@ def sync_client(test_config):
     """
     Real sync Taruvi client for integration tests.
     Makes ACTUAL API calls to the backend.
+
+    Uses new auth pattern: Create client, then authenticate via auth module.
     """
     from taruvi import Client
 
-    # Create client with environment configuration
-    client = Client(
+    # Create base client (project-level configuration)
+    base_client = Client(
         api_url=test_config["api_url"],
         app_slug=test_config["app_slug"],
-        api_key=test_config["api_key"],
-        username=test_config["username"],
-        password=test_config["password"],
-        jwt=test_config["jwt"],
         mode="sync"
     )
+
+    # Authenticate if credentials provided (user-level authentication)
+    # Priority: api_key > jwt > username+password
+    if test_config.get("api_key"):
+        client = base_client.auth.signInWithToken(
+            token=test_config["api_key"],
+            token_type='api_key'
+        )
+    elif test_config.get("jwt"):
+        client = base_client.auth.signInWithToken(
+            token=test_config["jwt"],
+            token_type='jwt'
+        )
+    elif test_config.get("username") and test_config.get("password"):
+        client = base_client.auth.signInWithPassword(
+            username=test_config["username"],
+            password=test_config["password"]
+        )
+    else:
+        # No authentication - use base client
+        client = base_client
 
     yield client
 

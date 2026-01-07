@@ -65,6 +65,13 @@ class AuthenticationError(APIError):
         super().__init__(message, status_code=401, details=details)
 
 
+class NotAuthenticatedError(APIError):
+    """Raised when attempting to access protected resource without authentication."""
+
+    def __init__(self, message: str = "Authentication required for this resource", details: Optional[dict[str, Any]] = None) -> None:
+        super().__init__(message, status_code=401, details=details)
+
+
 class AuthorizationError(APIError):
     """Raised when user lacks permission (403 Forbidden)."""
 

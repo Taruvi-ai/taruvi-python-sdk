@@ -45,64 +45,38 @@ class _AsyncClient:
         api_url: str,
         app_slug: str,
         *,
-        # Authentication Methods (All Optional)
-        api_key: Optional[str] = None,
-        jwt: Optional[str] = None,
-        session_token: Optional[str] = None,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
-        # Configuration
+        # Configuration (project-level only)
         timeout: int = 30,
         max_retries: int = 3,
         **kwargs: Any,
     ) -> None:
         """
-        Initialize Taruvi async client with flexible authentication.
+        Initialize Taruvi async client (project-level configuration).
+
+        Authentication is handled separately via the auth property.
 
         Args:
             api_url: Taruvi API base URL (e.g., "http://localhost:8000")
             app_slug: Application slug (required)
-            api_key: Knox API key for authentication (optional)
-            jwt: JWT token for authentication (optional)
-            session_token: Allauth session token (optional)
-            username: Username for auto-login (optional)
-            password: Password for auto-login (optional)
             timeout: Request timeout in seconds
             max_retries: Maximum retry attempts
             **kwargs: Additional configuration options
 
+        Example:
+            >>> client = Client(
+            ...     api_url='https://app.taruvi.com',
+            ...     app_slug='my-app'
+            ... )
+            >>> # Authenticate using auth module
+            >>> auth_client = client.auth.signInWithToken(token='...', token_type='jwt')
+
         Raises:
             ConfigurationError: If required configuration is missing
         """
-        import os
-
-        # Auto-login if username+password provided
-        if username and password:
-            import httpx
-            login_response = httpx.post(
-                f"{api_url}/api/auth/login",
-                json={"username": username, "password": password}
-            )
-            login_response.raise_for_status()
-            login_data = login_response.json()
-            # Store JWT in jwt parameter (overrides any user-provided jwt)
-            jwt = login_data.get("access") or login_data.get("token")
-
-        # Load from function runtime if NO auth provided
-        elif not any([api_key, jwt, session_token]):
-            if os.getenv("TARUVI_FUNCTION_RUNTIME") == "true":
-                jwt = os.getenv("TARUVI_FUNCTION_KEY")
-                # Also load other function context if not provided
-                api_url = api_url or os.getenv("TARUVI_API_URL")
-                app_slug = app_slug or os.getenv("TARUVI_APP_SLUG")
-
         # Use factory method - handles runtime detection and merging
         self._config = TaruviConfig.from_runtime_and_params(
             api_url=api_url,
             app_slug=app_slug,
-            api_key=api_key,
-            jwt=jwt,  # JWT from: user, login, or function runtime
-            session_token=session_token,
             timeout=timeout,
             max_retries=max_retries,
             **kwargs
@@ -149,12 +123,51 @@ class _AsyncClient:
 
     @property
     def auth(self):
-        """Access Auth API."""
-        if self._auth is None:
-            from taruvi.modules.auth import AuthModule
+        """
+        Authentication manager for user-level auth operations.
 
-            self._auth = AuthModule(self)
+        Returns:
+            AuthManager instance for this client
+
+        Example:
+            >>> # Sign in with JWT
+            >>> auth_client = client.auth.signInWithToken(token='jwt_token', token_type='jwt')
+
+            >>> # Sign in with username/password
+            >>> auth_client = client.auth.signInWithPassword(username='...', password='...')
+
+            >>> # Refresh token
+            >>> new_client = client.auth.refreshToken(refresh_token='...')
+
+            >>> # Sign out
+            >>> unauth_client = auth_client.auth.signOut()
+        """
+        if self._auth is None:
+            from taruvi.auth import AuthManager
+            self._auth = AuthManager(self)
         return self._auth
+
+    @property
+    def is_authenticated(self) -> bool:
+        """
+        Check if client has authentication credentials.
+
+        Returns:
+            True if client has jwt, api_key, or session_token configured
+
+        Example:
+            >>> client = Client(api_url='...', app_slug='...')
+            >>> client.is_authenticated
+            False
+            >>> auth_client = client.auth.signInWithToken(token='...', token_type='jwt')
+            >>> auth_client.is_authenticated
+            True
+        """
+        return any([
+            self._config.jwt is not None,
+            self._config.api_key is not None,
+            self._config.session_token is not None,
+        ])
 
     @property
     def storage(self):
@@ -232,11 +245,6 @@ def Client(
     app_slug: str,
     *,
     mode: Literal['async'],
-    api_key: Optional[str] = None,
-    jwt: Optional[str] = None,
-    session_token: Optional[str] = None,
-    username: Optional[str] = None,
-    password: Optional[str] = None,
     timeout: int = 30,
     max_retries: int = 3,
     **kwargs: Any,
@@ -249,11 +257,6 @@ def Client(
     app_slug: str,
     *,
     mode: Literal['sync'] = 'sync',
-    api_key: Optional[str] = None,
-    jwt: Optional[str] = None,
-    session_token: Optional[str] = None,
-    username: Optional[str] = None,
-    password: Optional[str] = None,
     timeout: int = 30,
     max_retries: int = 3,
     **kwargs: Any,
@@ -267,7 +270,9 @@ def Client(
     **config: Any
 ) -> Union[_AsyncClient, "_SyncClient"]:
     """
-    Create a Taruvi client with flexible authentication.
+    Create a Taruvi client (unauthenticated).
+
+    Use AuthManager to authenticate after creating the client.
 
     Mandatory Parameters:
         api_url: Taruvi API base URL
@@ -276,44 +281,45 @@ def Client(
     Optional Parameters:
         mode: Client mode - 'sync' (default) or 'async'
 
-    Authentication (choose ONE or none):
-        api_key: Knox API-Key → Authorization: Api-Key {key}
-        jwt: JWT Bearer → Authorization: Bearer {jwt}
-        session_token: Session → X-Session-Token: {token}
-        username+password: Auto-login → Authorization: Bearer {jwt}
-        (none): Django session → httpx cookies (automatic)
-
     Configuration:
         timeout: Request timeout in seconds (default: 30)
         max_retries: Maximum retry attempts (default: 3)
 
     Returns:
-        Configured client instance (_AsyncClient or _SyncClient)
+        Unauthenticated client instance (_AsyncClient or _SyncClient)
 
     Examples:
-        # Knox API-Key
-        client = Client(api_url="...", app_slug="...", api_key="knox_key")
+        # Create unauthenticated client
+        client = Client(
+            api_url="https://api.taruvi.cloud",
+            app_slug="my-app"
+        )
 
-        # JWT Bearer
-        client = Client(api_url="...", app_slug="...", jwt="jwt_token")
+        # Authenticate with JWT
+        auth_client = client.auth.signInWithToken(
+            token="jwt_token",
+            token_type="jwt"
+        )
 
-        # Session Token
-        client = Client(api_url="...", app_slug="...", session_token="session")
+        # Authenticate with username/password
+        auth_client = client.auth.signInWithPassword(
+            username="alice@example.com",
+            password="secret123"
+        )
 
-        # Auto-Login with username+password
+        # Authenticate with API key
+        auth_client = client.auth.signInWithToken(
+            token="knox_api_key",
+            token_type="api_key"
+        )
+
+        # Async mode
         client = Client(
             api_url="...",
             app_slug="...",
-            username="alice@example.com",
-            password="secret"
+            mode='async'
         )
-
-        # Django Session (no auth)
-        client = Client(api_url="...", app_slug="...")
-
-        # Async mode
-        client = Client(api_url="...", app_slug="...", mode='async', jwt="token")
-        result = await client.functions.execute("my-function", params={})
+        auth_client = await client.auth.signInWithPassword(...)
 
     Raises:
         ValueError: If mode is not 'sync' or 'async'

@@ -18,6 +18,7 @@ from taruvi.config import TaruviConfig
 from taruvi.exceptions import (
     ConnectionError,
     NetworkError,
+    NotAuthenticatedError,
     ResponseError,
     TimeoutError,
     create_error_from_response,
@@ -182,6 +183,19 @@ class HTTPClient:
                 },
             ) from e
 
+    def _is_client_authenticated(self) -> bool:
+        """
+        Check if client has authentication credentials configured.
+
+        Returns:
+            True if client has jwt, api_key, or session_token
+        """
+        return any([
+            self.config.jwt is not None,
+            self.config.api_key is not None,
+            self.config.session_token is not None,
+        ])
+
     async def _handle_error_response(self, response: httpx.Response) -> None:
         """
         Handle error response and raise appropriate exception.
@@ -191,7 +205,15 @@ class HTTPClient:
 
         Raises:
             APIError: Appropriate error based on status code
+            NotAuthenticatedError: When accessing protected resource without authentication
         """
+        # Special handling for 401 when client is not authenticated
+        if response.status_code == 401 and not self._is_client_authenticated():
+            raise NotAuthenticatedError(
+                "Authentication required for this resource. "
+                "Use client.auth.signInWithToken() or client.auth.signInWithPassword() to authenticate."
+            )
+
         # Try to parse error details from response
         try:
             error_data = response.json()
