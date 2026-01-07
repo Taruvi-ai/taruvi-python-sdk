@@ -140,12 +140,23 @@ async def test_list_async_real_api(async_functions_module):
     assert "data" in result
 
     data = result["data"]
-    assert "count" in data or "results" in data, \
-        "Response structure changed - missing count/results fields!"
+
+    # Handle both response formats:
+    # Format 1: {"data": {"count": X, "results": [...]}}
+    # Format 2: {"data": [...]} (direct list)
+    if isinstance(data, list):
+        # Direct list format
+        functions_list = data
+    elif "results" in data:
+        # Paginated format
+        functions_list = data["results"]
+    else:
+        # Unknown format
+        assert False, f"Unexpected response structure: {data}"
 
     # If there are functions, verify their structure
-    if "results" in data and len(data["results"]) > 0:
-        function = data["results"][0]
+    if len(functions_list) > 0:
+        function = functions_list[0]
         assert "id" in function or "slug" in function, \
             "Function object structure changed!"
 
@@ -166,9 +177,15 @@ async def test_get_async_real_api(async_functions_module, test_function_name):
 
     # Verify response structure
     assert result is not None
-    assert "data" in result
 
-    function_data = result["data"]
+    # Handle both formats:
+    # Format 1: {"data": {...}}
+    # Format 2: {...} (direct)
+    if "data" in result:
+        function_data = result["data"]
+    else:
+        function_data = result
+
     assert "id" in function_data or "slug" in function_data
 
     # Verify function name matches

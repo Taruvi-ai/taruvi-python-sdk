@@ -103,15 +103,9 @@ class HTTPClient:
 
         # Retry logic
         max_retries = self.config.max_retries if retry else 0
-        backoff_factor = self.config.retry_backoff_factor
 
         for attempt in range(max_retries + 1):
             try:
-                if self.config.debug:
-                    logger.debug(
-                        f"Request: {method} {path} "
-                        f"(attempt {attempt + 1}/{max_retries + 1})"
-                    )
 
                 response = await self.client.request(
                     method=method,
@@ -132,10 +126,8 @@ class HTTPClient:
                         details={"path": path, "method": method},
                     ) from e
 
-                # Wait with exponential backoff
-                wait_time = backoff_factor * (2**attempt)
-                if self.config.debug:
-                    logger.debug(f"Timeout, retrying in {wait_time}s...")
+                # Wait before retry (simple backoff: 1s, 2s, 4s...)
+                wait_time = 2**attempt
                 await asyncio.sleep(wait_time)
 
             except (httpx.ConnectError, httpx.NetworkError) as e:
@@ -145,10 +137,8 @@ class HTTPClient:
                         details={"path": path, "method": method, "error": str(e)},
                     ) from e
 
-                # Wait with exponential backoff
-                wait_time = backoff_factor * (2**attempt)
-                if self.config.debug:
-                    logger.debug(f"Connection error, retrying in {wait_time}s...")
+                # Wait before retry (simple backoff: 1s, 2s, 4s...)
+                wait_time = 2**attempt
                 await asyncio.sleep(wait_time)
 
             except Exception as e:
@@ -175,10 +165,6 @@ class HTTPClient:
             APIError: For error status codes
             ResponseError: For invalid JSON
         """
-        # Log response in debug mode
-        if self.config.debug:
-            logger.debug(f"Response: {response.status_code} {response.url}")
-
         # Check for errors
         if response.status_code >= 400:
             await self._handle_error_response(response)
@@ -221,12 +207,6 @@ class HTTPClient:
             message=message,
             details=details,
         )
-
-        if self.config.debug:
-            logger.error(
-                f"API Error: {response.status_code} - {message}",
-                extra={"details": details},
-            )
 
         raise error
 

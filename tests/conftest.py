@@ -170,14 +170,12 @@ def generate_unique_id():
 
 
 @pytest.fixture
-def test_function_name(generate_unique_id):
+def test_function_name():
     """
-    Provide a unique function name for tests.
-    Assumes this function exists in your test backend.
+    Provide test function name from environment.
+    Falls back to default if not configured.
     """
-    # Use a known test function that exists in your backend
-    # Or create a function during test setup
-    return "process-order"  # Replace with actual test function
+    return os.getenv("TARUVI_TEST_FUNCTION_NAME", "test-function")
 
 
 # ============================================================================
