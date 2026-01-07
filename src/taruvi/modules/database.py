@@ -166,6 +166,39 @@ class DatabaseModule:
         """Create a query builder for a table."""
         return QueryBuilder(self.client, table_name, app_slug)
 
+    async def get(
+        self,
+        table_name: str,
+        record_id: str | int,
+        *,
+        app_slug: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Get a single record by ID.
+
+        Args:
+            table_name: Name of the table
+            record_id: Record ID
+            app_slug: Optional app slug override
+
+        Returns:
+            Single record as dict
+
+        Example:
+            record = await db.get('users', 123)
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _DATATABLE_RECORD.format(
+            app_slug=app_slug,
+            table_name=table_name,
+            record_id=str(record_id)
+        )
+        response = await self._http.get(path)
+        return response.get("data", {})
+
     async def create(
         self,
         table_name: str,
@@ -428,6 +461,39 @@ class SyncDatabaseModule:
     def query(self, table_name: str, app_slug: Optional[str] = None) -> SyncQueryBuilder:
         """Create a query builder for a table."""
         return SyncQueryBuilder(self.client, table_name, app_slug)
+
+    def get(
+        self,
+        table_name: str,
+        record_id: str | int,
+        *,
+        app_slug: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Get a single record by ID (blocking).
+
+        Args:
+            table_name: Name of the table
+            record_id: Record ID
+            app_slug: Optional app slug override
+
+        Returns:
+            Single record as dict
+
+        Example:
+            record = db.get('users', 123)
+        """
+        app_slug = app_slug or self._config.app_slug
+        if not app_slug:
+            raise ValueError("app_slug is required")
+
+        path = _DATATABLE_RECORD.format(
+            app_slug=app_slug,
+            table_name=table_name,
+            record_id=str(record_id)
+        )
+        response = self._http.get(path)
+        return response.get("data", {})
 
     def create(
         self,
