@@ -13,7 +13,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional, BinaryIO
 
 from taruvi.modules.base import BaseModule
-from urllib.parse import urlencode
+from taruvi.utils import build_query_string, build_params
+from taruvi.types import StorageFile, Bucket
 import json
 
 
@@ -79,9 +80,7 @@ class _BaseStorageQueryBuilder:
 
     def build_query_string(self) -> str:
         """Build query string from filters."""
-        if not self._filters:
-            return ""
-        return "?" + urlencode(self._filters)
+        return build_query_string(self._filters)
 
 
 def _build_update_body(
@@ -152,7 +151,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         files: list[tuple[str, BinaryIO]],
         paths: list[str],
         metadatas: Optional[list[dict[str, Any]]] = None
-    ) -> list[dict[str, Any]]:
+    ) -> list[StorageFile]:
         """Upload multiple files to the bucket."""
         import aiohttp
 
@@ -213,7 +212,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         file_path: str,
         metadata: Optional[dict[str, Any]] = None,
         visibility: Optional[str] = None
-    ) -> dict[str, Any]:
+    ) -> StorageFile:
         """Update file metadata or visibility."""
         path = _STORAGE_OBJECT.format(
             app_slug=self.app_slug,
@@ -239,7 +238,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         source_path: str,
         destination_path: str,
         destination_bucket: Optional[str] = None
-    ) -> dict[str, Any]:
+    ) -> StorageFile:
         """
         Copy an object to a new location.
 
@@ -249,7 +248,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
             destination_bucket: Target bucket slug (defaults to current bucket)
 
         Returns:
-            Dict with new object metadata
+            StorageFile dict with new object metadata
 
         Examples:
             # Copy within same bucket
@@ -285,7 +284,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         self,
         source_path: str,
         destination_path: str
-    ) -> dict[str, Any]:
+    ) -> StorageFile:
         """
         Move or rename an object within the bucket.
 
@@ -297,7 +296,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
             destination_path: New path for object
 
         Returns:
-            Dict with updated object metadata
+            StorageFile dict with updated object metadata
 
         Example:
             obj = await storage.from_("my-bucket").move_object(
@@ -382,20 +381,14 @@ class AsyncStorageModule(BaseModule):
             raise ValueError("app_slug is required")
 
         path = _STORAGE_BUCKETS.format(app_slug=app_slug)
-        params: dict[str, Any] = {}
-
-        if search:
-            params["search"] = search
-        if visibility:
-            params["visibility"] = visibility
-        if app_category:
-            params["app_category"] = app_category
-        if ordering:
-            params["ordering"] = ordering
-        if page is not None:
-            params["page"] = page
-        if page_size is not None:
-            params["page_size"] = page_size
+        params = build_params(
+            search=search,
+            visibility=visibility,
+            app_category=app_category,
+            ordering=ordering,
+            page=page,
+            page_size=page_size,
+        )
 
         response = await self._http.get(path, params=params)
         return self._extract_data(response)
@@ -410,7 +403,7 @@ class AsyncStorageModule(BaseModule):
         allowed_mime_types: Optional[list[str]] = None,
         app_category: Optional[str] = None,
         app_slug: Optional[str] = None
-    ) -> dict[str, Any]:
+    ) -> Bucket:
         """
         Create a new storage bucket.
 
@@ -424,7 +417,7 @@ class AsyncStorageModule(BaseModule):
             app_slug: Override app_slug
 
         Returns:
-            Dict with new bucket metadata
+            Bucket dict with new bucket metadata
 
         Examples:
             # Simple bucket
@@ -466,7 +459,7 @@ class AsyncStorageModule(BaseModule):
         slug: str,
         *,
         app_slug: Optional[str] = None
-    ) -> dict[str, Any]:
+    ) -> Bucket:
         """
         Get a specific bucket by slug.
 
@@ -475,7 +468,7 @@ class AsyncStorageModule(BaseModule):
             app_slug: Override app_slug
 
         Returns:
-            Dict with bucket metadata
+            Bucket dict with bucket metadata
 
         Example:
             bucket = await storage.get_bucket("my-bucket")
@@ -498,7 +491,7 @@ class AsyncStorageModule(BaseModule):
         allowed_mime_types: Optional[list[str]] = None,
         app_category: Optional[str] = None,
         app_slug: Optional[str] = None
-    ) -> dict[str, Any]:
+    ) -> Bucket:
         """
         Update bucket settings.
 
@@ -512,7 +505,7 @@ class AsyncStorageModule(BaseModule):
             app_slug: Override app_slug
 
         Returns:
-            Dict with updated bucket metadata
+            Bucket dict with updated bucket metadata
 
         Example:
             bucket = await storage.update_bucket(

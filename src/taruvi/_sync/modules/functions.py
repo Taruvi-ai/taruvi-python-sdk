@@ -14,6 +14,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
+from taruvi.utils import build_params
+from taruvi.types import Function, FunctionInvocation
 
 if TYPE_CHECKING:
     from taruvi._sync.client import SyncClient
@@ -42,28 +44,6 @@ def _build_execute_request(
     }
 
 
-def _build_list_params(limit: int, offset: int) -> dict[str, int]:
-    """Build list request params."""
-    return {"limit": limit, "offset": offset}
-
-
-def _build_invocations_params(
-    function_slug: Optional[str],
-    status: Optional[str],
-    limit: int,
-    offset: int
-) -> dict[str, Any]:
-    """Build invocations list params."""
-    params: dict[str, Any] = {"limit": limit, "offset": offset}
-
-    if function_slug:
-        params["function_slug"] = function_slug
-    if status:
-        params["status"] = status
-
-    return params
-
-
 class FunctionsModule(BaseModule):
     """Functions API operations."""
 
@@ -80,7 +60,7 @@ class FunctionsModule(BaseModule):
         app_slug: Optional[str] = None,
         is_async: bool = False,
         timeout: Optional[int] = None,
-    ) -> dict[str, Any]:
+    ) -> FunctionInvocation:
         """
         Execute a function.
 
@@ -92,7 +72,7 @@ class FunctionsModule(BaseModule):
             timeout: Override default timeout
 
         Returns:
-            FunctionExecutionResult: Function execution result
+            FunctionInvocation dict with execution result
 
         Example:
             ```python
@@ -168,7 +148,7 @@ class FunctionsModule(BaseModule):
             raise ValueError("app_slug is required")
 
         path = _FUNCTIONS_BASE.format(app_slug=app_slug)
-        params = _build_list_params(limit, offset)
+        params = build_params(limit=limit, offset=offset)
 
         response = self._http.get(path, params=params)
         return response
@@ -178,7 +158,7 @@ class FunctionsModule(BaseModule):
         function_slug: str,
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> Function:
         """Get function details."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -193,7 +173,7 @@ class FunctionsModule(BaseModule):
         invocation_id: str,
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> FunctionInvocation:
         """Get function invocation details."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -218,7 +198,12 @@ class FunctionsModule(BaseModule):
             raise ValueError("app_slug is required")
 
         path = _INVOCATIONS_LIST.format(app_slug=app_slug)
-        params = _build_invocations_params(function_slug, status, limit, offset)
+        params = build_params(
+            function_slug=function_slug,
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
 
         response = self._http.get(path, params=params)
         return response

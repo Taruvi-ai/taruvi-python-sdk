@@ -13,6 +13,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
+from taruvi.utils import build_params
+from taruvi.types import Secret
 
 
 if TYPE_CHECKING:
@@ -21,35 +23,6 @@ if TYPE_CHECKING:
 # API endpoint paths for secrets
 _SECRETS_BASE = "/api/secrets/"
 _SECRET_DETAIL = "/api/secrets/{key}/"
-
-
-# ============================================================================
-# Helper Functions
-# ============================================================================
-
-def _build_list_params(
-    search: Optional[str],
-    app: Optional[str],
-    tags: Optional[list[str]],
-    secret_type: Optional[str],
-    page: Optional[int],
-    page_size: Optional[int]
-) -> dict[str, Any]:
-    """Build query parameters for list_secrets()."""
-    params: dict[str, Any] = {}
-    if search:
-        params["search"] = search
-    if app:
-        params["app"] = app
-    if tags:
-        params["tags"] = ",".join(tags)
-    if secret_type:
-        params["secret_type"] = secret_type
-    if page is not None:
-        params["page"] = page
-    if page_size is not None:
-        params["page_size"] = page_size
-    return params
 
 
 class SecretsModule(BaseModule):
@@ -99,7 +72,14 @@ class SecretsModule(BaseModule):
                 print(f"{secret['key']}: {secret['value'][:4]}...")
             ```
         """
-        params = _build_list_params(search, app, tags, secret_type, page, page_size)
+        params = build_params(
+            search=search,
+            app=app,
+            tags=",".join(tags) if tags else None,
+            secret_type=secret_type,
+            page=page,
+            page_size=page_size,
+        )
         response = self._http.get(_SECRETS_BASE, params=params)
         return self._extract_data(response)
 
@@ -109,7 +89,7 @@ class SecretsModule(BaseModule):
         *,
         app: Optional[str] = None,
         tags: Optional[list[str]] = None
-    ) -> dict[str, Any]:
+    ) -> Secret:
         """
         Get a specific secret by key.
 
@@ -119,7 +99,7 @@ class SecretsModule(BaseModule):
             tags: Tag validation (returns 404 if secret doesn't have these tags)
 
         Returns:
-            Secret object with key, value, tags, secret_type, etc.
+            Secret dict with key, value, tags, secret_type, etc.
 
         Raises:
             NotFoundError: If secret doesn't exist
@@ -145,11 +125,10 @@ class SecretsModule(BaseModule):
         """
         path = _SECRET_DETAIL.format(key=key)
 
-        params = {}
-        if app:
-            params["app"] = app
-        if tags:
-            params["tags"] = ",".join(tags)
+        params = build_params(
+            app=app,
+            tags=",".join(tags) if tags else None,
+        )
 
         response = self._http.get(path, params=params)
         return self._extract_data(response)
@@ -227,7 +206,7 @@ class SecretsModule(BaseModule):
         response = self._http.post("/api/secrets/batch/", json=payload)
         return self._extract_data(response)
 
-    def update(self, key: str, value: str) -> dict[str, Any]:
+    def update(self, key: str, value: str) -> Secret:
         """
         Update a secret's value.
 
@@ -236,7 +215,7 @@ class SecretsModule(BaseModule):
             value: New secret value
 
         Returns:
-            Secret: Updated secret object
+            Secret dict with updated secret
 
         Example:
             ```python

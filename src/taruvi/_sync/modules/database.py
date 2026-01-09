@@ -12,6 +12,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
+from taruvi.utils import build_params as build_params_util
+from taruvi.types import DatabaseRecord
 
 if TYPE_CHECKING:
     from taruvi._sync.client import SyncClient
@@ -65,20 +67,16 @@ class _BaseQueryBuilder(BaseModule):
 
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
-        params: dict[str, Any] = {}
+        params = build_params_util(
+            _sort=self._sort_field,
+            _order=self._sort_order if self._sort_field else None,
+            page_size=self._page_size,
+            page=self._page if self._page != 1 else None,
+            populate=",".join(self._populate_fields) if self._populate_fields else None,
+        )
+
+        # Merge filters
         params.update(self._filters)
-
-        if self._sort_field:
-            params["_sort"] = self._sort_field
-            params["_order"] = self._sort_order
-
-        if self._page_size is not None:
-            params["page_size"] = self._page_size
-        if self._page != 1:
-            params["page"] = self._page
-
-        if self._populate_fields:
-            params["populate"] = ",".join(self._populate_fields)
 
         return params
 
@@ -160,7 +158,7 @@ class DatabaseModule(BaseModule):
         record_id: str | int,
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
+    ) -> DatabaseRecord:
         """
         Get a single record by ID.
 
@@ -170,7 +168,7 @@ class DatabaseModule(BaseModule):
             app_slug: Optional app slug override
 
         Returns:
-            Single record as dict
+            DatabaseRecord dict with record data
 
         Example:
             record = await db.get('users', 123)
@@ -190,7 +188,7 @@ class DatabaseModule(BaseModule):
         data: dict[str, Any] | list[dict[str, Any]],
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any] | list[dict[str, Any]]:
+    ) -> DatabaseRecord | list[DatabaseRecord]:
         """
         Create single or multiple records.
 
@@ -200,8 +198,8 @@ class DatabaseModule(BaseModule):
             app_slug: Optional app slug override
 
         Returns:
-            Single record (dict) if input was dict
-            List of records if input was list
+            DatabaseRecord dict if input was dict
+            List of DatabaseRecord dicts if input was list
 
         Examples:
             # Single record
@@ -225,7 +223,7 @@ class DatabaseModule(BaseModule):
         data: Optional[dict[str, Any]] = None,
         *,
         app_slug: Optional[str] = None,
-    ) -> dict[str, Any] | list[dict[str, Any]]:
+    ) -> DatabaseRecord | list[DatabaseRecord]:
         """
         Update single record by ID or multiple records in bulk.
 
@@ -238,8 +236,8 @@ class DatabaseModule(BaseModule):
             app_slug: Optional app slug override
 
         Returns:
-            Single record (dict) if single update
-            List of records if bulk update
+            DatabaseRecord dict if single update
+            List of DatabaseRecord dicts if bulk update
 
         Examples:
             # Single record update

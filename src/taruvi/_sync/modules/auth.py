@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from taruvi.utils import safe_get_nested
 
 if TYPE_CHECKING:
     from taruvi._sync.client import SyncClient
@@ -84,7 +85,7 @@ class AuthModule:
                 json={"email": email, "password": password}
             )
             # Response structure: {"meta": {"access_token": "..."}}
-            jwt_token = response.get("meta", {}).get("access_token")
+            jwt_token = safe_get_nested(response, "meta", "access_token")
 
             if not jwt_token:
                 raise AuthenticationError("No access token in login response")

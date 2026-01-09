@@ -10,9 +10,10 @@ Provides methods for:
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
-from urllib.parse import urlencode
 
 from taruvi.modules.base import BaseModule
+from taruvi.utils import build_query_string, build_params
+from taruvi.types import User
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
@@ -103,32 +104,19 @@ def _build_user_list_path(
     page_size: Optional[int]
 ) -> str:
     """Build user list request path with query params."""
-    path = "/api/users/"
-    filters: dict[str, Any] = {}
+    filters = build_params(
+        search=search,
+        is_active=is_active,
+        is_staff=is_staff,
+        is_superuser=is_superuser,
+        is_deleted=is_deleted,
+        roles=roles,
+        ordering=ordering,
+        page=page,
+        page_size=page_size,
+    )
 
-    if search is not None:
-        filters["search"] = search
-    if is_active is not None:
-        filters["is_active"] = is_active
-    if is_staff is not None:
-        filters["is_staff"] = is_staff
-    if is_superuser is not None:
-        filters["is_superuser"] = is_superuser
-    if is_deleted is not None:
-        filters["is_deleted"] = is_deleted
-    if roles is not None:
-        filters["roles"] = roles
-    if ordering is not None:
-        filters["ordering"] = ordering
-    if page is not None:
-        filters["page"] = page
-    if page_size is not None:
-        filters["page_size"] = page_size
-
-    if filters:
-        path += "?" + urlencode(filters)
-
-    return path
+    return f"/api/users/{build_query_string(filters)}"
 
 
 def _parse_user_apps(response: Any) -> list[dict[str, Any]]:
@@ -181,7 +169,7 @@ class AsyncUsersModule(BaseModule):
         self.client = client
         super().__init__(client._http_client, client._config)
 
-    async def get_user(self, username: str) -> dict[str, Any]:
+    async def get_user(self, username: str) -> User:
         """
         Get user details by username.
 
@@ -189,7 +177,7 @@ class AsyncUsersModule(BaseModule):
             username: Username to retrieve
 
         Returns:
-            dict: User details response
+            User dict with id, email, username, etc.
 
         Example:
             ```python
@@ -212,7 +200,7 @@ class AsyncUsersModule(BaseModule):
         is_active: bool = True,
         is_staff: bool = False,
         attributes: Optional[str] = None
-    ) -> dict[str, Any]:
+    ) -> User:
         """
         Create a new user.
 
@@ -228,7 +216,7 @@ class AsyncUsersModule(BaseModule):
             attributes: Optional JSON string of custom attributes
 
         Returns:
-            dict: Created user response
+            User dict with created user details
 
         Example:
             ```python
@@ -260,7 +248,7 @@ class AsyncUsersModule(BaseModule):
         is_active: Optional[bool] = None,
         is_staff: Optional[bool] = None,
         attributes: Optional[str] = None
-    ) -> dict[str, Any]:
+    ) -> User:
         """
         Update an existing user.
 
@@ -276,7 +264,7 @@ class AsyncUsersModule(BaseModule):
             attributes: Updated JSON string of custom attributes
 
         Returns:
-            dict: Updated user response
+            User dict with updated user details
 
         Example:
             ```python

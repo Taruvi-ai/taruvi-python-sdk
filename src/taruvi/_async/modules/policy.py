@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
+from taruvi.types import PolicyCheckBatchResult
 
 
 if TYPE_CHECKING:
@@ -52,7 +53,7 @@ class AsyncPolicyModule(BaseModule):
         principal: Optional[dict[str, Any]] = None,
         aux_data: Optional[dict[str, Any]] = None,
         app_slug: Optional[str] = None
-    ) -> dict[str, Any]:
+    ) -> PolicyCheckBatchResult:
         """
         Check permissions for multiple resources.
 
@@ -65,9 +66,9 @@ class AsyncPolicyModule(BaseModule):
             app_slug: App slug (defaults to client's app_slug)
 
         Returns:
-            dict with keys:
+            PolicyCheckBatchResult dict with:
                 - requestId: str
-                - results: list[dict] - each with resource, actions, validationErrors
+                - results: list of PolicyCheckResult dicts
 
         Example:
             ```python
