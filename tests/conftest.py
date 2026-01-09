@@ -145,7 +145,7 @@ def sync_client(test_config):
     yield client
 
     # Cleanup: Close HTTP connections
-    client._http.close()
+    client._http_client.close()
 
 
 # ============================================================================
@@ -222,6 +222,9 @@ def sync_secrets_module(sync_client):
     All operations hit the actual backend.
     """
     return sync_client.secrets
+
+
+# Auth module is accessed via client.auth - no separate fixtures needed
 
 
 # ============================================================================

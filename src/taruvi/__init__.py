@@ -112,8 +112,10 @@ Function Runtime Example:
     ```
 """
 
-from taruvi.auth import AuthManager
-from taruvi.client import Client
+from typing import Optional, Any
+import asyncio
+import os
+
 from taruvi.config import RuntimeMode, TaruviConfig
 from taruvi.exceptions import (
     APIError,
@@ -142,13 +144,88 @@ from taruvi.runtime import (
     is_inside_function,
 )
 
+
+def _is_async_context() -> bool:
+    """Detect if we're in an async context."""
+    # In test mode, default to sync (tests must explicitly specify mode='async')
+    if os.getenv("TARUVI_TEST_MODE") == "true":
+        return False
+
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return False
+
+
+def Client(
+    api_url: str,
+    app_slug: str,
+    *,
+    mode: Optional[str] = None,
+    timeout: int = 30,
+    max_retries: int = 3,
+    **kwargs: Any
+):
+    """
+    Create a Taruvi client (unified factory).
+
+    Mandatory Parameters:
+        api_url: Taruvi API base URL
+        app_slug: Application slug
+
+    Optional Parameters:
+        mode: Client mode - 'sync' (default) or 'async' (auto-detected if not specified)
+        timeout: Request timeout in seconds (default: 30)
+        max_retries: Maximum retry attempts (default: 3)
+
+    Returns:
+        AsyncClient or SyncClient depending on mode
+
+    Examples:
+        # Auto-detect mode (sync in normal context, async in event loop)
+        client = Client(
+            api_url="https://api.taruvi.cloud",
+            app_slug="my-app"
+        )
+
+        # Force sync mode
+        client = Client(
+            api_url="https://api.taruvi.cloud",
+            app_slug="my-app",
+            mode='sync'
+        )
+
+        # Force async mode
+        client = Client(
+            api_url="https://api.taruvi.cloud",
+            app_slug="my-app",
+            mode='async'
+        )
+    """
+    # Auto-detect mode if not specified
+    if mode is None:
+        mode = "async" if _is_async_context() else "sync"
+
+    # Return appropriate client
+    if mode == "async":
+        from taruvi._async.client import AsyncClient
+        return AsyncClient(api_url, app_slug, timeout=timeout, max_retries=max_retries, **kwargs)
+    elif mode == "sync":
+        from taruvi._sync.client import SyncClient
+        return SyncClient(api_url, app_slug, timeout=timeout, max_retries=max_retries, **kwargs)
+    else:
+        raise ValueError(
+            f"Invalid mode: '{mode}'. Must be 'sync' or 'async'. "
+            f"Use Client(mode='sync') for synchronous or Client(mode='async') for async/await."
+        )
+
+
 __version__ = "0.2.0"
 
 __all__ = [
     # Main client
     "Client",
-    # Authentication
-    "AuthManager",
     # Configuration
     "TaruviConfig",
     "RuntimeMode",

@@ -614,7 +614,7 @@ print(user['username'], user['email'])
 
 ```python
 # List users with filters
-users = client.auth.list_users(
+users = client.users.list_users(
     search="alice",
     is_active=True,
     roles="admin,editor",
@@ -623,10 +623,10 @@ users = client.auth.list_users(
 )
 
 # Get specific user
-user = client.auth.get_user("alice")
+user = client.users.get_user("alice")
 
 # Create user
-new_user = client.auth.create_user(
+new_user = client.users.create_user(
     username="bob",
     email="bob@example.com",
     password="secret456",
@@ -638,34 +638,34 @@ new_user = client.auth.create_user(
 )
 
 # Update user
-updated = client.auth.update_user(
+updated = client.users.update_user(
     username="bob",
     email="bob.smith@example.com",
     first_name="Robert"
 )
 
 # Delete user
-client.auth.delete_user("bob")
+client.users.delete_user("bob")
 ```
 
 #### Role Management (Bulk Operations)
 
 ```python
 # Assign roles to multiple users
-client.auth.assign_roles(
+client.users.assign_roles(
     roles=["editor", "reviewer"],
     usernames=["alice", "bob", "charlie"],
     expires_at="2025-12-31T23:59:59Z"  # Optional expiration
 )
 
 # Revoke roles from multiple users
-client.auth.revoke_roles(
+client.users.revoke_roles(
     roles=["editor"],
     usernames=["alice", "bob"]
 )
 
 # Get user's apps
-apps = client.auth.get_user_apps("alice")
+apps = client.users.get_user_apps("alice")
 ```
 
 ---

@@ -2,7 +2,7 @@
 Functions API Module
 
 Provides methods for:
-- Executing functions (sync/async)
+- Executing functions (async)
 - Getting function execution results by task ID
 - Listing functions
 - Getting function details
@@ -13,9 +13,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
+from taruvi.modules.base import BaseModule
+
 if TYPE_CHECKING:
-    from taruvi.client import Client
-    from taruvi.sync_client import SyncClient
+    from taruvi._sync.client import SyncClient
 
 # API endpoint paths for functions
 _FUNCTIONS_BASE = "/api/apps/{app_slug}/functions/"
@@ -54,29 +55,24 @@ def _build_invocations_params(
 ) -> dict[str, Any]:
     """Build invocations list params."""
     params: dict[str, Any] = {"limit": limit, "offset": offset}
-    
+
     if function_slug:
         params["function_slug"] = function_slug
     if status:
         params["status"] = status
-    
+
     return params
 
 
-# ============================================================================
-# Async Implementation
-# ============================================================================
-
-class FunctionsModule:
+class FunctionsModule(BaseModule):
     """Functions API operations."""
 
-    def __init__(self, client: "Client") -> None:
-        """Initialize Functions module."""
+    def __init__(self, client: "SyncClient") -> None:
+        """Initialize FunctionsModule."""
         self.client = client
-        self._http = client._http_client
-        self._config = client._config
+        super().__init__(client._http_client, client._config)
 
-    async def execute(
+    def execute(
         self,
         function_slug: str,
         params: Optional[dict[str, Any]] = None,
@@ -116,10 +112,10 @@ class FunctionsModule:
         )
         body = _build_execute_request(params, is_async)
 
-        response = await self._http.post(path, json=body, headers={})
+        response = self._http.post(path, json=body, headers={})
         return response
 
-    async def get_result(
+    def get_result(
         self,
         task_id: str,
     ) -> dict[str, Any]:
@@ -156,151 +152,6 @@ class FunctionsModule:
             ```
         """
         path = _FUNCTION_RESULT.format(task_id=task_id)
-        response = await self._http.get(path)
-        return response
-
-    async def list(
-        self,
-        *,
-        app_slug: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> dict[str, Any]:
-        """List functions in an app."""
-        app_slug = app_slug or self._config.app_slug
-        if not app_slug:
-            raise ValueError("app_slug is required")
-
-        path = _FUNCTIONS_BASE.format(app_slug=app_slug)
-        params = _build_list_params(limit, offset)
-
-        response = await self._http.get(path, params=params)
-        return response
-
-    async def get(
-        self,
-        function_slug: str,
-        *,
-        app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """Get function details."""
-        app_slug = app_slug or self._config.app_slug
-        if not app_slug:
-            raise ValueError("app_slug is required")
-
-        path = _FUNCTION_DETAIL.format(app_slug=app_slug, function_slug=function_slug)
-        response = await self._http.get(path)
-        return response
-
-    async def get_invocation(
-        self,
-        invocation_id: str,
-        *,
-        app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """Get function invocation details."""
-        app_slug = app_slug or self._config.app_slug
-        if not app_slug:
-            raise ValueError("app_slug is required")
-
-        path = _INVOCATION_DETAIL.format(app_slug=app_slug, invocation_id=invocation_id)
-        response = await self._http.get(path)
-        return response
-
-    async def list_invocations(
-        self,
-        *,
-        function_slug: Optional[str] = None,
-        app_slug: Optional[str] = None,
-        status: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> dict[str, Any]:
-        """List function invocations."""
-        app_slug = app_slug or self._config.app_slug
-        if not app_slug:
-            raise ValueError("app_slug is required")
-
-        path = _INVOCATIONS_LIST.format(app_slug=app_slug)
-        params = _build_invocations_params(function_slug, status, limit, offset)
-
-        response = await self._http.get(path, params=params)
-        return response
-
-
-# ============================================================================
-# Sync Implementation
-# ============================================================================
-
-class SyncFunctionsModule:
-    """Synchronous Functions API operations (native blocking)."""
-
-    def __init__(self, client: "SyncClient") -> None:
-        """Initialize synchronous Functions module."""
-        self.client = client
-        self._http = client._http
-        self._config = client._config
-
-    def execute(
-        self,
-        function_slug: str,
-        params: Optional[dict[str, Any]] = None,
-        *,
-        app_slug: Optional[str] = None,
-        is_async: bool = False,
-        timeout: Optional[int] = None,
-    ) -> dict[str, Any]:
-        """Execute a function (blocking)."""
-        app_slug = app_slug or self._config.app_slug
-        if not app_slug:
-            raise ValueError("app_slug is required")
-
-        path = _FUNCTION_EXECUTE.format(
-            app_slug=app_slug,
-            function_slug=function_slug
-        )
-        body = _build_execute_request(params, is_async)
-
-        response = self._http.post(path, json=body, headers={})
-        return response
-
-    def get_result(
-        self,
-        task_id: str,
-    ) -> dict[str, Any]:
-        """
-        Get the result of a function execution by task ID (blocking).
-
-        Args:
-            task_id: Celery task ID returned from async execution
-
-        Returns:
-            Dict containing:
-                - task_id: The task identifier
-                - status: Task status (SUCCESS, FAILURE, PENDING, etc.)
-                - result: Task result data (if completed successfully)
-                - traceback: Error traceback (if failed)
-                - date_created: Task creation timestamp
-                - date_done: Task completion timestamp
-                - params: User-provided execution parameters
-
-        Example:
-            ```python
-            # Execute function asynchronously
-            result = client.functions.execute(
-                "process-order",
-                params={"order_id": 123},
-                is_async=True
-            )
-            task_id = result['invocation']['celery_task_id']
-
-            # Get result later
-            task_result = client.functions.get_result(task_id)
-            print(task_result['status'])  # 'SUCCESS', 'FAILURE', etc.
-            print(task_result['result'])  # Actual function output
-            ```
-        """
-        path = _FUNCTION_RESULT.format(task_id=task_id)
         response = self._http.get(path)
         return response
 
@@ -311,7 +162,7 @@ class SyncFunctionsModule:
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
-        """List functions in an app (blocking)."""
+        """List functions in an app."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
@@ -328,7 +179,7 @@ class SyncFunctionsModule:
         *,
         app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Get function details (blocking)."""
+        """Get function details."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
@@ -343,7 +194,7 @@ class SyncFunctionsModule:
         *,
         app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Get function invocation details (blocking)."""
+        """Get function invocation details."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")
@@ -361,7 +212,7 @@ class SyncFunctionsModule:
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
-        """List function invocations (blocking)."""
+        """List function invocations."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
             raise ValueError("app_slug is required")

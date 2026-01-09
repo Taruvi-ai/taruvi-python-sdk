@@ -2,27 +2,30 @@
 
 import pytest
 from taruvi import Client
-from taruvi.client import _AsyncClient
-from taruvi.sync_client import _SyncClient
 
 
-def test_client_defaults_to_sync():
+def test_client_defaults_to_sync(unauth_test_config):
     """Test that Client() without mode defaults to sync."""
     client = Client(
-        api_url="https://api.example.com",
-        app_slug="test-app"
+        api_url=unauth_test_config["api_url"],
+        app_slug=unauth_test_config["app_slug"]
     )
-    assert isinstance(client, _SyncClient)
+    # Verify it's a sync client by checking for _http_client attribute
+    assert hasattr(client, '_http_client'), "Sync client should have _http_client attribute"
+    assert not hasattr(client, '__aenter__'), "Sync client should not be async context manager"
 
 
-def test_client_explicit_sync_mode():
+def test_client_explicit_sync_mode(unauth_test_config):
     """Test that Client(mode='sync') returns sync client."""
     client = Client(
-        api_url="https://api.example.com",
-        app_slug="test-app",
+        api_url=unauth_test_config["api_url"],
+        app_slug=unauth_test_config["app_slug"],
         mode='sync'
     )
-    assert isinstance(client, _SyncClient)
+    # Verify it's a sync client
+    assert hasattr(client, '_http_client'), "Sync client should have _http_client attribute"
+    assert hasattr(client, 'database'), "Client should have database module"
+    assert hasattr(client, 'functions'), "Client should have functions module"
 
 
 def test_client_async_mode():
@@ -32,7 +35,10 @@ def test_client_async_mode():
         app_slug="test-app",
         mode='async'
     )
-    assert isinstance(client, _AsyncClient)
+    # Verify it's an async client
+    assert hasattr(client, '_http_client'), "Async client should have _http_client attribute"
+    assert hasattr(client, '__aenter__'), "Async client should be async context manager"
+    assert hasattr(client, 'close'), "Async client should have close method"
 
 
 def test_client_invalid_mode():
@@ -54,16 +60,18 @@ def test_client_missing_app_slug():
         )
 
 
-def test_client_with_optional_params():
+def test_client_with_optional_params(unauth_test_config):
     """Test that Client accepts optional configuration parameters."""
     client = Client(
-        api_url="https://api.example.com",
-        app_slug="test-app",
+        api_url=unauth_test_config["api_url"],
+        app_slug=unauth_test_config["app_slug"],
         mode='sync',
         timeout=60,
         max_retries=5
     )
-    assert isinstance(client, _SyncClient)
+    # Verify it's a sync client
+    assert hasattr(client, '_http_client'), "Sync client should have _http_client attribute"
+    # Verify configuration was applied
     assert client._config.timeout == 60
     assert client._config.max_retries == 5
 

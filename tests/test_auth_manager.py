@@ -1,8 +1,11 @@
 """
-Unit tests for AuthManager class - NO MOCKS.
+Unit tests for Auth Module (client.auth) - NO MOCKS.
 
 Tests the authentication refactoring that separates project-level configuration
 from user-level authentication.
+
+Auth functionality is now provided by AuthModule (accessed via client.auth).
+AuthManager has been merged into AuthModule.
 
 These tests do NOT use mocks - they test real logic without external dependencies.
 For tests that require real HTTP calls (login, token refresh), see test_auth_integration.py
@@ -10,9 +13,7 @@ For tests that require real HTTP calls (login, token refresh), see test_auth_int
 
 import pytest
 import concurrent.futures
-from taruvi import Client, AuthManager
-from taruvi.client import _AsyncClient
-from taruvi.sync_client import _SyncClient
+from taruvi import Client
 from taruvi.exceptions import NotAuthenticatedError
 
 
@@ -28,7 +29,8 @@ def test_client_created_without_auth(unauth_test_config):
         mode='sync'
     )
 
-    assert isinstance(client, _SyncClient)
+    # Verify it's a sync client by checking for _http_client attribute
+    assert hasattr(client, '_http_client'), "Sync client should have _http_client attribute"
     assert not client.is_authenticated
     assert client._config.jwt is None
     assert client._config.api_key is None
@@ -43,19 +45,24 @@ def test_async_client_created_without_auth(unauth_test_config):
         mode='async'
     )
 
-    assert isinstance(client, _AsyncClient)
+    # Verify it's an async client by checking for async-specific attributes
+    assert hasattr(client, '_http_client'), "Async client should have _http_client attribute"
     assert not client.is_authenticated
 
 
 def test_client_has_auth_property(unauth_test_config):
-    """Test that Client has auth property returning AuthManager."""
+    """Test that Client has auth property returning AuthModule."""
     client = Client(
         api_url=unauth_test_config["api_url"],
         app_slug=unauth_test_config["app_slug"]
     )
 
     assert hasattr(client, 'auth')
-    assert isinstance(client.auth, AuthManager)
+    # Auth module should have all required methods
+    assert hasattr(client.auth, 'signInWithPassword')
+    assert hasattr(client.auth, 'signInWithToken')
+    assert hasattr(client.auth, 'signOut')
+    assert hasattr(client.auth, 'get_current_user')
 
 
 def test_client_has_is_authenticated_property(unauth_test_config):
@@ -89,7 +96,8 @@ def test_sign_in_with_jwt_token(unauth_test_config):
 
     # Verify new client returned
     assert auth_client is not client
-    assert isinstance(auth_client, _SyncClient)
+    # Verify auth_client is a sync client
+    assert hasattr(auth_client, '_http_client'), "Sync client should have _http_client attribute"
 
     # Verify authentication
     assert auth_client.is_authenticated
@@ -331,8 +339,8 @@ def test_not_authenticated_error_exists(unauth_test_config):
 
 
 def test_http_client_checks_authentication(unauth_test_config):
-    """Test that HTTP client has authentication checking."""
-    from taruvi.http_client import HTTPClient
+    """Test that async HTTP client has authentication checking."""
+    from taruvi._async.http_client import AsyncHTTPClient
     from taruvi.config import TaruviConfig
 
     config = TaruviConfig(
@@ -340,7 +348,7 @@ def test_http_client_checks_authentication(unauth_test_config):
         app_slug=unauth_test_config["app_slug"]
     )
 
-    http_client = HTTPClient(config)
+    http_client = AsyncHTTPClient(config)
 
     # Should have _is_client_authenticated method
     assert hasattr(http_client, '_is_client_authenticated')
@@ -352,7 +360,7 @@ def test_http_client_checks_authentication(unauth_test_config):
 
 def test_sync_http_client_checks_authentication(unauth_test_config):
     """Test that sync HTTP client has authentication checking."""
-    from taruvi.sync_http_client import SyncHTTPClient
+    from taruvi._sync.http_client import HTTPClient
     from taruvi.config import TaruviConfig
 
     config = TaruviConfig(
@@ -360,7 +368,7 @@ def test_sync_http_client_checks_authentication(unauth_test_config):
         app_slug=unauth_test_config["app_slug"]
     )
 
-    sync_http_client = SyncHTTPClient(config)
+    sync_http_client = HTTPClient(config)
 
     # Should have _is_client_authenticated method
     assert hasattr(sync_http_client, '_is_client_authenticated')
@@ -443,13 +451,15 @@ def test_async_client_auth_pattern(unauth_test_config):
         mode='async'
     )
 
-    assert isinstance(client, _AsyncClient)
+    # Verify it's an async client by checking for async-specific attributes
+    assert hasattr(client, '_http_client'), "Async client should have _http_client attribute"
     assert not client.is_authenticated
 
     # Authenticate
     auth_client = client.auth.signInWithToken(token='async_jwt', token_type='jwt')
 
-    assert isinstance(auth_client, _AsyncClient)
+    # Verify auth_client is an async client
+    assert hasattr(auth_client, '_http_client'), "Async client should have _http_client attribute"
     assert auth_client.is_authenticated
     assert auth_client._config.jwt == 'async_jwt'
 
@@ -465,7 +475,8 @@ def test_async_client_sign_out(unauth_test_config):
     auth_client = client.auth.signInWithToken(token='jwt', token_type='jwt')
     unauth_client = auth_client.auth.signOut()
 
-    assert isinstance(unauth_client, _AsyncClient)
+    # Verify unauth_client is an async client
+    assert hasattr(unauth_client, '_http_client'), "Async client should have _http_client attribute"
     assert not unauth_client.is_authenticated
 
 

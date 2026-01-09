@@ -12,10 +12,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
+from taruvi.modules.base import BaseModule
+
 
 if TYPE_CHECKING:
-    from taruvi.client import Client
-    from taruvi.sync_client import SyncClient
+    from taruvi._sync.client import SyncClient
 
 # API endpoint paths for secrets
 _SECRETS_BASE = "/api/secrets/"
@@ -51,20 +52,15 @@ def _build_list_params(
     return params
 
 
-# ============================================================================
-# Async Implementation
-# ============================================================================
-
-class SecretsModule:
+class SecretsModule(BaseModule):
     """Secrets API operations."""
 
-    def __init__(self, client: "Client") -> None:
-        """Initialize Secrets module."""
+    def __init__(self, client: "SyncClient") -> None:
+        """Initialize SecretsModule."""
         self.client = client
-        self._http = client._http_client
-        self._config = client._config
+        super().__init__(client._http_client, client._config)
 
-    async def list_secrets(
+    def list_secrets(
         self,
         *,
         search: Optional[str] = None,
@@ -104,10 +100,10 @@ class SecretsModule:
             ```
         """
         params = _build_list_params(search, app, tags, secret_type, page, page_size)
-        response = await self._http.get(_SECRETS_BASE, params=params)
-        return response.get("data", {})
+        response = self._http.get(_SECRETS_BASE, params=params)
+        return self._extract_data(response)
 
-    async def get_secret(
+    def get_secret(
         self,
         key: str,
         *,
@@ -155,70 +151,83 @@ class SecretsModule:
         if tags:
             params["tags"] = ",".join(tags)
 
-        response = await self._http.get(path, params=params)
-        return response.get("data", {})
+        response = self._http.get(path, params=params)
+        return self._extract_data(response)
 
-    async def get_secrets(
+    def get_secrets(
         self,
         keys: list[str],
         *,
-        app: Optional[str] = None
+        app: Optional[str] = None,
+        include_metadata: bool = False
     ) -> dict[str, Any]:
         """
-        Get multiple secrets by keys (client-side batching).
+        Get multiple secrets by keys using backend batch endpoint.
 
-        Makes concurrent API calls internally for performance.
+        More efficient than making multiple individual requests - uses a single API call.
 
         Args:
             keys: List of secret keys to retrieve
             app: Optional app context for 2-tier inheritance
+            include_metadata: If True, returns full secret objects with tags and type
 
         Returns:
-            Dict mapping keys to secret objects:
+            Dict mapping keys to values (or full objects if include_metadata=True):
+
+            Without metadata:
             {
-                "API_KEY": {"key": "API_KEY", "value": "...", ...},
-                "DB_PASSWORD": {"key": "DB_PASSWORD", "value": "...", ...}
+                "API_KEY": "secret_value_123",
+                "DB_PASSWORD": "db_pass_456"
+            }
+
+            With metadata:
+            {
+                "API_KEY": {
+                    "value": "secret_value_123",
+                    "tags": ["production"],
+                    "secret_type": "api_credentials"
+                }
             }
 
             Keys not found are omitted from results.
 
         Example:
             ```python
-            # Get multiple secrets
+            # Get multiple secrets (values only)
             secrets = await client.secrets.get_secrets(
                 ["API_KEY", "DB_PASSWORD", "STRIPE_KEY"]
             )
-            api_key = secrets["API_KEY"]["value"]
-            db_pass = secrets["DB_PASSWORD"]["value"]
+            api_key = secrets["API_KEY"]
+            db_pass = secrets["DB_PASSWORD"]
 
-            # Get with app context
+            # Get with app context (2-tier inheritance)
             prod_secrets = await client.secrets.get_secrets(
                 ["API_KEY", "DB_PASSWORD"],
                 app="production"
             )
+
+            # Get with metadata
+            secrets_meta = await client.secrets.get_secrets(
+                ["API_KEY"],
+                include_metadata=True
+            )
+            api_key_value = secrets_meta["API_KEY"]["value"]
+            api_key_tags = secrets_meta["API_KEY"]["tags"]
             ```
         """
-        import asyncio
-
-        params = {}
+        # Build request payload
+        payload = {
+            "keys": keys,
+            "include_metadata": include_metadata
+        }
         if app:
-            params["app"] = app
+            payload["app"] = app
 
-        async def fetch_one(key: str) -> tuple[str, Optional[dict]]:
-            try:
-                path = _SECRET_DETAIL.format(key=key)
-                response = await self._http.get(path, params=params)
-                return (key, response.get("data"))
-            except Exception:
-                return (key, None)
+        # Make single batch API call
+        response = self._http.post("/api/secrets/batch/", json=payload)
+        return self._extract_data(response)
 
-        # Fetch all concurrently
-        results = await asyncio.gather(*[fetch_one(key) for key in keys])
-
-        # Return dict excluding None values
-        return {key: value for key, value in results if value is not None}
-
-    async def update(self, key: str, value: str) -> dict[str, Any]:
+    def update(self, key: str, value: str) -> dict[str, Any]:
         """
         Update a secret's value.
 
@@ -238,83 +247,6 @@ class SecretsModule:
             print(f"Updated: {updated.key}")
             ```
         """
-        path = _SECRET_DETAIL.format(key=key)
-        response = await self._http.put(path, json={"value": value})
-        return response
-
-
-# ============================================================================
-# Sync Implementation
-# ============================================================================
-
-class SyncSecretsModule:
-    """Synchronous Secrets API operations."""
-
-    def __init__(self, client: "SyncClient") -> None:
-        """Initialize Secrets module."""
-        self.client = client
-        self._http = client._http
-        self._config = client._config
-
-    def list_secrets(
-        self,
-        *,
-        search: Optional[str] = None,
-        app: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        secret_type: Optional[str] = None,
-        page: Optional[int] = None,
-        page_size: Optional[int] = None
-    ) -> dict[str, Any]:
-        """List secrets with optional filters (blocking)."""
-        params = _build_list_params(search, app, tags, secret_type, page, page_size)
-        response = self._http.get(_SECRETS_BASE, params=params)
-        return response.get("data", {})
-
-    def get_secret(
-        self,
-        key: str,
-        *,
-        app: Optional[str] = None,
-        tags: Optional[list[str]] = None
-    ) -> dict[str, Any]:
-        """Get a specific secret by key (blocking)."""
-        path = _SECRET_DETAIL.format(key=key)
-
-        params = {}
-        if app:
-            params["app"] = app
-        if tags:
-            params["tags"] = ",".join(tags)
-
-        response = self._http.get(path, params=params)
-        return response.get("data", {})
-
-    def get_secrets(
-        self,
-        keys: list[str],
-        *,
-        app: Optional[str] = None
-    ) -> dict[str, Any]:
-        """Get multiple secrets by keys (blocking, sequential)."""
-        params = {}
-        if app:
-            params["app"] = app
-
-        results = {}
-        for key in keys:
-            try:
-                path = _SECRET_DETAIL.format(key=key)
-                response = self._http.get(path, params=params)
-                data = response.get("data")
-                if data:
-                    results[key] = data
-            except Exception:
-                continue
-        return results
-
-    def update(self, key: str, value: str) -> dict[str, Any]:
-        """Update a secret's value (blocking)."""
         path = _SECRET_DETAIL.format(key=key)
         response = self._http.put(path, json={"value": value})
         return response
