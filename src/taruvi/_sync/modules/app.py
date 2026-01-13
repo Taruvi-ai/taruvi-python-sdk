@@ -40,7 +40,7 @@ class AppModule(BaseModule):
 
         Example:
             ```python
-            roles = await client.app.roles()
+            roles = client.app.roles()
             for role in roles.data:
                 print(f"{role.name}: {role.permissions}")
             ```

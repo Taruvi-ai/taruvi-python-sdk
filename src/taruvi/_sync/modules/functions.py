@@ -76,7 +76,7 @@ class FunctionsModule(BaseModule):
 
         Example:
             ```python
-            result = await client.functions.execute(
+            result = client.functions.execute(
                 "process-order",
                 params={"order_id": 123}
             )
@@ -118,7 +118,7 @@ class FunctionsModule(BaseModule):
         Example:
             ```python
             # Execute function asynchronously
-            result = await client.functions.execute(
+            result = client.functions.execute(
                 "process-order",
                 params={"order_id": 123},
                 is_async=True
@@ -126,7 +126,7 @@ class FunctionsModule(BaseModule):
             task_id = result['invocation']['celery_task_id']
 
             # Get result later
-            task_result = await client.functions.get_result(task_id)
+            task_result = client.functions.get_result(task_id)
             print(task_result['status'])  # 'SUCCESS', 'FAILURE', etc.
             print(task_result['result'])  # Actual function output
             ```

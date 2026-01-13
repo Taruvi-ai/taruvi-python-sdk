@@ -27,7 +27,7 @@ class SyncClient:
             mode="async"
         )
 
-        result = await client.functions.execute("my-function", {"param": "value"})
+        result = client.functions.execute("my-function", {"param": "value"})
         ```
 
     Function Runtime Mode (auto-configured):
@@ -35,7 +35,7 @@ class SyncClient:
         # No configuration needed - auto-detects from environment!
         client = Client(mode="async")
 
-        result = await client.functions.execute("other-function", {"data": 123})
+        result = client.functions.execute("other-function", {"data": 123})
         ```
     """
 
@@ -68,7 +68,7 @@ class SyncClient:
             ...     mode='async'
             ... )
             >>> # Authenticate using auth module
-            >>> auth_client = await client.auth.signInWithToken(token='...', token_type='jwt')
+            >>> auth_client = client.auth.signInWithToken(token='...', token_type='jwt')
 
         Raises:
             ConfigurationError: If required configuration is missing
@@ -98,6 +98,7 @@ class SyncClient:
         self._app = None
         self._settings = None
         self._users = None
+        self._analytics = None
 
     @property
     def config(self) -> TaruviConfig:
@@ -135,17 +136,17 @@ class SyncClient:
             >>> auth_client = client.auth.signInWithToken(token='jwt_token', token_type='jwt')
 
             >>> # Sign in with username/password
-            >>> auth_client = await client.auth.signInWithPassword(username='...', password='...')
+            >>> auth_client = client.auth.signInWithPassword(username='...', password='...')
 
             >>> # Refresh token
-            >>> new_client = await client.auth.refreshToken(refresh_token='...')
+            >>> new_client = client.auth.refreshToken(refresh_token='...')
 
             >>> # Sign out
             >>> unauth_client = auth_client.auth.signOut()
 
             >>> # Low-level API calls
-            >>> response = await client.auth.login(username='...', password='...')
-            >>> user = await client.auth.get_current_user()
+            >>> response = client.auth.login(username='...', password='...')
+            >>> user = client.auth.get_current_user()
         """
         if self._auth is None:
             from taruvi._sync.modules.auth import AuthModule
@@ -164,7 +165,7 @@ class SyncClient:
             >>> client = Client(api_url='...', app_slug='...', mode='async')
             >>> client.is_authenticated
             False
-            >>> auth_client = await client.auth.signInWithToken(token='...', token_type='jwt')
+            >>> auth_client = client.auth.signInWithToken(token='...', token_type='jwt')
             >>> auth_client.is_authenticated
             True
         """
@@ -227,6 +228,15 @@ class SyncClient:
 
             self._users = UsersModule(self)
         return self._users
+
+    @property
+    def analytics(self):
+        """Access Analytics API for executing analytics queries."""
+        if self._analytics is None:
+            from taruvi._sync.modules.analytics import AnalyticsModule
+
+            self._analytics = AnalyticsModule(self)
+        return self._analytics
 
     def close(self) -> None:
         """Close the client and release resources."""

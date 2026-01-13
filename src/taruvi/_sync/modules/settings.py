@@ -36,7 +36,7 @@ class SettingsModule(BaseModule):
 
         Example:
             ```python
-            settings = await client.settings.get()
+            settings = client.settings.get()
             print(settings.to_dict())
             ```
         """

@@ -37,7 +37,7 @@ class AuthModule:
 
         Example:
             ```python
-            user = await client.auth.get_current_user()
+            user = client.auth.get_current_user()
             print(f"Logged in as: {user['username']}")
             ```
         """
@@ -71,7 +71,7 @@ class AuthModule:
 
         Example:
             >>> # Login with email
-            >>> auth_client = await client.auth.signInWithPassword(
+            >>> auth_client = client.auth.signInWithPassword(
             ...     email='user@example.com',
             ...     password='secure_password'
             ... )

@@ -171,7 +171,7 @@ class DatabaseModule(BaseModule):
             DatabaseRecord dict with record data
 
         Example:
-            record = await db.get('users', 123)
+            record = db.get('users', 123)
         """
         app_slug = self._ensure_app_slug(app_slug)
         path = _DATATABLE_RECORD.format(
@@ -203,10 +203,10 @@ class DatabaseModule(BaseModule):
 
         Examples:
             # Single record
-            record = await db.create('users', {'name': 'John', 'age': 30})
+            record = db.create('users', {'name': 'John', 'age': 30})
 
             # Bulk records
-            records = await db.create('users', [
+            records = db.create('users', [
                 {'name': 'Alice', 'age': 25},
                 {'name': 'Bob', 'age': 35}
             ])
@@ -241,10 +241,10 @@ class DatabaseModule(BaseModule):
 
         Examples:
             # Single record update
-            record = await db.update('users', 123, {'name': 'John Updated'})
+            record = db.update('users', 123, {'name': 'John Updated'})
 
             # Bulk record update
-            records = await db.update('users', [
+            records = db.update('users', [
                 {'id': 1, 'status': 'active'},
                 {'id': 2, 'status': 'inactive'},
                 {'id': 3, 'age': 25}
@@ -297,14 +297,14 @@ class DatabaseModule(BaseModule):
 
         Examples:
             # Single record delete
-            await db.delete('users', 123)
+            db.delete('users', 123)
 
             # Bulk delete by IDs
-            result = await db.delete('users', ids=[1, 2, 3])
+            result = db.delete('users', ids=[1, 2, 3])
             # Returns: {"deleted_count": 3, "message": "..."}
 
             # Bulk delete by filter
-            result = await db.delete('users', filter={'status': 'inactive'})
+            result = db.delete('users', filter={'status': 'inactive'})
             # Returns: {"deleted_count": 42, "message": "..."}
         """
         app_slug = self._ensure_app_slug(app_slug)

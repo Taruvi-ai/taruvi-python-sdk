@@ -156,6 +156,7 @@ from taruvi.types import (
     Setting,
     PolicyCheckResult,
     PolicyCheckBatchResult,
+    AnalyticsQueryResult,
     PaginatedResponse,
     # Filter types
     DatabaseFilters,
@@ -286,6 +287,7 @@ __all__ = [
     "Setting",
     "PolicyCheckResult",
     "PolicyCheckBatchResult",
+    "AnalyticsQueryResult",
     "PaginatedResponse",
     # Filter types
     "DatabaseFilters",

@@ -60,10 +60,10 @@ class SecretsModule(BaseModule):
         Example:
             ```python
             # List all secrets
-            all_secrets = await client.secrets.list_secrets()
+            all_secrets = client.secrets.list_secrets()
 
             # List with filters
-            api_secrets = await client.secrets.list_secrets(
+            api_secrets = client.secrets.list_secrets(
                 secret_type="api_key",
                 tags=["production"],
                 page_size=50
@@ -107,17 +107,17 @@ class SecretsModule(BaseModule):
         Example:
             ```python
             # Simple get
-            api_key = await client.secrets.get_secret("API_KEY")
+            api_key = client.secrets.get_secret("API_KEY")
             print(f"API Key: {api_key['value']}")
 
             # Get with app context (2-tier inheritance)
-            db_pass = await client.secrets.get_secret(
+            db_pass = client.secrets.get_secret(
                 "DB_PASSWORD",
                 app="production"
             )
 
             # Get with tag validation
-            stripe_key = await client.secrets.get_secret(
+            stripe_key = client.secrets.get_secret(
                 "STRIPE_KEY",
                 tags=["payment", "production"]
             )
@@ -173,20 +173,20 @@ class SecretsModule(BaseModule):
         Example:
             ```python
             # Get multiple secrets (values only)
-            secrets = await client.secrets.get_secrets(
+            secrets = client.secrets.get_secrets(
                 ["API_KEY", "DB_PASSWORD", "STRIPE_KEY"]
             )
             api_key = secrets["API_KEY"]
             db_pass = secrets["DB_PASSWORD"]
 
             # Get with app context (2-tier inheritance)
-            prod_secrets = await client.secrets.get_secrets(
+            prod_secrets = client.secrets.get_secrets(
                 ["API_KEY", "DB_PASSWORD"],
                 app="production"
             )
 
             # Get with metadata
-            secrets_meta = await client.secrets.get_secrets(
+            secrets_meta = client.secrets.get_secrets(
                 ["API_KEY"],
                 include_metadata=True
             )
@@ -219,7 +219,7 @@ class SecretsModule(BaseModule):
 
         Example:
             ```python
-            updated = await client.secrets.update(
+            updated = client.secrets.update(
                 "API_KEY",
                 "new_secret_value_123"
             )

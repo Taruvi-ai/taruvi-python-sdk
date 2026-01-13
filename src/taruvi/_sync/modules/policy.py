@@ -72,7 +72,7 @@ class PolicyModule(BaseModule):
 
         Example:
             ```python
-            result = await client.policy.check_resources([
+            result = client.policy.check_resources([
                 {
                     "resource": {
                         "kind": "datatable",
@@ -124,7 +124,7 @@ class PolicyModule(BaseModule):
                 {'kind': 'datatable', 'id': 'orders'},
                 {'kind': 'datatable', 'id': 'invoices'}
             ]
-            allowed = await client.policy.filter_allowed(all_tables, ['read', 'write'])
+            allowed = client.policy.filter_allowed(all_tables, ['read', 'write'])
             # Returns: [{'kind': 'datatable', 'id': 'users'}, {'kind': 'datatable', 'id': 'orders'}]
             ```
         """
@@ -170,7 +170,7 @@ class PolicyModule(BaseModule):
 
         Example:
             ```python
-            allowed = await client.policy.get_allowed_actions(
+            allowed = client.policy.get_allowed_actions(
                 {'kind': 'datatable', 'id': 'users'}
             )
             # Returns: ['read', 'write', 'update']  # 'delete' not allowed

@@ -252,13 +252,13 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
 
         Examples:
             # Copy within same bucket
-            new_obj = await storage.from_("my-bucket").copy_object(
+            new_obj = storage.from_("my-bucket").copy_object(
                 "users/123/avatar.jpg",
                 "users/456/avatar.jpg"
             )
 
             # Copy to different bucket
-            new_obj = await storage.from_("uploads").copy_object(
+            new_obj = storage.from_("uploads").copy_object(
                 "temp/file.pdf",
                 "archive/file.pdf",
                 destination_bucket="archives"
@@ -299,7 +299,7 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
             StorageFile dict with updated object metadata
 
         Example:
-            obj = await storage.from_("my-bucket").move_object(
+            obj = storage.from_("my-bucket").move_object(
                 "temp/document.pdf",
                 "archive/2024/document.pdf"
             )
@@ -364,11 +364,11 @@ class StorageModule(BaseModule):
 
         Examples:
             # List all buckets
-            response = await storage.list_buckets()
+            response = storage.list_buckets()
             buckets = response["results"]
 
             # Search and filter
-            response = await storage.list_buckets(
+            response = storage.list_buckets(
                 search="images",
                 visibility="public",
                 ordering="-created_at",
@@ -421,10 +421,10 @@ class StorageModule(BaseModule):
 
         Examples:
             # Simple bucket
-            bucket = await storage.create_bucket("My Images")
+            bucket = storage.create_bucket("My Images")
 
             # With options
-            bucket = await storage.create_bucket(
+            bucket = storage.create_bucket(
                 "User Uploads",
                 slug="user-uploads",
                 visibility="private",
@@ -471,7 +471,7 @@ class StorageModule(BaseModule):
             Bucket dict with bucket metadata
 
         Example:
-            bucket = await storage.get_bucket("my-bucket")
+            bucket = storage.get_bucket("my-bucket")
         """
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -508,7 +508,7 @@ class StorageModule(BaseModule):
             Bucket dict with updated bucket metadata
 
         Example:
-            bucket = await storage.update_bucket(
+            bucket = storage.update_bucket(
                 "my-bucket",
                 visibility="public",
                 file_size_limit=104857600  # 100MB
@@ -551,7 +551,7 @@ class StorageModule(BaseModule):
             app_slug: Override app_slug
 
         Example:
-            await storage.delete_bucket("old-bucket")
+            storage.delete_bucket("old-bucket")
         """
         app_slug = app_slug or self._config.app_slug
         if not app_slug:

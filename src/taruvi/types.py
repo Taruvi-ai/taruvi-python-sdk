@@ -147,6 +147,11 @@ class PolicyCheckBatchResult(TypedDict):
     results: list[PolicyCheckResult]
 
 
+class AnalyticsQueryResult(TypedDict):
+    """Analytics query result (type hint only)."""
+    data: Any  # Query-specific result structure (varies by query)
+
+
 # ============================================================================
 # Filter Types - Query Parameters
 # ============================================================================
@@ -227,6 +232,7 @@ __all__ = [
     "Setting",
     "PolicyCheckResult",
     "PolicyCheckBatchResult",
+    "AnalyticsQueryResult",
     "PaginatedResponse",
 
     # Filter types

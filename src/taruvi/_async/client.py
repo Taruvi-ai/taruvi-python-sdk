@@ -98,6 +98,7 @@ class AsyncClient:
         self._app = None
         self._settings = None
         self._users = None
+        self._analytics = None
 
     @property
     def config(self) -> TaruviConfig:
@@ -227,6 +228,15 @@ class AsyncClient:
 
             self._users = AsyncUsersModule(self)
         return self._users
+
+    @property
+    def analytics(self):
+        """Access Analytics API for executing analytics queries."""
+        if self._analytics is None:
+            from taruvi._async.modules.analytics import AsyncAnalyticsModule
+
+            self._analytics = AsyncAnalyticsModule(self)
+        return self._analytics
 
     async def close(self) -> None:
         """Close the client and release resources."""

@@ -868,6 +868,62 @@ actions = client.policy.get_allowed_actions(
 
 ---
 
+### Analytics
+
+Execute pre-configured analytics queries to retrieve insights and metrics from your application.
+
+#### Execute Analytics Query
+
+```python
+# Execute analytics query
+result = client.analytics.execute(
+    "monthly-revenue",
+    params={
+        "start_date": "2024-01-01",
+        "end_date": "2024-12-31"
+    }
+)
+print(result["data"])
+```
+
+#### Query with Grouping
+
+```python
+# Group results by month
+result = client.analytics.execute(
+    "user-signups",
+    params={
+        "start_date": "2024-01-01",
+        "end_date": "2024-12-31",
+        "group_by": "month"
+    }
+)
+
+# Results grouped by month
+for month_data in result["data"]:
+    print(f"{month_data['month']}: {month_data['count']} signups")
+```
+
+#### Query with Filters
+
+```python
+# Execute query with custom filters
+result = client.analytics.execute(
+    "sales-by-region",
+    params={
+        "region": "US",
+        "product_category": "electronics",
+        "start_date": "2024-Q1"
+    }
+)
+
+# Access filtered data
+print(f"Total sales: {result['data']['total']}")
+print(f"Average: {result['data']['average']}")
+```
+
+---
+
 ### App & Settings
 
 #### Get App Roles

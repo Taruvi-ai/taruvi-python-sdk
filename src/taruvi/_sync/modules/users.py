@@ -181,7 +181,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            user = await client.users.get_user("alice")
+            user = client.users.get_user("alice")
             print(f"Email: {user['data']['email']}")
             ```
         """
@@ -220,7 +220,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            user = await client.users.create_user(
+            user = client.users.create_user(
                 username="alice",
                 email="alice@example.com",
                 password="secure123",
@@ -268,7 +268,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            user = await client.users.update_user(
+            user = client.users.update_user(
                 username="alice",
                 email="newemail@example.com",
                 is_active=False
@@ -291,7 +291,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            await client.users.delete_user("alice")
+            client.users.delete_user("alice")
             ```
         """
         self._http.delete(f"/api/users/{username}/")
@@ -327,7 +327,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            users = await client.users.list_users(
+            users = client.users.list_users(
                 is_active=True,
                 roles="admin",
                 page=1,
@@ -356,7 +356,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            apps = await client.users.get_user_apps("alice")
+            apps = client.users.get_user_apps("alice")
             for app in apps:
                 print(app["slug"])
             ```
@@ -384,7 +384,7 @@ class UsersModule(BaseModule):
         Example:
             ```python
             # Assign multiple roles to multiple users
-            result = await client.users.assign_roles(
+            result = client.users.assign_roles(
                 roles=["admin", "manager"],
                 usernames=["alice", "bob"],
                 expires_at="2025-06-15T23:59:59Z"  # Optional
@@ -392,7 +392,7 @@ class UsersModule(BaseModule):
             print(result["message"])  # "Assigned 4 roles successfully"
 
             # Permanent assignment (no expiration)
-            result = await client.users.assign_roles(
+            result = client.users.assign_roles(
                 roles=["viewer"],
                 usernames=["charlie"]
             )
@@ -425,7 +425,7 @@ class UsersModule(BaseModule):
         Example:
             ```python
             # Revoke multiple roles from multiple users
-            result = await client.users.revoke_roles(
+            result = client.users.revoke_roles(
                 roles=["admin", "manager"],
                 usernames=["alice", "bob"]
             )

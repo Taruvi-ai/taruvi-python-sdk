@@ -33,8 +33,12 @@ RULES = [
             "AsyncSettingsModule": "SettingsModule",
             "AsyncAuthModule": "AuthModule",
             "AsyncUsersModule": "UsersModule",
+            "AsyncAnalyticsModule": "AnalyticsModule",
             "AsyncQueryBuilder": "QueryBuilder",
             "AsyncStorageQueryBuilder": "StorageQueryBuilder",
+
+            # Docstring transformations
+            "result = await client.": "result = client.",
         },
     ),
 ]
@@ -63,7 +67,7 @@ def main():
         content = py_file.read_text()
         original_content = content
 
-        # Fix asyncio imports and calls
+        # Fix asyncio imports and calls (additional_replacements doesn't catch these reliably)
         content = content.replace("import asyncio", "import time")
         content = content.replace("asyncio.sleep", "time.sleep")
 
@@ -75,6 +79,27 @@ def main():
         content = content.replace("Async HTTP Client", "Sync HTTP Client")
         content = content.replace("async httpx client", "sync httpx client")
         content = content.replace("async/await:", "synchronous operations:")
+
+        # Fix module docstrings
+        content = content.replace("Initialize AsyncAnalyticsModule", "Initialize AnalyticsModule")
+        content = content.replace("Initialize AsyncSecretsModule", "Initialize SecretsModule")
+        content = content.replace("Initialize AsyncStorageModule", "Initialize StorageModule")
+        content = content.replace("Initialize AsyncUsersModule", "Initialize UsersModule")
+        content = content.replace("Initialize AsyncFunctionsModule", "Initialize FunctionsModule")
+        content = content.replace("Initialize AsyncDatabaseModule", "Initialize DatabaseModule")
+        content = content.replace("Initialize AsyncPolicyModule", "Initialize PolicyModule")
+        content = content.replace("Initialize AsyncAppModule", "Initialize AppModule")
+        content = content.replace("Initialize AsyncSettingsModule", "Initialize SettingsModule")
+        content = content.replace("Initialize AsyncAuthModule", "Initialize AuthModule")
+
+        # Fix await in docstring examples (comprehensive)
+        import re
+        # Pattern 1: variable = await something (in docstrings)
+        content = re.sub(r'(\s+\w+\s*=\s*)await\s+', r'\1', content)
+        # Pattern 2: standalone await statements (in docstrings)
+        content = re.sub(r'(\s+)await\s+([a-zA-Z_]\w*\.)', r'\1\2', content)
+        # Pattern 3: await in >>> examples
+        content = re.sub(r'>>>\s+(\w+\s*=\s*)await\s+', r'>>> \1', content)
 
         if content != original_content:
             py_file.write_text(content)
