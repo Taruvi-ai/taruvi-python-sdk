@@ -153,44 +153,34 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         metadatas: Optional[list[dict[str, Any]]] = None
     ) -> list[StorageFile]:
         """Upload multiple files to the bucket."""
-        import aiohttp
-
         path = _STORAGE_BATCH_UPLOAD.format(
             app_slug=self.app_slug,
             bucket=self.bucket
         )
 
-        # Create FormData
-        form = aiohttp.FormData()
+        # Prepare multipart files for httpx
+        # Format: [('field_name', ('filename', file_obj, 'content_type'))]
+        httpx_files = [
+            ("files", (filename, file_obj, "application/octet-stream"))
+            for filename, file_obj in files
+        ]
 
-        # Add files
-        for filename, file_obj in files:
-            form.add_field(
-                "files",
-                file_obj,
-                filename=filename,
-                content_type="application/octet-stream"
-            )
-
-        # Add paths as JSON string
-        form.add_field("paths", json.dumps(paths))
-
-        # Add metadata as JSON string
+        # Prepare form data (paths and metadata as JSON strings)
+        data = {"paths": json.dumps(paths)}
         if metadatas:
-            form.add_field("metadata", json.dumps(metadatas))
+            data["metadata"] = json.dumps(metadatas)
 
-        # Use custom headers for FormData
-        headers = self._config.headers.copy()
-        headers.pop("Content-Type", None)
-
+        # Use httpx client directly with files parameter
+        # Note: httpx automatically sets Content-Type to multipart/form-data
         response = await self._http.client.post(
             f"{self._config.api_url}{path}",
-            data=form,
-            headers=headers
+            files=httpx_files,
+            data=data,
+            headers=self._config.headers
         )
 
-        data = response.json()
-        files_data = data.get("data", [])
+        response_data = response.json()
+        files_data = response_data.get("data", [])
         return files_data
 
     async def download(self, file_path: str) -> bytes:

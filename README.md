@@ -678,20 +678,29 @@ apps = client.users.get_user_apps("alice")
 # List buckets
 buckets = client.storage.list_buckets()
 
-# Create bucket
+# Create bucket (simple)
+bucket = client.storage.create_bucket(name="images")
+
+# Create bucket with options
 bucket = client.storage.create_bucket(
-    name="images",
-    description="User uploaded images"
+    name="User Uploads",
+    slug="user-uploads",
+    visibility="private",
+    file_size_limit=10485760,  # 10MB
+    allowed_mime_types=["image/jpeg", "image/png"],
+    app_category="assets"
 )
 
 # Get bucket details
 bucket = client.storage.get_bucket("images")
 
 # Update bucket
-client.storage.update_bucket("images", {
-    "description": "Public user images",
-    "visibility": "public"
-})
+client.storage.update_bucket(
+    slug="images",
+    name="Public Images",
+    visibility="public",
+    file_size_limit=20971520  # 20MB
+)
 
 # Delete bucket
 client.storage.delete_bucket("images")
