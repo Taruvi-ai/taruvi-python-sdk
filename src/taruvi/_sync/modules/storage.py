@@ -22,8 +22,8 @@ if TYPE_CHECKING:
     from taruvi._sync.client import SyncClient
 
 # API endpoint paths for storage
-_STORAGE_BASE = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects"
-_STORAGE_OBJECT = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/{path}"
+_STORAGE_BASE = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/"
+_STORAGE_OBJECT = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/{path}/"
 _STORAGE_BATCH_UPLOAD = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/batch-upload/"
 _STORAGE_BATCH_DELETE = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/batch-delete/"
 

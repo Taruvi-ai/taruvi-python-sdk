@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
 
 # API endpoint paths for app
-_APP_ROLES = "/api/app/{app_slug}/roles"
+_APP_ROLES = "/api/apps/{app_slug}/roles/"
 
 
 class AsyncAppModule(BaseModule):

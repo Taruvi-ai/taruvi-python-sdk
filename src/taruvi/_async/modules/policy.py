@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
 
 # API endpoint paths for policy
-_POLICY_CHECK_RESOURCES = "/api/apps/{app_slug}/check/resources"
+_POLICY_CHECK_RESOURCES = "/api/apps/{app_slug}/check/resources/"
 
 
 # ============================================================================
