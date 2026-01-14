@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class HTTPClient(BaseHTTPClient):
     """
-    Async HTTP client for Taruvi API with retry logic.
+    Sync HTTP client for Taruvi API with retry logic.
 
     Inherits shared logic from BaseHTTPClient.
 
@@ -40,7 +40,7 @@ class HTTPClient(BaseHTTPClient):
 
     def __init__(self, config: TaruviConfig) -> None:
         """
-        Initialize async HTTP client.
+        Initialize sync HTTP client.
 
         Args:
             config: Taruvi configuration
@@ -191,7 +191,7 @@ class HTTPClient(BaseHTTPClient):
         return self.request("DELETE", path, params=params, headers=headers)
 
     def __enter__(self):
-        """Support async context manager."""
+        """Support context manager."""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

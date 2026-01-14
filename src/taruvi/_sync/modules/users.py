@@ -158,7 +158,7 @@ def _build_revoke_roles_request(
 
 
 # ============================================================================
-# Async Implementation
+# Sync Implementation
 # ============================================================================
 
 class UsersModule(BaseModule):

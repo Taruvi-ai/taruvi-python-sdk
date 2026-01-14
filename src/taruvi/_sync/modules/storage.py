@@ -97,7 +97,7 @@ def _build_update_body(
 
 
 # ============================================================================
-# Async Implementation
+# Sync Implementation
 # ============================================================================
 
 class StorageQueryBuilder(_BaseStorageQueryBuilder):

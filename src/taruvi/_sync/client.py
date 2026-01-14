@@ -1,7 +1,7 @@
 """
-Taruvi SDK Async Client
+Taruvi SDK Sync Client
 
-Async client class for interacting with Taruvi API.
+Sync client class for interacting with Taruvi API.
 Supports both external application mode and function runtime mode.
 """
 
@@ -13,7 +13,7 @@ from taruvi._sync.http_client import HTTPClient
 
 class SyncClient:
     """
-    Async Taruvi API client implementation.
+    Sync Taruvi API client implementation.
 
     This client automatically detects whether it's running in an external application
     or inside a Taruvi function and configures itself accordingly.
@@ -24,7 +24,7 @@ class SyncClient:
             api_url="http://localhost:8000",
             api_key="your_jwt_token",
             site_slug="your-site",
-            mode="async"
+            mode="sync"
         )
 
         result = client.functions.execute("my-function", {"param": "value"})
@@ -33,7 +33,7 @@ class SyncClient:
     Function Runtime Mode (auto-configured):
         ```python
         # No configuration needed - auto-detects from environment!
-        client = Client(mode="async")
+        client = Client(mode="sync")
 
         result = client.functions.execute("other-function", {"data": 123})
         ```
@@ -50,7 +50,7 @@ class SyncClient:
         **kwargs: Any,
     ) -> None:
         """
-        Initialize Taruvi async client (project-level configuration).
+        Initialize Taruvi sync client (project-level configuration).
 
         Authentication is handled separately via the auth property.
 
@@ -65,7 +65,7 @@ class SyncClient:
             >>> client = Client(
             ...     api_url='https://app.taruvi.com',
             ...     app_slug='my-app',
-            ...     mode='async'
+            ...     mode='sync'
             ... )
             >>> # Authenticate using auth module
             >>> auth_client = client.auth.signInWithToken(token='...', token_type='jwt')
@@ -129,7 +129,7 @@ class SyncClient:
         Authentication module for user-level auth operations.
 
         Returns:
-            AsyncAuthModule instance for this client
+            AuthModule instance for this client
 
         Example:
             >>> # Sign in with JWT
@@ -162,7 +162,7 @@ class SyncClient:
             True if client has jwt, api_key, or session_token configured
 
         Example:
-            >>> client = Client(api_url='...', app_slug='...', mode='async')
+            >>> client = Client(api_url='...', app_slug='...', mode='sync')
             >>> client.is_authenticated
             False
             >>> auth_client = client.auth.signInWithToken(token='...', token_type='jwt')
@@ -243,7 +243,7 @@ class SyncClient:
         self._http_client.close()
 
     def __enter__(self):
-        """Support async context manager."""
+        """Support context manager."""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -254,7 +254,7 @@ class SyncClient:
         """String representation of client."""
         mode = self._config.runtime_mode.value
         return (
-            f"AsyncClient(api_url={self._config.api_url}, "
+            f"SyncClient(api_url={self._config.api_url}, "
             f"site_slug={self._config.site_slug}, "
             f"mode={mode})"
         )

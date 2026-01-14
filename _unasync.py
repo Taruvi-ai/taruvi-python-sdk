@@ -80,6 +80,23 @@ def main():
         content = content.replace("async httpx client", "sync httpx client")
         content = content.replace("async/await:", "synchronous operations:")
 
+        # Fix client documentation
+        content = content.replace("Taruvi SDK Async Client", "Taruvi SDK Sync Client")
+        content = content.replace("Async client class", "Sync client class")
+        content = content.replace("Async Taruvi API client implementation", "Sync Taruvi API client implementation")
+        content = content.replace("Async HTTP client for Taruvi API", "Sync HTTP client for Taruvi API")
+        content = content.replace("Initialize Taruvi async client", "Initialize Taruvi sync client")
+        content = content.replace("Initialize async HTTP client", "Initialize sync HTTP client")
+        content = content.replace("Support async context manager", "Support context manager")
+        content = content.replace("AsyncAuthModule instance", "AuthModule instance")
+
+        # Fix mode examples in docstrings
+        content = content.replace('mode="async"', 'mode="sync"')
+        content = content.replace("mode='async'", "mode='sync'")
+
+        # Fix __repr__ method
+        content = content.replace('f"AsyncClient(', 'f"SyncClient(')
+
         # Fix module docstrings
         content = content.replace("Initialize AsyncAnalyticsModule", "Initialize AnalyticsModule")
         content = content.replace("Initialize AsyncSecretsModule", "Initialize SecretsModule")
@@ -91,6 +108,9 @@ def main():
         content = content.replace("Initialize AsyncAppModule", "Initialize AppModule")
         content = content.replace("Initialize AsyncSettingsModule", "Initialize SettingsModule")
         content = content.replace("Initialize AsyncAuthModule", "Initialize AuthModule")
+
+        # Fix section comments
+        content = content.replace("# Async Implementation", "# Sync Implementation")
 
         # Fix await in docstring examples (comprehensive)
         import re

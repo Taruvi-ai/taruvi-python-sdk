@@ -215,5 +215,7 @@ class AuthModule:
         new_client._policy = None
         new_client._app = None
         new_client._settings = None
+        new_client._users = None
+        new_client._analytics = None
 
         return new_client
