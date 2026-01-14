@@ -205,27 +205,3 @@ class AsyncSecretsModule(BaseModule):
         # Make single batch API call
         response = await self._http.post("/api/secrets/batch/", json=payload)
         return self._extract_data(response)
-
-    async def update(self, key: str, value: str) -> Secret:
-        """
-        Update a secret's value.
-
-        Args:
-            key: Secret key/name
-            value: New secret value
-
-        Returns:
-            Secret dict with updated secret
-
-        Example:
-            ```python
-            updated = await client.secrets.update(
-                "API_KEY",
-                "new_secret_value_123"
-            )
-            print(f"Updated: {updated.key}")
-            ```
-        """
-        path = _SECRET_DETAIL.format(key=key)
-        response = await self._http.put(path, json={"value": value})
-        return response

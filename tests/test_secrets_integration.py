@@ -101,46 +101,6 @@ async def test_get_secret_real_api(async_secrets_module, generate_unique_id):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_update_secret_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test updating a secret in real backend.
-
-    Creates secret, updates it, verifies new value.
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"UPDATE_TEST_{unique_id}"
-    original_value = f"original_value_{unique_id}"
-    updated_value = f"updated_value_{unique_id}"
-
-    try:
-        # Create secret
-        await async_secrets_module.create(key=secret_key, value=original_value)
-
-        # Update secret
-        result = await async_secrets_module.update(key=secret_key, value=updated_value)
-
-        # Verify update
-        assert result is not None
-
-        # Get secret to verify persistence
-        retrieved = await async_secrets_module.get(secret_key)
-        assert retrieved["value"] == updated_value
-
-    except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
-        raise
-
-    finally:
-        # Cleanup
-        try:
-            await async_secrets_module.delete(secret_key)
-        except:
-            pass
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_delete_secret_real_api(async_secrets_module, generate_unique_id):
     """
     Test deleting a secret from real backend.
@@ -401,34 +361,6 @@ def test_get_secret_sync_real_api(sync_secrets_module, generate_unique_id):
         raise
 
 
-@pytest.mark.integration
-def test_update_secret_sync_real_api(sync_secrets_module, generate_unique_id):
-    """
-    Test updating secret with sync client.
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"SYNC_UPDATE_{unique_id}"
-
-    try:
-        # Create
-        sync_secrets_module.create(key=secret_key, value="original")
-
-        # Update
-        sync_secrets_module.update(key=secret_key, value="updated")
-
-        # Verify
-        result = sync_secrets_module.get(secret_key)
-        assert result["value"] == "updated"
-
-        # Cleanup
-        sync_secrets_module.delete(secret_key)
-
-    except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
-        raise
-
-
 # ============================================================================
 # Error Handling Tests - Real API Errors
 # ============================================================================
@@ -600,7 +532,7 @@ async def test_secret_with_long_value_real_api(async_secrets_module, generate_un
 IMPORTANT CONFIGURATION:
 
 1. Ensure secrets management is enabled in backend
-2. Verify API key has permissions to create/read/update/delete secrets
+2. Verify API key has permissions to create/read/delete secrets
 3. Backend may have specific secret key naming requirements
 
 Cleanup Strategy:
@@ -611,7 +543,6 @@ Cleanup Strategy:
 Test Coverage:
 ✅ Create secrets
 ✅ Read secrets
-✅ Update secrets
 ✅ Delete secrets
 ✅ List secrets
 ✅ Filter/prefix search (if supported)

@@ -816,13 +816,6 @@ prod_secrets = client.secrets.get_secrets(
 )
 ```
 
-#### Update Secret
-
-```python
-# Update secret value
-updated = client.secrets.update("API_KEY", value="new_value_here")
-```
-
 ---
 
 ### Policy & Authorization
