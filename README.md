@@ -686,9 +686,11 @@ bucket = client.storage.create_bucket(
     name="User Uploads",
     slug="user-uploads",
     visibility="private",
-    file_size_limit=10485760,  # 10MB
+    file_size_limit=10485760,  # 10MB per file
     allowed_mime_types=["image/jpeg", "image/png"],
-    app_category="assets"
+    app_category="assets",
+    max_size_bytes=1073741824,  # 1GB total bucket size limit (quota)
+    max_objects=1000  # Max 1000 files (quota)
 )
 
 # Get bucket details
@@ -699,7 +701,9 @@ client.storage.update_bucket(
     slug="images",
     name="Public Images",
     visibility="public",
-    file_size_limit=20971520  # 20MB
+    file_size_limit=20971520,  # 20MB per file
+    max_size_bytes=5368709120,  # 5GB total bucket size limit (quota)
+    max_objects=5000  # Max 5000 files (quota)
 )
 
 # Delete bucket

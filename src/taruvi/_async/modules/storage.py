@@ -392,6 +392,8 @@ class AsyncStorageModule(BaseModule):
         file_size_limit: Optional[int] = None,
         allowed_mime_types: Optional[list[str]] = None,
         app_category: Optional[str] = None,
+        max_size_bytes: Optional[int] = None,
+        max_objects: Optional[int] = None,
         app_slug: Optional[str] = None
     ) -> Bucket:
         """
@@ -404,6 +406,8 @@ class AsyncStorageModule(BaseModule):
             file_size_limit: Max file size in bytes
             allowed_mime_types: List of allowed MIME types (e.g., ["image/*", "video/*"])
             app_category: "assets" or "attachments"
+            max_size_bytes: Maximum total storage size for bucket in bytes (quota limit)
+            max_objects: Maximum number of objects allowed in bucket (quota limit)
             app_slug: Override app_slug
 
         Returns:
@@ -418,9 +422,11 @@ class AsyncStorageModule(BaseModule):
                 "User Uploads",
                 slug="user-uploads",
                 visibility="private",
-                file_size_limit=10485760,  # 10MB
+                file_size_limit=10485760,  # 10MB per file
                 allowed_mime_types=["image/jpeg", "image/png"],
-                app_category="assets"
+                app_category="assets",
+                max_size_bytes=1073741824,  # 1GB total bucket size limit
+                max_objects=1000  # Max 1000 files
             )
         """
         app_slug = app_slug or self._config.app_slug
@@ -440,6 +446,10 @@ class AsyncStorageModule(BaseModule):
             body["allowed_mime_types"] = allowed_mime_types
         if app_category:
             body["app_category"] = app_category
+        if max_size_bytes is not None:
+            body["max_size_bytes"] = max_size_bytes
+        if max_objects is not None:
+            body["max_objects"] = max_objects
 
         response = await self._http.post(path, json=body)
         return self._extract_data(response)
@@ -480,6 +490,8 @@ class AsyncStorageModule(BaseModule):
         file_size_limit: Optional[int] = None,
         allowed_mime_types: Optional[list[str]] = None,
         app_category: Optional[str] = None,
+        max_size_bytes: Optional[int] = None,
+        max_objects: Optional[int] = None,
         app_slug: Optional[str] = None
     ) -> Bucket:
         """
@@ -492,6 +504,8 @@ class AsyncStorageModule(BaseModule):
             file_size_limit: New max file size in bytes
             allowed_mime_types: New list of allowed MIME types
             app_category: "assets" or "attachments"
+            max_size_bytes: Maximum total storage size for bucket in bytes (quota limit)
+            max_objects: Maximum number of objects allowed in bucket (quota limit)
             app_slug: Override app_slug
 
         Returns:
@@ -501,7 +515,9 @@ class AsyncStorageModule(BaseModule):
             bucket = await storage.update_bucket(
                 "my-bucket",
                 visibility="public",
-                file_size_limit=104857600  # 100MB
+                file_size_limit=104857600,  # 100MB per file
+                max_size_bytes=10737418240,  # 10GB total bucket size
+                max_objects=5000  # Max 5000 files
             )
         """
         app_slug = app_slug or self._config.app_slug
@@ -521,6 +537,10 @@ class AsyncStorageModule(BaseModule):
             body["allowed_mime_types"] = allowed_mime_types
         if app_category is not None:
             body["app_category"] = app_category
+        if max_size_bytes is not None:
+            body["max_size_bytes"] = max_size_bytes
+        if max_objects is not None:
+            body["max_objects"] = max_objects
 
         response = await self._http.patch(path, json=body)
         return self._extract_data(response)
