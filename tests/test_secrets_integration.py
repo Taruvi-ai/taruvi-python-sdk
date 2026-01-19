@@ -268,20 +268,23 @@ async def test_batch_get_secrets_real_api(async_secrets_module, generate_unique_
             )
             secret_keys.append(secret_key)
 
-        # Batch get (if supported)
-        if hasattr(async_secrets_module, 'get_many') or hasattr(async_secrets_module, 'batch_get'):
-            batch_method = getattr(async_secrets_module, 'get_many', None) or \
-                          getattr(async_secrets_module, 'batch_get')
-
-            result = await batch_method(secret_keys)
+        # Batch get using get_secrets method
+        if hasattr(async_secrets_module, 'get_secrets'):
+            result = await async_secrets_module.get_secrets(secret_keys)
 
             # Verify we got all secrets
             assert result is not None
             assert len(result) == len(secret_keys)
 
-            # Verify values
-            for i, secret_data in enumerate(result):
-                assert secret_data.get("value") == f"batch_value_{i}"
+            # Verify values - result is a dict mapping keys to secret objects
+            for i, secret_key in enumerate(secret_keys):
+                assert secret_key in result
+                secret_data = result[secret_key]
+                # Handle both dict response (with metadata) and string response (value only)
+                if isinstance(secret_data, dict):
+                    assert secret_data.get("value") == f"batch_value_{i}"
+                else:
+                    assert secret_data == f"batch_value_{i}"
         else:
             pytest.skip("Batch get not supported by SDK")
 

@@ -798,10 +798,10 @@ secret = client.secrets.get_secret(
 )
 ```
 
-#### Batch Get Secrets (Concurrent)
+#### Batch Get Secrets (Efficient Single Request)
 
 ```python
-# Get multiple secrets at once
+# Get multiple secrets at once - single efficient GET request
 keys = ["API_KEY", "DATABASE_URL", "STRIPE_KEY"]
 secrets = client.secrets.get_secrets(keys)
 

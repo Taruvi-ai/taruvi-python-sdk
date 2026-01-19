@@ -241,7 +241,7 @@ def show_api_comparison():
     print("    tags=['production', 'critical']")
     print(")")
     print("")
-    print("# Batch get with concurrent requests")
+    print("# Batch get with single efficient GET request")
     print("secrets = await client.secrets.get_secrets(")
     print("    ['API_KEY', 'DB_PASSWORD', 'STRIPE_KEY'],")
     print("    app='production'")

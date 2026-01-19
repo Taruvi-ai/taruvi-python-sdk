@@ -4,7 +4,7 @@ Secrets API Module
 Provides methods for:
 - Listing secrets with filters (search, app, tags, type, pagination)
 - Getting specific secret values with 2-tier inheritance
-- Batch getting multiple secrets concurrently
+- Batch getting multiple secrets efficiently (single request)
 - Updating secret values
 """
 
@@ -194,14 +194,13 @@ class AsyncSecretsModule(BaseModule):
             api_key_tags = secrets_meta["API_KEY"]["tags"]
             ```
         """
-        # Build request payload
-        payload = {
-            "keys": keys,
-            "include_metadata": include_metadata
-        }
-        if app:
-            payload["app"] = app
+        # Build query parameters for GET request
+        params = build_params(
+            keys=",".join(keys),  # Convert list to comma-separated string
+            app=app,
+            include_metadata=include_metadata
+        )
 
-        # Make single batch API call
-        response = await self._http.post("/api/secrets/batch/", json=payload)
+        # Make single batch API call using GET with query params
+        response = await self._http.get("/api/secrets/", params=params)
         return self._extract_data(response)

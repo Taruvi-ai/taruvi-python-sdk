@@ -50,6 +50,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internal implementation improved for better performance
 - Users will experience performance improvements automatically
 
+## [1.3.0] - 2026-01-19
+
+### Changed
+- Updated `get_secrets()` method to use `GET /api/secrets/?keys=...` instead of `POST /api/secrets/batch/`
+- Improved RESTful compliance - batch retrieval now uses GET request with query parameters
+- More cacheable and follows HTTP semantic conventions
+
+### Migration Guide
+**No code changes required** - the method signature remains identical. Existing code continues to work:
+
+```python
+# Your existing code works unchanged
+secrets = client.secrets.get_secrets(["key1", "key2", "key3"])
+```
+
+**Technical Details:**
+- Changed HTTP method from POST to GET
+- Changed endpoint from `/api/secrets/batch/` to `/api/secrets/`
+- Changed payload format from JSON body to query parameters
+- Keys are now passed as comma-separated string: `keys=key1,key2,key3`
+
+**Notes:**
+- Backend API maintains backward compatibility during deprecation period
+- Older SDK versions will stop working after backend removes POST endpoint
+- Recommended to upgrade to v1.3.0+ before backend deprecation ends
+
 ## [0.1.0] - 2025-12-26
 
 ### Added
@@ -73,5 +99,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - RestrictedPython sandbox support
 - Thread-local storage for client isolation
 
-[Unreleased]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.0...v1.3.0
 [0.1.0]: https://github.com/taruvi-ai/taruvi-python-sdk/releases/tag/v0.1.0
