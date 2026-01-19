@@ -84,7 +84,7 @@ class TaruviConfig(BaseSettings):
     # Legacy/Optional Configuration
     site_slug: Optional[str] = Field(
         default=None,
-        description="Site slug for multi-tenant routing (optional)",
+        description="Site slug (legacy field, not used - include site in api_url path instead)",
     )
 
     # Configuration
@@ -194,10 +194,6 @@ class TaruviConfig(BaseSettings):
             headers["X-Session-Token"] = self.session_token
 
         # 4. No auth → Django session cookies (httpx automatic)
-
-        # Add site slug for multi-tenant routing (if provided)
-        if self.site_slug:
-            headers["Host"] = f"{self.site_slug}.localhost"
 
         # Add execution context headers (for tracing)
         if self.execution_id:

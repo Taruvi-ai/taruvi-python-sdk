@@ -1024,9 +1024,6 @@ client = Client(
     # Optional: Configuration
     timeout=30,       # Request timeout (seconds, 1-300, default: 30)
     max_retries=3,    # Max retry attempts (0-10, default: 3)
-
-    # Optional: Multi-tenant routing
-    site_slug="my-site",  # Site slug for multi-tenant routing
 )
 
 # Authentication is done separately via AuthManager
@@ -1037,12 +1034,11 @@ auth_client = client.auth.signInWithPassword(username="...", password="...")
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `api_url` | `str` | **Required** | Taruvi API base URL |
+| `api_url` | `str` | **Required** | Taruvi API base URL (include full path with `/sites/{site_slug}/` for multi-tenant) |
 | `app_slug` | `str` | **Required** | Application slug |
 | `mode` | `str` | `'sync'` | Client mode: `'sync'` or `'async'` |
 | `timeout` | `int` | `30` | Request timeout in seconds (1-300) |
 | `max_retries` | `int` | `3` | Maximum retry attempts (0-10) |
-| `site_slug` | `str` | `None` | Site slug for multi-tenant routing |
 
 **Note**: Authentication parameters are no longer passed to `Client()`. Use `AuthManager` methods instead.
 
@@ -1265,18 +1261,17 @@ print(context['execution_id'])
 
 ### Multi-Tenant Routing
 
-For multi-tenant setups, specify the site:
+For multi-tenant setups, include the site in the API URL:
 
 ```python
 client = Client(
-    api_url="https://api.taruvi.cloud",
-    app_slug="my-app",
-    site_slug="tenant-a"  # Routes to tenant-a's schema
+    api_url="https://api.taruvi.cloud/sites/tenant-a",  # Include site in URL path
+    app_slug="my-app"
 )
 auth_client = client.auth.signInWithToken(token="jwt_here", token_type="jwt")
 ```
 
-Sends header: `Host: tenant-a.localhost`
+The API URL should include the full path with `/sites/{site_slug}/` for path-based routing.
 
 ### Working with Raw Responses
 
