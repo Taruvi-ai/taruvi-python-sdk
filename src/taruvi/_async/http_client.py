@@ -128,13 +128,6 @@ class AsyncHTTPClient(BaseHTTPClient):
                 wait_time = 2**attempt
                 await asyncio.sleep(wait_time)
 
-            except Exception as e:
-                # Don't retry on unexpected errors
-                raise NetworkError(
-                    f"Unexpected network error: {str(e)}",
-                    details={"path": path, "method": method},
-                ) from e
-
         # Should never reach here, but satisfy type checker
         raise NetworkError("Max retries exceeded")
 
