@@ -93,7 +93,7 @@ class AsyncFunctionsModule(BaseModule):
         body = _build_execute_request(params, is_async)
 
         response = await self._http.post(path, json=body, headers={})
-        return response
+        return self._extract_data(response)
 
     async def get_result(
         self,
@@ -133,7 +133,7 @@ class AsyncFunctionsModule(BaseModule):
         """
         path = _FUNCTION_RESULT.format(task_id=task_id)
         response = await self._http.get(path)
-        return response
+        return self._extract_data(response)
 
     async def list(
         self,
@@ -166,7 +166,7 @@ class AsyncFunctionsModule(BaseModule):
 
         path = _FUNCTION_DETAIL.format(app_slug=app_slug, function_slug=function_slug)
         response = await self._http.get(path)
-        return response
+        return self._extract_data(response)
 
     async def get_invocation(
         self,
@@ -181,7 +181,7 @@ class AsyncFunctionsModule(BaseModule):
 
         path = _INVOCATION_DETAIL.format(app_slug=app_slug, invocation_id=invocation_id)
         response = await self._http.get(path)
-        return response
+        return self._extract_data(response)
 
     async def list_invocations(
         self,

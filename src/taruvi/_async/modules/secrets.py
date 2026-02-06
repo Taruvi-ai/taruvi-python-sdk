@@ -55,20 +55,28 @@ class AsyncSecretsModule(BaseModule):
             page_size: Items per page (max 100)
 
         Returns:
-            Paginated secret results with count, next, previous, results
+            Full API response with status, message, data, and total:
+            {
+                "status": "success",
+                "message": "Secrets retrieved successfully",
+                "data": [...],
+                "total": 50
+            }
 
         Example:
             ```python
             # List all secrets
-            all_secrets = await client.secrets.list_secrets()
+            result = await client.secrets.list_secrets()
+            secrets = result["data"]
+            total = result["total"]
 
             # List with filters
-            api_secrets = await client.secrets.list_secrets(
+            result = await client.secrets.list_secrets(
                 secret_type="api_key",
                 tags=["production"],
                 page_size=50
             )
-            for secret in api_secrets["results"]:
+            for secret in result["data"]:
                 print(f"{secret['key']}: {secret['value'][:4]}...")
             ```
         """
@@ -81,7 +89,7 @@ class AsyncSecretsModule(BaseModule):
             page_size=page_size,
         )
         response = await self._http.get(_SECRETS_BASE, params=params)
-        return self._extract_data(response)
+        return response
 
     async def get_secret(
         self,

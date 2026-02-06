@@ -41,4 +41,4 @@ class AsyncSettingsModule(BaseModule):
             ```
         """
         response = await self._http.get(_SETTINGS_METADATA)
-        return response
+        return self._extract_data(response)
