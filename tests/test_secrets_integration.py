@@ -153,15 +153,14 @@ async def test_list_secrets_real_api(async_secrets_module, generate_unique_id):
             secret_keys.append(secret_key)
 
         # List secrets
-        result = await async_secrets_module.list()
+        result = await async_secrets_module.list_secrets()
 
-        # Verify structure
+        # Verify structure (list_secrets returns full response with data/total)
         assert result is not None
-        assert "secrets" in result or "results" in result or "data" in result, \
-            "Response missing secrets/results list - API contract changed!"
+        assert "data" in result, "Response missing 'data' field - API contract changed!"
 
         # Get the list of secrets
-        secrets_list = result.get("secrets") or result.get("results") or result.get("data", [])
+        secrets_list = result["data"]
 
         # Verify we have secrets
         assert len(secrets_list) > 0

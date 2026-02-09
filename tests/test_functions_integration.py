@@ -38,6 +38,7 @@ async def test_execute_async_sync_mode_real_api(async_functions_module, test_fun
     )
 
     # Verify actual response structure from backend
+    # SDK now returns extracted data directly (not wrapped in {"data": ...})
     assert result is not None
     assert "data" in result, "Response missing 'data' field - API contract changed!"
     assert "invocation" in result, "Response missing 'invocation' field - API contract changed!"
@@ -69,7 +70,7 @@ async def test_execute_async_async_mode_real_api(async_functions_module, test_fu
         is_async=True
     )
 
-    # Verify response structure
+    # Verify response structure (SDK returns extracted data)
     assert result is not None
     assert "invocation" in result
 
@@ -108,17 +109,14 @@ async def test_get_result_async_real_api(async_functions_module, test_function_n
     # Note: This might be PENDING if function is still running
     result = await async_functions_module.get_result(task_id)
 
-    # Verify actual result structure from backend
+    # Verify actual result structure from backend (SDK returns extracted data)
     assert result is not None
-    assert "data" in result
-
-    task_data = result["data"]
-    assert "task_id" in task_data
-    assert task_data["task_id"] == task_id
-    assert "status" in task_data
+    assert "task_id" in result
+    assert result["task_id"] == task_id
+    assert "status" in result
 
     # Status could be PENDING, SUCCESS, or FAILURE depending on timing
-    assert task_data["status"] in ["PENDING", "SUCCESS", "FAILURE", "STARTED", "RETRY"]
+    assert result["status"] in ["PENDING", "SUCCESS", "FAILURE", "STARTED", "RETRY"]
 
 
 # ============================================================================
@@ -135,24 +133,21 @@ async def test_list_async_real_api(async_functions_module):
     """
     result = await async_functions_module.list(limit=10, offset=0)
 
-    # Verify response structure
+    # Verify response structure (SDK returns extracted data)
     assert result is not None
-    assert "data" in result
-
-    data = result["data"]
 
     # Handle both response formats:
-    # Format 1: {"data": {"count": X, "results": [...]}}
-    # Format 2: {"data": [...]} (direct list)
-    if isinstance(data, list):
+    # Format 1: {"count": X, "results": [...]}
+    # Format 2: [...] (direct list)
+    if isinstance(result, list):
         # Direct list format
-        functions_list = data
-    elif "results" in data:
+        functions_list = result
+    elif "results" in result:
         # Paginated format
-        functions_list = data["results"]
+        functions_list = result["results"]
     else:
         # Unknown format
-        assert False, f"Unexpected response structure: {data}"
+        assert False, f"Unexpected response structure: {result}"
 
     # If there are functions, verify their structure
     if len(functions_list) > 0:
@@ -175,22 +170,13 @@ async def test_get_async_real_api(async_functions_module, test_function_name):
     """
     result = await async_functions_module.get(test_function_name)
 
-    # Verify response structure
+    # Verify response structure (SDK returns extracted data directly)
     assert result is not None
-
-    # Handle both formats:
-    # Format 1: {"data": {...}}
-    # Format 2: {...} (direct)
-    if "data" in result:
-        function_data = result["data"]
-    else:
-        function_data = result
-
-    assert "id" in function_data or "slug" in function_data
+    assert "id" in result or "slug" in result
 
     # Verify function name matches
-    if "slug" in function_data:
-        assert function_data["slug"] == test_function_name
+    if "slug" in result:
+        assert result["slug"] == test_function_name
 
 
 # ============================================================================
@@ -211,7 +197,7 @@ def test_execute_sync_sync_mode_real_api(sync_functions_module, test_function_na
         is_async=False
     )
 
-    # Verify actual response structure
+    # Verify actual response structure (SDK returns extracted data)
     assert result is not None
     assert "data" in result
     assert "invocation" in result
@@ -239,10 +225,9 @@ def test_get_result_sync_real_api(sync_functions_module, test_function_name):
     # Step 2: Get result
     result = sync_functions_module.get_result(task_id)
 
-    # Verify structure
+    # Verify structure (SDK returns extracted data)
     assert result is not None
-    assert "data" in result
-    assert result["data"]["task_id"] == task_id
+    assert result["task_id"] == task_id
 
 
 # ============================================================================
@@ -307,8 +292,8 @@ BEFORE (mocked):
 
 AFTER (integration):
     result = await module.execute("func")  # Real API call
-    assert "data" in result  # Structure check
-    assert result["data"] is not None  # Behavior check
+    assert "invocation" in result  # Structure check
+    assert result is not None  # Behavior check
 
 Benefits:
 - No mock maintenance when API changes

@@ -39,10 +39,9 @@ async def test_execute_analytics_query_async(async_analytics_module):
             params={}
         )
 
-        # Verify response structure
+        # Verify response structure (SDK returns extracted data)
         assert result is not None
-        assert isinstance(result, dict), "Response should be a dictionary"
-        assert "data" in result, "Response should contain 'data' key"
+        assert isinstance(result, (dict, list)), "Response should be a dictionary or list"
 
     except Exception as e:
         error_msg = str(e).lower()
@@ -71,10 +70,9 @@ async def test_execute_with_params_async(async_analytics_module):
             }
         )
 
-        # Verify response structure
+        # Verify response structure (SDK returns extracted data)
         assert result is not None
-        assert isinstance(result, dict)
-        assert "data" in result
+        assert isinstance(result, (dict, list))
 
     except Exception as e:
         error_msg = str(e).lower()
@@ -106,8 +104,7 @@ async def test_execute_with_grouping_async(async_analytics_module):
 
         # Verify response structure
         assert result is not None
-        assert isinstance(result, dict)
-        assert "data" in result
+        assert isinstance(result, (dict, list))
 
     except Exception as e:
         error_msg = str(e).lower()
@@ -138,8 +135,7 @@ async def test_execute_with_filters_async(async_analytics_module):
 
         # Verify response structure
         assert result is not None
-        assert isinstance(result, dict)
-        assert "data" in result
+        assert isinstance(result, (dict, list))
 
     except Exception as e:
         error_msg = str(e).lower()
@@ -171,7 +167,6 @@ def test_execute_analytics_query_sync(sync_analytics_module):
         # Verify response structure
         assert result is not None
         assert isinstance(result, dict), "Response should be a dictionary"
-        assert "data" in result, "Response should contain 'data' key"
 
     except Exception as e:
         error_msg = str(e).lower()
@@ -201,8 +196,7 @@ def test_execute_with_params_sync(sync_analytics_module):
 
         # Verify response structure
         assert result is not None
-        assert isinstance(result, dict)
-        assert "data" in result
+        assert isinstance(result, (dict, list))
 
     except Exception as e:
         error_msg = str(e).lower()
@@ -233,8 +227,7 @@ def test_execute_with_grouping_sync(sync_analytics_module):
 
         # Verify response structure
         assert result is not None
-        assert isinstance(result, dict)
-        assert "data" in result
+        assert isinstance(result, (dict, list))
 
     except Exception as e:
         error_msg = str(e).lower()
@@ -264,8 +257,7 @@ def test_execute_with_filters_sync(sync_analytics_module):
 
         # Verify response structure
         assert result is not None
-        assert isinstance(result, dict)
-        assert "data" in result
+        assert isinstance(result, (dict, list))
 
     except Exception as e:
         error_msg = str(e).lower()
