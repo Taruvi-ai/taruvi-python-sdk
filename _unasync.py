@@ -109,6 +109,14 @@ def main():
         content = content.replace("Initialize AsyncSettingsModule", "Initialize SettingsModule")
         content = content.replace("Initialize AsyncAuthModule", "Initialize AuthModule")
 
+        # Fix class references in docstrings (for chaining methods)
+        content = content.replace("AsyncQueryBuilder for chaining", "QueryBuilder for chaining")
+        content = content.replace("AsyncStorageQueryBuilder for chaining", "StorageQueryBuilder for chaining")
+        content = content.replace("Returns AsyncQueryBuilder", "Returns QueryBuilder")
+        content = content.replace("Returns AsyncStorageQueryBuilder", "Returns StorageQueryBuilder")
+        content = content.replace("returns AsyncQueryBuilder", "returns QueryBuilder")
+        content = content.replace("returns AsyncStorageQueryBuilder", "returns StorageQueryBuilder")
+
         # Fix section comments
         content = content.replace("# Async Implementation", "# Sync Implementation")
 
