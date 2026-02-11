@@ -75,6 +75,9 @@ The Taruvi Python SDK provides a clean, pythonic interface to all platform capab
 - Pagination with `page_size()` and `page()`
 - Foreign key population with `populate()`
 - Filtering with operators: eq, gt, lt, gte, lte, ne, contains, etc.
+- **Edge management**: Create, list, and delete relationships
+- **Graph queries**: Tree/graph formats with traversal (descendants, ancestors)
+- **Relationship filtering**: Multi-type relationship support
 
 ⚡ **High-Performance Sync Client**
 - Native `httpx.Client` (blocking) - NOT asyncio wrapper
@@ -579,6 +582,97 @@ user_count = (
 )
 print(f"Active users: {user_count}")
 ```
+
+#### Edge Management (Relationships)
+
+```python
+# List edges (relationships) with filters
+edges = client.database.list_edges(
+    "employees",
+    from_id=[1, 2],  # Filter by source nodes
+    types=["manager", "dotted_line"],  # Filter by relationship types
+    limit=10
+)
+print(f"Found {edges['total']} relationships")
+
+# Create edges (bulk)
+result = client.database.create_edges("employees", [
+    {
+        "from_id": 1,  # CEO
+        "to_id": 2,    # VP Engineering
+        "type": "manager",
+        "metadata": {"primary": True, "effective_date": "2024-01-01"}
+    },
+    {
+        "from_id": 2,  # VP Engineering
+        "to_id": 10,   # Senior Engineer
+        "type": "manager"
+    },
+    {
+        "from_id": 5,  # Project Manager
+        "to_id": 10,   # Senior Engineer
+        "type": "dotted_line",
+        "metadata": {"project": "AI Initiative"}
+    }
+])
+print(f"Created {result['total']} edges")
+
+# Delete edges (bulk)
+result = client.database.delete_edges("employees", edge_ids=[1, 2, 3])
+print(f"Deleted {result['deleted']} edges")
+```
+
+#### Graph & Tree Queries
+
+```python
+# Get data in tree format (hierarchical)
+tree = (
+    client.database.query("categories")
+    .filter("id", "eq", 1)
+    .format("tree")
+    .include("descendants")
+    .depth(3)
+    .get()
+)
+
+# Get org chart (manager relationships only)
+org_chart = (
+    client.database.query("employees")
+    .filter("id", "eq", 1)  # CEO
+    .format("tree")
+    .include("descendants")
+    .depth(5)
+    .relationship_types(["manager"])
+    .get()
+)
+
+# Get reporting chain (ancestors)
+chain = (
+    client.database.query("employees")
+    .filter("id", "eq", 10)  # Employee
+    .format("flat")
+    .include("ancestors")
+    .relationship_types(["manager"])
+    .get()
+)
+
+# Multi-type graph (manager + dotted line)
+graph = (
+    client.database.query("employees")
+    .filter("id", "eq", 1)
+    .format("graph")
+    .include("descendants")
+    .depth(3)
+    .relationship_types(["manager", "dotted_line"])
+    .get()
+)
+```
+
+**Graph Query Options:**
+- `.format()` - Response format: `"flat"` (default), `"tree"`, or `"graph"`
+- `.include()` - Traversal direction: `"descendants"`, `"ancestors"`, or `"both"`
+- `.depth()` - Maximum traversal depth (e.g., `3` for 3 levels)
+- `.relationship_types()` - Filter by relationship types (e.g., `["manager", "dotted_line"]`)
 
 ---
 
