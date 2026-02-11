@@ -141,7 +141,7 @@ def _build_assign_roles_request(
     if expires_at is not None:
         body["expires_at"] = expires_at
 
-    return "/api/assign/roles", body
+    return "/api/assign/roles/", body
 
 
 def _build_revoke_roles_request(
@@ -154,7 +154,7 @@ def _build_revoke_roles_request(
         "usernames": usernames
     }
 
-    return "/api/revoke/roles", body
+    return "/api/revoke/roles/", body
 
 
 # ============================================================================
