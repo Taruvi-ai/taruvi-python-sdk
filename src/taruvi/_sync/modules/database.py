@@ -270,8 +270,8 @@ class DatabaseModule(BaseModule):
         from_id: Optional[list[int]] = None,
         to_id: Optional[list[int]] = None,
         types: Optional[list[str]] = None,
-        limit: int = 100,
-        offset: int = 0,
+        page: int = 1,
+        page_size: int = 100,
         app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
         """
@@ -282,8 +282,8 @@ class DatabaseModule(BaseModule):
             from_id: Filter by source node ID(s)
             to_id: Filter by target node ID(s)
             types: Filter by relationship types
-            limit: Maximum number of edges to return
-            offset: Offset for pagination
+            page: Page number (1-indexed, default: 1)
+            page_size: Number of edges per page (default: 100)
             app_slug: Optional app slug override
 
         Returns:
@@ -305,7 +305,8 @@ class DatabaseModule(BaseModule):
                 'employees',
                 from_id=[1, 2],
                 types=['manager', 'dotted_line'],
-                limit=10
+                page=1,
+                page_size=10
             )
             edges = result['data']
             total = result['total']
@@ -323,10 +324,10 @@ class DatabaseModule(BaseModule):
         if types:
             for t in types:
                 params.setdefault("types", []).append(t)
-        if limit is not None:
-            params["limit"] = limit
-        if offset is not None:
-            params["offset"] = offset
+        if page is not None:
+            params["page"] = page
+        if page_size is not None:
+            params["page_size"] = page_size
 
         response = self._http.get(path, params=params)
         return response

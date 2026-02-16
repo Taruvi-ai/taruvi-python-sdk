@@ -616,7 +616,8 @@ edges = client.database.list_edges(
     "employees",
     from_id=[1, 2],  # Filter by source nodes
     types=["manager", "dotted_line"],  # Filter by relationship types
-    limit=10
+    page=1,          # Page number (1-indexed)
+    page_size=10     # Records per page
 )
 print(f"Found {edges['total']} relationships")
 
@@ -642,10 +643,18 @@ result = client.database.create_edges("employees", [
 ])
 print(f"Created {result['total']} edges")
 
+# Update edge
+result = client.database.update_edge("employees", 10, {
+    "metadata": {"effective_end_date": "2026-01-29"}
+})
+print(f"Updated edge {result['data']['id']}")
+
 # Delete edges (bulk)
 result = client.database.delete_edges("employees", edge_ids=[1, 2, 3])
 print(f"Deleted {result['deleted']} edges")
 ```
+
+**Note:** Backend supports `page`/`page_size` pagination (not `limit`/`offset`).
 
 #### Graph & Tree Queries
 
