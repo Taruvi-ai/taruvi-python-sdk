@@ -185,7 +185,7 @@ def Client(
     app_slug: str,
     *,
     mode: Optional[str] = None,
-    timeout: int = 30,
+    timeout: int = 120,
     max_retries: int = 3,
     **kwargs: Any
 ):
@@ -198,7 +198,7 @@ def Client(
 
     Optional Parameters:
         mode: Client mode - 'sync' (default) or 'async' (auto-detected if not specified)
-        timeout: Request timeout in seconds (default: 30)
+        timeout: Request timeout in seconds (default: 120)
         max_retries: Maximum retry attempts (default: 3)
 
     Returns:
