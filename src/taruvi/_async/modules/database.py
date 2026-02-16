@@ -287,22 +287,28 @@ class AsyncDatabaseModule(BaseModule):
             app_slug: Optional app slug override
 
         Returns:
-            Dict with 'edges' list and 'total' count:
+            Dict with 'data' list, 'total' count, and 'pagination':
             {
-                "edges": [
-                    {"id": 1, "from_id": 5, "to_id": 10, "type": "manager", "metadata": {...}},
+                "data": [
+                    {"id": 1, "from": 5, "to": 10, "type": "manager", "metadata": {...}},
                     ...
                 ],
-                "total": 42
+                "total": 42,
+                "pagination": {...}
             }
 
+        Note:
+            Response uses 'from' and 'to' field names (not 'from_id'/'to_id')
+
         Example:
-            edges = await db.list_edges(
+            result = await db.list_edges(
                 'employees',
                 from_id=[1, 2],
                 types=['manager', 'dotted_line'],
                 limit=10
             )
+            edges = result['data']
+            total = result['total']
         """
         app_slug = self._ensure_app_slug(app_slug)
         path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/"
@@ -406,6 +412,73 @@ class AsyncDatabaseModule(BaseModule):
 
         payload = {"edge_ids": edge_ids}
         response = await self._http.delete(path, json=payload)
+        return response
+
+    async def update_edge(
+        self,
+        table_name: str,
+        edge_id: int,
+        data: dict[str, Any],
+        *,
+        app_slug: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """
+        Update a single edge (relationship) by ID.
+
+        Args:
+            table_name: Name of the table
+            edge_id: Edge ID to update
+            data: Update data with 'from_id'/'from', 'to_id'/'to', 'type', and/or 'metadata'
+            app_slug: Optional app slug override
+
+        Returns:
+            Dict with updated edge:
+            {
+                "data": {
+                    "id": 10,
+                    "from": 1,
+                    "to": 2,
+                    "type": "manager",
+                    "metadata": {...}
+                }
+            }
+
+        Note:
+            - SDK accepts both 'from_id'/'to_id' and 'from'/'to' in input
+            - Backend API uses 'from'/'to' in requests/responses
+            - SDK automatically transforms 'from_id'/'to_id' to 'from'/'to'
+
+        Example:
+            result = await db.update_edge('employees', 10, {
+                'from_id': 1,
+                'to_id': 2,
+                'type': 'manager',
+                'metadata': {'effective_end_date': '2026-01-29'}
+            })
+            updated_edge = result['data']
+        """
+        app_slug = self._ensure_app_slug(app_slug)
+        path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/{edge_id}/"
+
+        # Transform from_id/to_id to from/to for backend API
+        formatted_data = {}
+        if "from_id" in data:
+            formatted_data["from"] = data["from_id"]
+        elif "from" in data:
+            formatted_data["from"] = data["from"]
+        
+        if "to_id" in data:
+            formatted_data["to"] = data["to_id"]
+        elif "to" in data:
+            formatted_data["to"] = data["to"]
+        
+        if "type" in data:
+            formatted_data["type"] = data["type"]
+        
+        if "metadata" in data:
+            formatted_data["metadata"] = data["metadata"]
+
+        response = await self._http.patch(path, json=formatted_data)
         return response
 
     async def get(
