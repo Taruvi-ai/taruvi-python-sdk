@@ -48,6 +48,10 @@ class _BaseStorageQueryBuilder:
         self.app_slug = app_slug
         self._filters: dict[str, Any] = {}
 
+    def _extract_data(self, response: dict[str, Any]) -> Any:
+        """Extract 'data' field from API response."""
+        return response.get("data", {})
+
     def _add_filters(
         self,
         page: Optional[int],
