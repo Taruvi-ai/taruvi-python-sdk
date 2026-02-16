@@ -224,7 +224,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         self._set_relationship_types(types)
         return self
 
-    async def get(self) -> list[dict[str, Any]]:
+    async def execute(self) -> list[dict[str, Any]]:
         """Execute query and get results."""
         path = _DATATABLE_DATA.format(
             app_slug=self.app_slug,
@@ -236,7 +236,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
 
     async def first(self) -> Optional[dict[str, Any]]:
         """Get first result."""
-        results = await self.page_size(1).get()
+        results = await self.page_size(1).execute()
         return results[0] if results else None
 
     async def count(self) -> int:
@@ -259,7 +259,7 @@ class AsyncDatabaseModule(BaseModule):
         self.client = client
         super().__init__(client._http_client, client._config)
 
-    def query(self, table_name: str, app_slug: Optional[str] = None) -> AsyncQueryBuilder:
+    def from_(self, table_name: str, app_slug: Optional[str] = None) -> AsyncQueryBuilder:
         """Create a query builder for a table."""
         return AsyncQueryBuilder(self.client, table_name, app_slug)
 

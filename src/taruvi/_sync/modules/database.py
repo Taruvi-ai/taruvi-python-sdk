@@ -224,7 +224,7 @@ class QueryBuilder(_BaseQueryBuilder):
         self._set_relationship_types(types)
         return self
 
-    def get(self) -> list[dict[str, Any]]:
+    def execute(self) -> list[dict[str, Any]]:
         """Execute query and get results."""
         path = _DATATABLE_DATA.format(
             app_slug=self.app_slug,
@@ -236,7 +236,7 @@ class QueryBuilder(_BaseQueryBuilder):
 
     def first(self) -> Optional[dict[str, Any]]:
         """Get first result."""
-        results = self.page_size(1).get()
+        results = self.page_size(1).execute()
         return results[0] if results else None
 
     def count(self) -> int:
@@ -259,7 +259,7 @@ class DatabaseModule(BaseModule):
         self.client = client
         super().__init__(client._http_client, client._config)
 
-    def query(self, table_name: str, app_slug: Optional[str] = None) -> QueryBuilder:
+    def from_(self, table_name: str, app_slug: Optional[str] = None) -> QueryBuilder:
         """Create a query builder for a table."""
         return QueryBuilder(self.client, table_name, app_slug)
 

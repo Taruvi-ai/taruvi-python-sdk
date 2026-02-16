@@ -71,7 +71,7 @@ The Taruvi Python SDK provides a clean, pythonic interface to all platform capab
 - Runtime authentication switching
 
 🗃️ **Database Query Builder**
-- Fluent API: `client.database.query("users").filter(...).sort(...).get()`
+- Fluent API: `client.database.from_("users").filter(...).sort(...).execute()`
 - Pagination with `page_size()` and `page()`
 - Foreign key population with `populate()`
 - Filtering with operators: eq, gt, lt, gte, lte, ne, contains, etc.
@@ -156,7 +156,7 @@ result = auth_client.functions.execute("process-order", params={"order_id": 123}
 print(result["data"])
 
 # Query database
-users = auth_client.database.query("users").page_size(10).get()
+users = auth_client.database.from_("users").page_size(10).execute()
 print(f"Found {len(users)} users")
 ```
 
@@ -185,7 +185,7 @@ async def main():
     print(result["data"])
 
     # Query database
-    users = await auth_client.database.query("users").page_size(10).get()
+    users = await auth_client.database.from_("users").page_size(10).execute()
     print(f"Found {len(users)} users")
 
     await auth_client.close()
@@ -210,7 +210,7 @@ def main(params, user_data):
     result = client.functions.execute("helper", {"test": True})
 
     # Query database
-    users = client.database.query("users").page_size(10).get()
+    users = client.database.from_("users").page_size(10).execute()
 
     return {"result": result, "user_count": len(users)}
 ```
@@ -493,31 +493,31 @@ print(f"Result: {invocation['result']}")
 
 ```python
 # Simple query
-users = client.database.query("users").get()
+users = client.database.from_("users").execute()
 
 # With filtering
 active_users = (
-    client.database.query("users")
+    client.database.from_("users")
     .filter("is_active", "eq", True)
     .filter("age", "gte", 18)
-    .get()
+    .execute()
 )
 
 # With sorting and pagination
 users_page = (
-    client.database.query("users")
+    client.database.from_("users")
     .filter("email", "contains", "@example.com")
     .sort("created_at", "desc")
     .page_size(20)
     .page(1)
-    .get()
+    .execute()
 )
 
 # Populate foreign keys
 orders = (
-    client.database.query("orders")
+    client.database.from_("orders")
     .populate("customer", "product")  # Load related records
-    .get()
+    .execute()
 )
 ```
 
@@ -597,11 +597,11 @@ client.database.delete("users", filters={"is_active": False})
 
 ```python
 # Get first result
-first_user = client.database.query("users").first()
+first_user = client.database.from_("users").first()
 
 # Get count
 user_count = (
-    client.database.query("users")
+    client.database.from_("users")
     .filter("is_active", "eq", True)
     .count()
 )
@@ -661,44 +661,44 @@ print(f"Deleted {result['deleted']} edges")
 ```python
 # Get data in tree format (hierarchical)
 tree = (
-    client.database.query("categories")
+    client.database.from_("categories")
     .filter("id", "eq", 1)
     .format("tree")
     .include("descendants")
     .depth(3)
-    .get()
+    .execute()
 )
 
 # Get org chart (manager relationships only)
 org_chart = (
-    client.database.query("employees")
+    client.database.from_("employees")
     .filter("id", "eq", 1)  # CEO
     .format("tree")
     .include("descendants")
     .depth(5)
     .relationship_types(["manager"])
-    .get()
+    .execute()
 )
 
 # Get reporting chain (ancestors)
 chain = (
-    client.database.query("employees")
+    client.database.from_("employees")
     .filter("id", "eq", 10)  # Employee
     .format("flat")
     .include("ancestors")
     .relationship_types(["manager"])
-    .get()
+    .execute()
 )
 
 # Multi-type graph (manager + dotted line)
 graph = (
-    client.database.query("employees")
+    client.database.from_("employees")
     .filter("id", "eq", 1)
     .format("graph")
     .include("descendants")
     .depth(3)
     .relationship_types(["manager", "dotted_line"])
-    .get()
+    .execute()
 )
 ```
 
@@ -1072,7 +1072,7 @@ print(roles)  # ["admin", "editor", "viewer"]
 
 ```python
 # Get site metadata/settings
-settings = client.settings.get()
+settings = client.settings.execute()
 print(settings['site_name'])
 print(settings['settings'])
 ```
@@ -1099,7 +1099,7 @@ auth_client = client.auth.signInWithToken(token="jwt_here", token_type="jwt")
 
 # All methods are async
 result = await auth_client.functions.execute("my-func", params={})
-users = await auth_client.database.query("users").get()
+users = await auth_client.database.from_("users").execute()
 ```
 
 ### When to Use Sync
@@ -1121,7 +1121,7 @@ auth_client = client.auth.signInWithToken(token="jwt_here", token_type="jwt")
 
 # All methods are blocking (no await)
 result = auth_client.functions.execute("my-func", params={})
-users = auth_client.database.query("users").get()
+users = auth_client.database.from_("users").execute()
 ```
 
 ### Performance Note
@@ -1419,7 +1419,7 @@ print(result['data'])
 print(result.get('invocation', {}))
 
 # Full IDE autocomplete via type hints
-users: list[dict[str, Any]] = auth_client.database.query("users").get()
+users: list[dict[str, Any]] = auth_client.database.from_("users").execute()
 ```
 
 ---
