@@ -460,6 +460,31 @@ func = client.functions.get("process-order")
 print(func['name'], func['execution_mode'])
 ```
 
+#### List Function Invocations
+
+```python
+# List all invocations
+invocations = client.functions.list_invocations(limit=50, offset=0)
+for inv in invocations['results']:
+    print(f"{inv['function']['name']}: {inv['status']}")
+
+# Filter by function
+invocations = client.functions.list_invocations(
+    function_slug="process-order",
+    status="SUCCESS",
+    limit=20
+)
+```
+
+#### Get Invocation Details
+
+```python
+# Get specific invocation by ID
+invocation = client.functions.get_invocation("inv_123")
+print(f"Status: {invocation['status']}")
+print(f"Result: {invocation['result']}")
+```
+
 ---
 
 ### Database Operations

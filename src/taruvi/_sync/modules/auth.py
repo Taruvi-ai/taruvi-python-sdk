@@ -79,9 +79,9 @@ class AuthModule:
         from taruvi.exceptions import AuthenticationError
 
         try:
-            # Call login API directly
+            # Call allauth headless login API
             response = self._http.post(
-                "/api/v1/auth/login",
+                "/_allauth/app/v1/auth/login",
                 json={"email": email, "password": password}
             )
             # Response structure: {"meta": {"access_token": "..."}}
