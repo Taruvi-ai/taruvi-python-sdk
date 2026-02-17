@@ -438,7 +438,10 @@ class StorageModule(BaseModule):
             raise ValueError("app_slug is required")
 
         path = _STORAGE_BUCKETS.format(app_slug=app_slug)
-        body: dict[str, Any] = {"name": name}
+        body: dict[str, Any] = {
+            "name": name,
+            "app_category": app_category or "attachments"  # Default to 'attachments' if not provided
+        }
 
         if slug:
             body["slug"] = slug
@@ -448,8 +451,6 @@ class StorageModule(BaseModule):
             body["file_size_limit"] = file_size_limit
         if allowed_mime_types:
             body["allowed_mime_types"] = allowed_mime_types
-        if app_category:
-            body["app_category"] = app_category
         if max_size_bytes is not None:
             body["max_size_bytes"] = max_size_bytes
         if max_objects is not None:
