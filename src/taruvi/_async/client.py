@@ -45,7 +45,7 @@ class AsyncClient:
         app_slug: str,
         *,
         # Configuration (project-level only)
-        timeout: int = 30,
+        timeout: int = 120,
         max_retries: int = 3,
         **kwargs: Any,
     ) -> None:

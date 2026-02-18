@@ -71,10 +71,13 @@ The Taruvi Python SDK provides a clean, pythonic interface to all platform capab
 - Runtime authentication switching
 
 🗃️ **Database Query Builder**
-- Fluent API: `client.database.query("users").filter(...).sort(...).get()`
+- Fluent API: `client.database.from_("users").filter(...).sort(...).execute()`
 - Pagination with `page_size()` and `page()`
 - Foreign key population with `populate()`
 - Filtering with operators: eq, gt, lt, gte, lte, ne, contains, etc.
+- **Edge management**: Create, list, and delete relationships
+- **Graph queries**: Tree/graph formats with traversal (descendants, ancestors)
+- **Relationship filtering**: Multi-type relationship support
 
 ⚡ **High-Performance Sync Client**
 - Native `httpx.Client` (blocking) - NOT asyncio wrapper
@@ -153,7 +156,7 @@ result = auth_client.functions.execute("process-order", params={"order_id": 123}
 print(result["data"])
 
 # Query database
-users = auth_client.database.query("users").page_size(10).get()
+users = auth_client.database.from_("users").page_size(10).execute()
 print(f"Found {len(users)} users")
 ```
 
@@ -182,7 +185,7 @@ async def main():
     print(result["data"])
 
     # Query database
-    users = await auth_client.database.query("users").page_size(10).get()
+    users = await auth_client.database.from_("users").page_size(10).execute()
     print(f"Found {len(users)} users")
 
     await auth_client.close()
@@ -207,7 +210,7 @@ def main(params, user_data):
     result = client.functions.execute("helper", {"test": True})
 
     # Query database
-    users = client.database.query("users").page_size(10).get()
+    users = client.database.from_("users").page_size(10).execute()
 
     return {"result": result, "user_count": len(users)}
 ```
@@ -457,6 +460,31 @@ func = client.functions.get("process-order")
 print(func['name'], func['execution_mode'])
 ```
 
+#### List Function Invocations
+
+```python
+# List all invocations
+invocations = client.functions.list_invocations(limit=50, offset=0)
+for inv in invocations['results']:
+    print(f"{inv['function']['name']}: {inv['status']}")
+
+# Filter by function
+invocations = client.functions.list_invocations(
+    function_slug="process-order",
+    status="SUCCESS",
+    limit=20
+)
+```
+
+#### Get Invocation Details
+
+```python
+# Get specific invocation by ID
+invocation = client.functions.get_invocation("inv_123")
+print(f"Status: {invocation['status']}")
+print(f"Result: {invocation['result']}")
+```
+
 ---
 
 ### Database Operations
@@ -465,31 +493,31 @@ print(func['name'], func['execution_mode'])
 
 ```python
 # Simple query
-users = client.database.query("users").get()
+users = client.database.from_("users").execute()
 
 # With filtering
 active_users = (
-    client.database.query("users")
+    client.database.from_("users")
     .filter("is_active", "eq", True)
     .filter("age", "gte", 18)
-    .get()
+    .execute()
 )
 
 # With sorting and pagination
 users_page = (
-    client.database.query("users")
+    client.database.from_("users")
     .filter("email", "contains", "@example.com")
     .sort("created_at", "desc")
     .page_size(20)
     .page(1)
-    .get()
+    .execute()
 )
 
 # Populate foreign keys
 orders = (
-    client.database.query("orders")
+    client.database.from_("orders")
     .populate("customer", "product")  # Load related records
-    .get()
+    .execute()
 )
 ```
 
@@ -569,16 +597,116 @@ client.database.delete("users", filters={"is_active": False})
 
 ```python
 # Get first result
-first_user = client.database.query("users").first()
+first_user = client.database.from_("users").first()
 
 # Get count
 user_count = (
-    client.database.query("users")
+    client.database.from_("users")
     .filter("is_active", "eq", True)
     .count()
 )
 print(f"Active users: {user_count}")
 ```
+
+#### Edge Management (Relationships)
+
+```python
+# List edges (relationships) with filters
+edges = client.database.list_edges(
+    "employees",
+    from_id=[1, 2],  # Filter by source nodes
+    types=["manager", "dotted_line"],  # Filter by relationship types
+    page=1,          # Page number (1-indexed)
+    page_size=10     # Records per page
+)
+print(f"Found {edges['total']} relationships")
+
+# Create edges (bulk)
+result = client.database.create_edges("employees", [
+    {
+        "from_id": 1,  # CEO
+        "to_id": 2,    # VP Engineering
+        "type": "manager",
+        "metadata": {"primary": True, "effective_date": "2024-01-01"}
+    },
+    {
+        "from_id": 2,  # VP Engineering
+        "to_id": 10,   # Senior Engineer
+        "type": "manager"
+    },
+    {
+        "from_id": 5,  # Project Manager
+        "to_id": 10,   # Senior Engineer
+        "type": "dotted_line",
+        "metadata": {"project": "AI Initiative"}
+    }
+])
+print(f"Created {result['total']} edges")
+
+# Update edge
+result = client.database.update_edge("employees", 10, {
+    "metadata": {"effective_end_date": "2026-01-29"}
+})
+print(f"Updated edge {result['data']['id']}")
+
+# Delete edges (bulk)
+result = client.database.delete_edges("employees", edge_ids=[1, 2, 3])
+print(f"Deleted {result['deleted']} edges")
+```
+
+**Note:** Backend supports `page`/`page_size` pagination (not `limit`/`offset`).
+
+#### Graph & Tree Queries
+
+```python
+# Get data in tree format (hierarchical)
+tree = (
+    client.database.from_("categories")
+    .filter("id", "eq", 1)
+    .format("tree")
+    .include("descendants")
+    .depth(3)
+    .execute()
+)
+
+# Get org chart (manager relationships only)
+org_chart = (
+    client.database.from_("employees")
+    .filter("id", "eq", 1)  # CEO
+    .format("tree")
+    .include("descendants")
+    .depth(5)
+    .relationship_types(["manager"])
+    .execute()
+)
+
+# Get reporting chain (ancestors)
+chain = (
+    client.database.from_("employees")
+    .filter("id", "eq", 10)  # Employee
+    .format("flat")
+    .include("ancestors")
+    .relationship_types(["manager"])
+    .execute()
+)
+
+# Multi-type graph (manager + dotted line)
+graph = (
+    client.database.from_("employees")
+    .filter("id", "eq", 1)
+    .format("graph")
+    .include("descendants")
+    .depth(3)
+    .relationship_types(["manager", "dotted_line"])
+    .execute()
+)
+```
+
+**Graph Query Options:**
+- `.format()` - Response format: `"flat"` (default), `"tree"`, or `"graph"`
+- `.include()` - Traversal direction: `"descendants"`, `"ancestors"`, or `"both"`
+- `.depth()` - Maximum traversal depth (e.g., `3` for 3 levels)
+- `.relationship_types()` - Filter by relationship types (e.g., `["manager", "dotted_line"]`)
 
 ---
 
@@ -944,7 +1072,7 @@ print(roles)  # ["admin", "editor", "viewer"]
 
 ```python
 # Get site metadata/settings
-settings = client.settings.get()
+settings = client.settings.execute()
 print(settings['site_name'])
 print(settings['settings'])
 ```
@@ -971,7 +1099,7 @@ auth_client = client.auth.signInWithToken(token="jwt_here", token_type="jwt")
 
 # All methods are async
 result = await auth_client.functions.execute("my-func", params={})
-users = await auth_client.database.query("users").get()
+users = await auth_client.database.from_("users").execute()
 ```
 
 ### When to Use Sync
@@ -993,7 +1121,7 @@ auth_client = client.auth.signInWithToken(token="jwt_here", token_type="jwt")
 
 # All methods are blocking (no await)
 result = auth_client.functions.execute("my-func", params={})
-users = auth_client.database.query("users").get()
+users = auth_client.database.from_("users").execute()
 ```
 
 ### Performance Note
@@ -1291,7 +1419,7 @@ print(result['data'])
 print(result.get('invocation', {}))
 
 # Full IDE autocomplete via type hints
-users: list[dict[str, Any]] = auth_client.database.query("users").get()
+users: list[dict[str, Any]] = auth_client.database.from_("users").execute()
 ```
 
 ---

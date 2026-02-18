@@ -25,8 +25,8 @@ _FUNCTIONS_BASE = "/api/apps/{app_slug}/functions/"
 _FUNCTION_DETAIL = "/api/apps/{app_slug}/functions/{function_slug}/"
 _FUNCTION_EXECUTE = "/api/apps/{app_slug}/functions/{function_slug}/execute/"
 _FUNCTION_RESULT = "/api/result/{task_id}/"
-_INVOCATIONS_LIST = "/api/apps/{app_slug}/invocations/"
-_INVOCATION_DETAIL = "/api/apps/{app_slug}/invocations/{invocation_id}/"
+_INVOCATIONS_LIST = "/api/invocations/"
+_INVOCATION_DETAIL = "/api/invocations/{invocation_id}/"
 
 
 # ============================================================================
@@ -171,15 +171,9 @@ class AsyncFunctionsModule(BaseModule):
     async def get_invocation(
         self,
         invocation_id: str,
-        *,
-        app_slug: Optional[str] = None,
     ) -> FunctionInvocation:
         """Get function invocation details."""
-        app_slug = app_slug or self._config.app_slug
-        if not app_slug:
-            raise ValueError("app_slug is required")
-
-        path = _INVOCATION_DETAIL.format(app_slug=app_slug, invocation_id=invocation_id)
+        path = _INVOCATION_DETAIL.format(invocation_id=invocation_id)
         response = await self._http.get(path)
         return self._extract_data(response)
 
@@ -187,17 +181,12 @@ class AsyncFunctionsModule(BaseModule):
         self,
         *,
         function_slug: Optional[str] = None,
-        app_slug: Optional[str] = None,
         status: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> dict[str, Any]:
         """List function invocations."""
-        app_slug = app_slug or self._config.app_slug
-        if not app_slug:
-            raise ValueError("app_slug is required")
-
-        path = _INVOCATIONS_LIST.format(app_slug=app_slug)
+        path = _INVOCATIONS_LIST
         params = build_params(
             function_slug=function_slug,
             status=status,

@@ -178,10 +178,11 @@ class AsyncHTTPClient(BaseHTTPClient):
         path: str,
         *,
         params: Optional[dict[str, Any]] = None,
+        json: Optional[dict[str, Any]] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         """Make a DELETE request."""
-        return await self.request("DELETE", path, params=params, headers=headers)
+        return await self.request("DELETE", path, params=params, json=json, headers=headers)
 
     async def __aenter__(self):
         """Support async context manager."""

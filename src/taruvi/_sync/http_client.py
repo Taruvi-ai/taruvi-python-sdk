@@ -178,10 +178,11 @@ class HTTPClient(BaseHTTPClient):
         path: str,
         *,
         params: Optional[dict[str, Any]] = None,
+        json: Optional[dict[str, Any]] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         """Make a DELETE request."""
-        return self.request("DELETE", path, params=params, headers=headers)
+        return self.request("DELETE", path, params=params, json=json, headers=headers)
 
     def __enter__(self):
         """Support context manager."""
