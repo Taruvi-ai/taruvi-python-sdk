@@ -33,24 +33,28 @@ class AsyncSecretsModule(BaseModule):
         self.client = client
         super().__init__(client._http_client, client._config)
 
-    async def list_secrets(
+    async def list(
         self,
+        keys: Optional[list[str]] = None,
         *,
         search: Optional[str] = None,
         app: Optional[str] = None,
         tags: Optional[list[str]] = None,
         secret_type: Optional[str] = None,
+        include_metadata: bool = False,
         page: Optional[int] = None,
         page_size: Optional[int] = None
     ) -> dict[str, Any]:
         """
-        List secrets with optional filters.
+        List secrets with optional filters or batch-get by keys.
 
         Args:
+            keys: Optional list of secret keys for batch retrieval
             search: Search by key (partial, case-insensitive)
             app: Filter by app context
             tags: Filter by tags (list of tag names)
             secret_type: Filter by type (e.g., "api_key", "database")
+            include_metadata: If True, returns full secret objects for batch keys
             page: Page number for pagination
             page_size: Items per page (max 100)
 
@@ -78,20 +82,33 @@ class AsyncSecretsModule(BaseModule):
             )
             for secret in result["data"]:
                 print(f"{secret['key']}: {secret['value'][:4]}...")
+
+            # Batch get (values only)
+            secrets_map = await client.secrets.list(
+                keys=["API_KEY", "DB_PASSWORD"]
+            )
+
+            # Batch get with metadata
+            secrets_meta = await client.secrets.list(
+                keys=["API_KEY"],
+                include_metadata=True
+            )
             ```
         """
         params = build_params(
+            keys=",".join(keys) if keys else None,
             search=search,
             app=app,
             tags=",".join(tags) if tags else None,
             secret_type=secret_type,
+            include_metadata=include_metadata,
             page=page,
             page_size=page_size,
         )
         response = await self._http.get(_SECRETS_BASE, params=params)
         return response
 
-    async def get_secret(
+    async def get(
         self,
         key: str,
         *,
@@ -115,17 +132,17 @@ class AsyncSecretsModule(BaseModule):
         Example:
             ```python
             # Simple get
-            api_key = await client.secrets.get_secret("API_KEY")
+            api_key = await client.secrets.get("API_KEY")
             print(f"API Key: {api_key['value']}")
 
             # Get with app context (2-tier inheritance)
-            db_pass = await client.secrets.get_secret(
+            db_pass = await client.secrets.get(
                 "DB_PASSWORD",
                 app="production"
             )
 
             # Get with tag validation
-            stripe_key = await client.secrets.get_secret(
+            stripe_key = await client.secrets.get(
                 "STRIPE_KEY",
                 tags=["payment", "production"]
             )
@@ -141,74 +158,4 @@ class AsyncSecretsModule(BaseModule):
         response = await self._http.get(path, params=params)
         return self._extract_data(response)
 
-    async def get_secrets(
-        self,
-        keys: list[str],
-        *,
-        app: Optional[str] = None,
-        include_metadata: bool = False
-    ) -> dict[str, Any]:
-        """
-        Get multiple secrets by keys using backend batch endpoint.
-
-        More efficient than making multiple individual requests - uses a single API call.
-
-        Args:
-            keys: List of secret keys to retrieve
-            app: Optional app context for 2-tier inheritance
-            include_metadata: If True, returns full secret objects with tags and type
-
-        Returns:
-            Dict mapping keys to values (or full objects if include_metadata=True):
-
-            Without metadata:
-            {
-                "API_KEY": "secret_value_123",
-                "DB_PASSWORD": "db_pass_456"
-            }
-
-            With metadata:
-            {
-                "API_KEY": {
-                    "value": "secret_value_123",
-                    "tags": ["production"],
-                    "secret_type": "api_credentials"
-                }
-            }
-
-            Keys not found are omitted from results.
-
-        Example:
-            ```python
-            # Get multiple secrets (values only)
-            secrets = await client.secrets.get_secrets(
-                ["API_KEY", "DB_PASSWORD", "STRIPE_KEY"]
-            )
-            api_key = secrets["API_KEY"]
-            db_pass = secrets["DB_PASSWORD"]
-
-            # Get with app context (2-tier inheritance)
-            prod_secrets = await client.secrets.get_secrets(
-                ["API_KEY", "DB_PASSWORD"],
-                app="production"
-            )
-
-            # Get with metadata
-            secrets_meta = await client.secrets.get_secrets(
-                ["API_KEY"],
-                include_metadata=True
-            )
-            api_key_value = secrets_meta["API_KEY"]["value"]
-            api_key_tags = secrets_meta["API_KEY"]["tags"]
-            ```
-        """
-        # Build query parameters for GET request
-        params = build_params(
-            keys=",".join(keys),  # Convert list to comma-separated string
-            app=app,
-            include_metadata=include_metadata
-        )
-
-        # Make single batch API call using GET with query params
-        response = await self._http.get("/api/secrets/", params=params)
-        return self._extract_data(response)
+    # get_many removed: use list(keys=[...]) instead

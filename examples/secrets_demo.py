@@ -2,9 +2,9 @@
 Example: Secrets Module - New Features Demo
 
 Demonstrates:
-1. list_secrets() with filters
-2. get_secret() with app and tags parameters
-3. get_secrets() for batch retrieval
+1. list() with filters
+2. get() with app and tags parameters
+3. list(keys=...) for batch retrieval
 4. Multiple authentication methods
 """
 
@@ -49,14 +49,14 @@ async def demo_async():
         # 1. List all secrets (no filters)
         print("\n1. List all secrets:")
         print("-" * 40)
-        all_secrets = await auth_client.secrets.list_secrets()
+        all_secrets = await auth_client.secrets.list()
         print(f"Total secrets: {all_secrets.get('count', 0)}")
         print(f"Results: {len(all_secrets.get('results', []))} secrets")
 
         # 2. List with filters
         print("\n2. List with filters (search + type):")
         print("-" * 40)
-        api_secrets = await auth_client.secrets.list_secrets(
+        api_secrets = await auth_client.secrets.list(
             search="API",
             secret_type="api_key",
             page_size=10
@@ -69,7 +69,7 @@ async def demo_async():
         print("\n3. Get single secret:")
         print("-" * 40)
         try:
-            secret = await auth_client.secrets.get_secret("API_KEY")
+            secret = await auth_client.secrets.get("API_KEY")
             print(f"Key: {secret.get('key')}")
             print(f"Value: {secret.get('value', '')[:10]}...")
             print(f"Type: {secret.get('secret_type')}")
@@ -80,7 +80,7 @@ async def demo_async():
         print("\n4. Get secret with app context:")
         print("-" * 40)
         try:
-            prod_secret = await auth_client.secrets.get_secret(
+            prod_secret = await auth_client.secrets.get(
                 "DB_PASSWORD",
                 app="production"
             )
@@ -93,7 +93,7 @@ async def demo_async():
         print("\n5. Get secret with tag validation:")
         print("-" * 40)
         try:
-            tagged_secret = await auth_client.secrets.get_secret(
+            tagged_secret = await auth_client.secrets.get(
                 "STRIPE_KEY",
                 tags=["payment", "production"]
             )
@@ -108,7 +108,7 @@ async def demo_async():
         keys_to_fetch = ["API_KEY", "DB_PASSWORD", "STRIPE_KEY"]
         print(f"Fetching: {keys_to_fetch}")
 
-        secrets = await auth_client.secrets.get_secrets(keys_to_fetch)
+        secrets = await auth_client.secrets.list(keys=keys_to_fetch)
         print(f"\nRetrieved {len(secrets)} secrets:")
         for key, value in secrets.items():
             print(f"  - {key}: {value.get('secret_type', 'unknown')}")
@@ -116,7 +116,7 @@ async def demo_async():
         # 7. Batch get with app context
         print("\n7. Batch get with app context:")
         print("-" * 40)
-        prod_secrets = await auth_client.secrets.get_secrets(
+        prod_secrets = await auth_client.secrets.list(keys=
             ["API_KEY", "DB_PASSWORD"],
             app="production"
         )
@@ -152,13 +152,13 @@ def demo_sync():
     # 1. List all secrets
     print("\n1. List all secrets (sync):")
     print("-" * 40)
-    all_secrets = auth_client.secrets.list_secrets()
+    all_secrets = auth_client.secrets.list()
     print(f"Total secrets: {all_secrets.get('count', 0)}")
 
     # 2. List with filters
     print("\n2. List with filters (sync):")
     print("-" * 40)
-    filtered = auth_client.secrets.list_secrets(
+    filtered = auth_client.secrets.list(
         secret_type="database",
         page=1,
         page_size=5
@@ -169,7 +169,7 @@ def demo_sync():
     print("\n3. Get single secret (sync):")
     print("-" * 40)
     try:
-        secret = auth_client.secrets.get_secret("API_KEY")
+        secret = auth_client.secrets.get("API_KEY")
         print(f"Key: {secret.get('key')}")
         print(f"Retrieved successfully")
     except Exception as e:
@@ -179,7 +179,7 @@ def demo_sync():
     print("\n4. Get with app and tags (sync):")
     print("-" * 40)
     try:
-        secret = auth_client.secrets.get_secret(
+        secret = auth_client.secrets.get(
             "DB_PASSWORD",
             app="production",
             tags=["production"]
@@ -192,7 +192,7 @@ def demo_sync():
     # 5. Batch get
     print("\n5. Batch get multiple secrets (sync):")
     print("-" * 40)
-    secrets = auth_client.secrets.get_secrets(
+    secrets = auth_client.secrets.list(keys=
         ["API_KEY", "DB_PASSWORD", "STRIPE_KEY"]
     )
     print(f"Retrieved {len(secrets)} secrets")
@@ -226,7 +226,7 @@ def show_api_comparison():
     print("\n### AFTER (New API):")
     print("-" * 40)
     print("# List with powerful filters")
-    print("secrets = await client.secrets.list_secrets(")
+    print("secrets = await client.secrets.list(")
     print("    search='API',")
     print("    secret_type='api_key',")
     print("    tags=['production'],")
@@ -235,14 +235,14 @@ def show_api_comparison():
     print(")")
     print("")
     print("# Get with 2-tier inheritance and tag validation")
-    print("secret = await client.secrets.get_secret(")
+    print("secret = await client.secrets.get(")
     print("    'DB_PASSWORD',")
     print("    app='production',")
     print("    tags=['production', 'critical']")
     print(")")
     print("")
     print("# Batch get with single efficient GET request")
-    print("secrets = await client.secrets.get_secrets(")
+    print("secrets = await client.secrets.list(keys=")
     print("    ['API_KEY', 'DB_PASSWORD', 'STRIPE_KEY'],")
     print("    app='production'")
     print(")")

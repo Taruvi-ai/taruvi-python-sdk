@@ -742,7 +742,7 @@ print(user['username'], user['email'])
 
 ```python
 # List users with filters
-users = client.users.list_users(
+users = client.users.list(
     search="alice",
     is_active=True,
     roles="admin,editor",
@@ -751,10 +751,10 @@ users = client.users.list_users(
 )
 
 # Get specific user
-user = client.users.get_user("alice")
+user = client.users.get("alice")
 
 # Create user
-new_user = client.users.create_user(
+new_user = client.users.create(
     username="bob",
     email="bob@example.com",
     password="secret456",
@@ -766,14 +766,14 @@ new_user = client.users.create_user(
 )
 
 # Update user
-updated = client.users.update_user(
+updated = client.users.update(
     username="bob",
     email="bob.smith@example.com",
     first_name="Robert"
 )
 
 # Delete user
-client.users.delete_user("bob")
+client.users.delete("bob")
 ```
 
 #### Role Management (Bulk Operations)
@@ -793,7 +793,7 @@ client.users.revoke_roles(
 )
 
 # Get user's apps
-apps = client.users.get_user_apps("alice")
+apps = client.users.apps("alice")
 ```
 
 ---
@@ -892,10 +892,10 @@ client.storage.from_("images").move_object(
 
 ```python
 # List all secrets
-secrets = client.secrets.list_secrets()
+secrets = client.secrets.list()
 
 # List with filters
-api_secrets = client.secrets.list_secrets(
+api_secrets = client.secrets.list(
     search="API",
     secret_type="api_key",
     tags="production",
@@ -910,17 +910,17 @@ for secret in api_secrets['results']:
 
 ```python
 # Get secret (simple)
-secret = client.secrets.get_secret("DATABASE_URL")
+secret = client.secrets.get("DATABASE_URL")
 print(secret['value'])
 
 # Get with app context (2-tier inheritance: app-level → site-level)
-prod_secret = client.secrets.get_secret(
+prod_secret = client.secrets.get(
     "DATABASE_URL",
     app="production"
 )
 
 # Get with tag validation
-secret = client.secrets.get_secret(
+secret = client.secrets.get(
     "STRIPE_KEY",
     tags=["payment", "production"]
 )
@@ -931,15 +931,15 @@ secret = client.secrets.get_secret(
 ```python
 # Get multiple secrets at once - single efficient GET request
 keys = ["API_KEY", "DATABASE_URL", "STRIPE_KEY"]
-secrets = client.secrets.get_secrets(keys)
+secrets = client.secrets.list(keys=keys)
 
 # Returns: {"API_KEY": {...}, "DATABASE_URL": {...}, "STRIPE_KEY": {...}}
 for key, secret in secrets.items():
     print(f"{key}: {secret['secret_type']}")
 
 # With app context
-prod_secrets = client.secrets.get_secrets(
-    ["API_KEY", "DATABASE_URL"],
+prod_secrets = client.secrets.list(
+    keys=["API_KEY", "DATABASE_URL"],
     app="production"
 )
 ```

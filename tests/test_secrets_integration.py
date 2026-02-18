@@ -62,7 +62,7 @@ async def test_create_secret_real_api(async_secrets_module, generate_unique_id):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_get_secret_real_api(async_secrets_module, generate_unique_id):
+async def test_get_real_api(async_secrets_module, generate_unique_id):
     """
     Test getting a secret from real backend.
 
@@ -70,7 +70,7 @@ async def test_get_secret_real_api(async_secrets_module, generate_unique_id):
     """
     unique_id = generate_unique_id()
     secret_key = f"GET_TEST_{unique_id}"
-    secret_value = f"get_secret_value_{unique_id}"
+    secret_value = f"get_value_{unique_id}"
 
     try:
         # Create secret
@@ -133,7 +133,7 @@ async def test_delete_secret_real_api(async_secrets_module, generate_unique_id):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_list_secrets_real_api(async_secrets_module, generate_unique_id):
+async def test_list_real_api(async_secrets_module, generate_unique_id):
     """
     Test listing secrets from real backend.
 
@@ -191,7 +191,7 @@ async def test_list_secrets_real_api(async_secrets_module, generate_unique_id):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_get_secrets_by_filter_real_api(async_secrets_module, generate_unique_id):
+async def test_gets_by_filter_real_api(async_secrets_module, generate_unique_id):
     """
     Test filtering secrets (if supported).
 
@@ -248,7 +248,7 @@ async def test_get_secrets_by_filter_real_api(async_secrets_module, generate_uni
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_batch_get_secrets_real_api(async_secrets_module, generate_unique_id):
+async def test_batch_gets_real_api(async_secrets_module, generate_unique_id):
     """
     Test batch getting multiple secrets (if supported).
 
@@ -267,25 +267,22 @@ async def test_batch_get_secrets_real_api(async_secrets_module, generate_unique_
             )
             secret_keys.append(secret_key)
 
-        # Batch get using get_secrets method
-        if hasattr(async_secrets_module, 'get_secrets'):
-            result = await async_secrets_module.get_secrets(secret_keys)
+        # Batch get using list(keys=...)
+        result = await async_secrets_module.list(keys=secret_keys)
 
-            # Verify we got all secrets
-            assert result is not None
-            assert len(result) == len(secret_keys)
+        # Verify we got all secrets
+        assert result is not None
+        assert len(result) == len(secret_keys)
 
-            # Verify values - result is a dict mapping keys to secret objects
-            for i, secret_key in enumerate(secret_keys):
-                assert secret_key in result
-                secret_data = result[secret_key]
-                # Handle both dict response (with metadata) and string response (value only)
-                if isinstance(secret_data, dict):
-                    assert secret_data.get("value") == f"batch_value_{i}"
-                else:
-                    assert secret_data == f"batch_value_{i}"
-        else:
-            pytest.skip("Batch get not supported by SDK")
+        # Verify values - result is a dict mapping keys to secret objects
+        for i, secret_key in enumerate(secret_keys):
+            assert secret_key in result
+            secret_data = result[secret_key]
+            # Handle both dict response (with metadata) and string response (value only)
+            if isinstance(secret_data, dict):
+                assert secret_data.get("value") == f"batch_value_{i}"
+            else:
+                assert secret_data == f"batch_value_{i}"
 
     except Exception as e:
         if "permission" in str(e).lower() or "not enabled" in str(e).lower():
@@ -335,7 +332,7 @@ def test_create_secret_sync_real_api(sync_secrets_module, generate_unique_id):
 
 
 @pytest.mark.integration
-def test_get_secret_sync_real_api(sync_secrets_module, generate_unique_id):
+def test_get_sync_real_api(sync_secrets_module, generate_unique_id):
     """
     Test getting secret with sync client.
     """
