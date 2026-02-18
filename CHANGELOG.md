@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-02-18
+
+### Changed
+- **BREAKING**: Simplified Users module method names to remove redundant suffixes
+  - `get_user` → `get`
+  - `create_user` → `create`
+  - `update_user` → `update`
+  - `delete_user` → `delete`
+  - `list_users` → `list`
+  - `get_user_apps` → `apps`
+- **BREAKING**: Secrets module now uses a single `list()` method
+  - Batch retrieval is now `list(keys=[...])`
+  - `get_many` removed
+- Documentation and tests updated for the new method names
+
 ### Added
 - **Unified Client API** with `mode` parameter
   - `Client(mode='sync')` - Native blocking client (default)
@@ -100,5 +115,6 @@ secrets = client.secrets.get_secrets(["key1", "key2", "key3"])
 - Thread-local storage for client isolation
 
 [Unreleased]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v1.3.0...HEAD
+[0.1.3]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.2...v0.1.3
 [1.3.0]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.0...v1.3.0
 [0.1.0]: https://github.com/taruvi-ai/taruvi-python-sdk/releases/tag/v0.1.0
