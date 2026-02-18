@@ -7,7 +7,7 @@ Methods still return plain dicts - these are type hints only, NOT runtime valida
 Usage:
     from taruvi.types import User, DatabaseFilters
 
-    def get_user(self, username: str) -> User:
+    def get(self, username: str) -> User:
         # Returns dict, but IDE knows the structure
         ...
 """

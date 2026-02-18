@@ -169,7 +169,7 @@ class AsyncUsersModule(BaseModule):
         self.client = client
         super().__init__(client._http_client, client._config)
 
-    async def get_user(self, username: str) -> User:
+    async def get(self, username: str) -> User:
         """
         Get user details by username.
 
@@ -181,7 +181,7 @@ class AsyncUsersModule(BaseModule):
 
         Example:
             ```python
-            user = await client.users.get_user("alice")
+            user = await client.users.get("alice")
             print(f"Email: {user['data']['email']}")
             ```
         """
@@ -189,7 +189,7 @@ class AsyncUsersModule(BaseModule):
         response = await self._http.get(path)
         return response
 
-    async def create_user(
+    async def create(
         self,
         username: str,
         email: str,
@@ -220,7 +220,7 @@ class AsyncUsersModule(BaseModule):
 
         Example:
             ```python
-            user = await client.users.create_user(
+            user = await client.users.create(
                 username="alice",
                 email="alice@example.com",
                 password="secure123",
@@ -237,7 +237,7 @@ class AsyncUsersModule(BaseModule):
         response = await self._http.post(path, json=body)
         return response
 
-    async def update_user(
+    async def update(
         self,
         username: str,
         email: Optional[str] = None,
@@ -268,7 +268,7 @@ class AsyncUsersModule(BaseModule):
 
         Example:
             ```python
-            user = await client.users.update_user(
+            user = await client.users.update(
                 username="alice",
                 email="newemail@example.com",
                 is_active=False
@@ -282,7 +282,7 @@ class AsyncUsersModule(BaseModule):
         response = await self._http.put(path, json=body)
         return response
 
-    async def delete_user(self, username: str) -> None:
+    async def delete(self, username: str) -> None:
         """
         Delete a user.
 
@@ -291,12 +291,12 @@ class AsyncUsersModule(BaseModule):
 
         Example:
             ```python
-            await client.users.delete_user("alice")
+            await client.users.delete("alice")
             ```
         """
         await self._http.delete(f"/api/users/{username}/")
 
-    async def list_users(
+    async def list(
         self,
         search: Optional[str] = None,
         is_active: Optional[bool] = None,
@@ -327,7 +327,7 @@ class AsyncUsersModule(BaseModule):
 
         Example:
             ```python
-            users = await client.users.list_users(
+            users = await client.users.list(
                 is_active=True,
                 roles="admin",
                 page=1,
@@ -344,7 +344,7 @@ class AsyncUsersModule(BaseModule):
         response = await self._http.get(path)
         return response
 
-    async def get_user_apps(self, username: str) -> list[dict[str, Any]]:
+    async def apps(self, username: str) -> list[dict[str, Any]]:
         """
         Get apps associated with a user.
 
@@ -356,7 +356,7 @@ class AsyncUsersModule(BaseModule):
 
         Example:
             ```python
-            apps = await client.users.get_user_apps("alice")
+            apps = await client.users.apps("alice")
             for app in apps:
                 print(app["slug"])
             ```
@@ -441,5 +441,4 @@ class AsyncUsersModule(BaseModule):
         # Use request() directly as delete() convenience method doesn't support JSON body
         response = await self._http.request("DELETE", path, json=body)
         return response
-
 

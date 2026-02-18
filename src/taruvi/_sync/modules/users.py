@@ -169,7 +169,7 @@ class UsersModule(BaseModule):
         self.client = client
         super().__init__(client._http_client, client._config)
 
-    def get_user(self, username: str) -> User:
+    def get(self, username: str) -> User:
         """
         Get user details by username.
 
@@ -181,7 +181,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            user = client.users.get_user("alice")
+            user = client.users.get("alice")
             print(f"Email: {user['data']['email']}")
             ```
         """
@@ -189,7 +189,7 @@ class UsersModule(BaseModule):
         response = self._http.get(path)
         return response
 
-    def create_user(
+    def create(
         self,
         username: str,
         email: str,
@@ -220,7 +220,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            user = client.users.create_user(
+            user = client.users.create(
                 username="alice",
                 email="alice@example.com",
                 password="secure123",
@@ -237,7 +237,7 @@ class UsersModule(BaseModule):
         response = self._http.post(path, json=body)
         return response
 
-    def update_user(
+    def update(
         self,
         username: str,
         email: Optional[str] = None,
@@ -268,7 +268,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            user = client.users.update_user(
+            user = client.users.update(
                 username="alice",
                 email="newemail@example.com",
                 is_active=False
@@ -282,7 +282,7 @@ class UsersModule(BaseModule):
         response = self._http.put(path, json=body)
         return response
 
-    def delete_user(self, username: str) -> None:
+    def delete(self, username: str) -> None:
         """
         Delete a user.
 
@@ -291,12 +291,12 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            client.users.delete_user("alice")
+            client.users.delete("alice")
             ```
         """
         self._http.delete(f"/api/users/{username}/")
 
-    def list_users(
+    def list(
         self,
         search: Optional[str] = None,
         is_active: Optional[bool] = None,
@@ -327,7 +327,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            users = client.users.list_users(
+            users = client.users.list(
                 is_active=True,
                 roles="admin",
                 page=1,
@@ -344,7 +344,7 @@ class UsersModule(BaseModule):
         response = self._http.get(path)
         return response
 
-    def get_user_apps(self, username: str) -> list[dict[str, Any]]:
+    def apps(self, username: str) -> list[dict[str, Any]]:
         """
         Get apps associated with a user.
 
@@ -356,7 +356,7 @@ class UsersModule(BaseModule):
 
         Example:
             ```python
-            apps = client.users.get_user_apps("alice")
+            apps = client.users.apps("alice")
             for app in apps:
                 print(app["slug"])
             ```
@@ -441,5 +441,4 @@ class UsersModule(BaseModule):
         # Use request() directly as delete() convenience method doesn't support JSON body
         response = self._http.request("DELETE", path, json=body)
         return response
-
 

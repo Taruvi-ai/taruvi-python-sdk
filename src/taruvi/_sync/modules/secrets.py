@@ -33,57 +33,75 @@ class SecretsModule(BaseModule):
         self.client = client
         super().__init__(client._http_client, client._config)
 
-    def list_secrets(
+    def list(
         self,
+        keys: Optional[list[str]] = None,
         *,
         search: Optional[str] = None,
         app: Optional[str] = None,
         tags: Optional[list[str]] = None,
         secret_type: Optional[str] = None,
+        include_metadata: bool = False,
         page: Optional[int] = None,
         page_size: Optional[int] = None
     ) -> dict[str, Any]:
         """
-        List secrets with optional filters.
+        List secrets with optional filters or batch-get by keys.
 
         Args:
+            keys: Optional list of secret keys for batch retrieval
             search: Search by key (partial, case-insensitive)
             app: Filter by app context
             tags: Filter by tags (list of tag names)
             secret_type: Filter by type (e.g., "api_key", "database")
+            include_metadata: If True, returns full secret objects for batch keys
             page: Page number for pagination
             page_size: Items per page (max 100)
 
         Returns:
-            Paginated secret results with count, next, previous, results
+            Paginated secret results for list queries or
+            dict mapping keys to values (or metadata dicts) for batch queries
 
         Example:
             ```python
             # List all secrets
-            all_secrets = client.secrets.list_secrets()
+            all_secrets = client.secrets.list()
 
             # List with filters
-            api_secrets = client.secrets.list_secrets(
+            api_secrets = client.secrets.list(
                 secret_type="api_key",
                 tags=["production"],
                 page_size=50
             )
             for secret in api_secrets["results"]:
                 print(f"{secret['key']}: {secret['value'][:4]}...")
+
+            # Batch get (values only)
+            secrets_map = client.secrets.list(
+                keys=["API_KEY", "DB_PASSWORD"]
+            )
+
+            # Batch get with metadata
+            secrets_meta = client.secrets.list(
+                keys=["API_KEY"],
+                include_metadata=True
+            )
             ```
         """
         params = build_params(
+            keys=",".join(keys) if keys else None,
             search=search,
             app=app,
             tags=",".join(tags) if tags else None,
             secret_type=secret_type,
+            include_metadata=include_metadata,
             page=page,
             page_size=page_size,
         )
         response = self._http.get(_SECRETS_BASE, params=params)
         return self._extract_data(response)
 
-    def get_secret(
+    def get(
         self,
         key: str,
         *,
@@ -107,17 +125,17 @@ class SecretsModule(BaseModule):
         Example:
             ```python
             # Simple get
-            api_key = client.secrets.get_secret("API_KEY")
+            api_key = client.secrets.get("API_KEY")
             print(f"API Key: {api_key['value']}")
 
             # Get with app context (2-tier inheritance)
-            db_pass = client.secrets.get_secret(
+            db_pass = client.secrets.get(
                 "DB_PASSWORD",
                 app="production"
             )
 
             # Get with tag validation
-            stripe_key = client.secrets.get_secret(
+            stripe_key = client.secrets.get(
                 "STRIPE_KEY",
                 tags=["payment", "production"]
             )
@@ -133,74 +151,4 @@ class SecretsModule(BaseModule):
         response = self._http.get(path, params=params)
         return self._extract_data(response)
 
-    def get_secrets(
-        self,
-        keys: list[str],
-        *,
-        app: Optional[str] = None,
-        include_metadata: bool = False
-    ) -> dict[str, Any]:
-        """
-        Get multiple secrets by keys using backend batch endpoint.
-
-        More efficient than making multiple individual requests - uses a single API call.
-
-        Args:
-            keys: List of secret keys to retrieve
-            app: Optional app context for 2-tier inheritance
-            include_metadata: If True, returns full secret objects with tags and type
-
-        Returns:
-            Dict mapping keys to values (or full objects if include_metadata=True):
-
-            Without metadata:
-            {
-                "API_KEY": "secret_value_123",
-                "DB_PASSWORD": "db_pass_456"
-            }
-
-            With metadata:
-            {
-                "API_KEY": {
-                    "value": "secret_value_123",
-                    "tags": ["production"],
-                    "secret_type": "api_credentials"
-                }
-            }
-
-            Keys not found are omitted from results.
-
-        Example:
-            ```python
-            # Get multiple secrets (values only)
-            secrets = client.secrets.get_secrets(
-                ["API_KEY", "DB_PASSWORD", "STRIPE_KEY"]
-            )
-            api_key = secrets["API_KEY"]
-            db_pass = secrets["DB_PASSWORD"]
-
-            # Get with app context (2-tier inheritance)
-            prod_secrets = client.secrets.get_secrets(
-                ["API_KEY", "DB_PASSWORD"],
-                app="production"
-            )
-
-            # Get with metadata
-            secrets_meta = client.secrets.get_secrets(
-                ["API_KEY"],
-                include_metadata=True
-            )
-            api_key_value = secrets_meta["API_KEY"]["value"]
-            api_key_tags = secrets_meta["API_KEY"]["tags"]
-            ```
-        """
-        # Build query parameters for GET request
-        params = build_params(
-            keys=",".join(keys),  # Convert list to comma-separated string
-            app=app,
-            include_metadata=include_metadata
-        )
-
-        # Make single batch API call using GET with query params
-        response = self._http.get("/api/secrets/", params=params)
-        return self._extract_data(response)
+    # get_many removed: use list(keys=[...]) instead
