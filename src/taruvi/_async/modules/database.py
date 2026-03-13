@@ -46,6 +46,9 @@ class _BaseQueryBuilder(BaseModule):
         self._include: Optional[str] = None
         self._depth: Optional[int] = None
         self._relationship_types: list[str] = []
+        self._aggregates: list[str] = []
+        self._group_by: list[str] = []
+        self._having: Optional[str] = None
 
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
         """Add a filter (shared logic)."""
@@ -87,6 +90,18 @@ class _BaseQueryBuilder(BaseModule):
         """Set relationship types (shared logic)."""
         self._relationship_types = types
 
+    def _add_aggregate(self, *expressions: str) -> None:
+        """Add aggregate expressions (shared logic)."""
+        self._aggregates.extend(expressions)
+
+    def _set_group_by(self, *fields: str) -> None:
+        """Set GROUP BY fields (shared logic)."""
+        self._group_by = list(fields)
+
+    def _set_having(self, condition: str) -> None:
+        """Set HAVING condition (shared logic)."""
+        self._having = condition
+
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
         params = build_params_util(
@@ -98,6 +113,9 @@ class _BaseQueryBuilder(BaseModule):
             format=self._format,
             include=self._include,
             depth=self._depth,
+            _aggregate=",".join(self._aggregates) if self._aggregates else None,
+            _group_by=",".join(self._group_by) if self._group_by else None,
+            _having=self._having,
         )
 
         # Add relationship types (can be multiple)
@@ -224,20 +242,94 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         self._set_relationship_types(types)
         return self
 
-    async def execute(self) -> list[dict[str, Any]]:
-        """Execute query and get results."""
+    def aggregate(self, *expressions: str) -> "AsyncQueryBuilder":
+        """
+        Add aggregate functions to the query.
+
+        Args:
+            expressions: Aggregate expressions like 'count(*)', 'sum(price)', 'avg(rating)'
+
+        Returns:
+            AsyncQueryBuilder for chaining
+
+        Example:
+            # Single aggregate
+            result = await db.from_('orders').aggregate('sum(total)').execute()
+
+            # Multiple aggregates
+            result = await db.from_('products').aggregate('count(*)', 'avg(price)', 'sum(stock)').execute()
+        """
+        self._add_aggregate(*expressions)
+        return self
+
+    def group_by(self, *fields: str) -> "AsyncQueryBuilder":
+        """
+        Add GROUP BY clause for aggregations.
+
+        Args:
+            fields: Field names to group by
+
+        Returns:
+            AsyncQueryBuilder for chaining
+
+        Example:
+            # Group by single field
+            result = await db.from_('orders') \\
+                .aggregate('sum(total)', 'count(*)') \\
+                .group_by('status') \\
+                .execute()
+
+            # Group by multiple fields
+            result = await db.from_('sales') \\
+                .aggregate('sum(amount)') \\
+                .group_by('region', 'product_category') \\
+                .execute()
+        """
+        self._set_group_by(*fields)
+        return self
+
+    def having(self, condition: str) -> "AsyncQueryBuilder":
+        """
+        Add HAVING clause to filter aggregated results.
+
+        Args:
+            condition: HAVING condition (e.g., 'sum_total > 1000')
+
+        Returns:
+            AsyncQueryBuilder for chaining
+
+        Example:
+            # Filter aggregated results
+            result = await db.from_('orders') \\
+                .aggregate('sum(total) as sum_total', 'count(*) as order_count') \\
+                .group_by('customer_id') \\
+                .having('sum_total > 1000') \\
+                .execute()
+        """
+        self._set_having(condition)
+        return self
+
+    async def execute(self) -> dict[str, Any]:
+        """Execute query and get results with metadata."""
         path = _DATATABLE_DATA.format(
             app_slug=self.app_slug,
             table_name=self.table_name
         )
         params = self.build_params()
         response = await self._http.get(path, params=params)
+        
+        return {
+            "data": self._extract_data_list(response),
+            "total": response.get("total", 0)
+        }
+        params = self.build_params()
+        response = await self._http.get(path, params=params)
         return self._extract_data_list(response)
 
     async def first(self) -> Optional[dict[str, Any]]:
         """Get first result."""
-        results = await self.page_size(1).execute()
-        return results[0] if results else None
+        result = await self.page_size(1).execute()
+        return result['data'][0] if result['data'] else None
 
     async def count(self) -> int:
         """Get count of matching records."""

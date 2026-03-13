@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 # API endpoint paths for settings
 _SETTINGS_METADATA = "/api/settings/metadata/"
+_USER_ATTRIBUTES = "/api/settings/user-attributes/"
 
 
 class SettingsModule(BaseModule):
@@ -41,4 +42,20 @@ class SettingsModule(BaseModule):
             ```
         """
         response = self._http.get(_SETTINGS_METADATA)
+        return response
+
+    def user_attributes(self) -> dict[str, Any]:
+        """
+        Get all user attributes defined in the site.
+
+        Returns:
+            dict: User attributes schema/list
+
+        Example:
+            ```python
+            attributes = client.settings.user_attributes()
+            print(attributes)
+            ```
+        """
+        response = self._http.get(_USER_ATTRIBUTES)
         return response
