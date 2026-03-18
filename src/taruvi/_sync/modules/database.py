@@ -49,6 +49,7 @@ class _BaseQueryBuilder(BaseModule):
         self._aggregates: list[str] = []
         self._group_by: list[str] = []
         self._having: Optional[str] = None
+        self._search: Optional[str] = None
 
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
         """Add a filter (shared logic)."""
@@ -102,6 +103,10 @@ class _BaseQueryBuilder(BaseModule):
         """Set HAVING condition (shared logic)."""
         self._having = condition
 
+    def _set_search(self, query: str) -> None:
+        """Set full-text search query (shared logic)."""
+        self._search = query
+
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
         params = build_params_util(
@@ -116,6 +121,7 @@ class _BaseQueryBuilder(BaseModule):
             _aggregate=",".join(self._aggregates) if self._aggregates else None,
             _group_by=",".join(self._group_by) if self._group_by else None,
             _having=self._having,
+            search=self._search,
         )
 
         # Add relationship types (can be multiple)
@@ -139,6 +145,11 @@ class QueryBuilder(_BaseQueryBuilder):
     def filter(self, field: str, operator: str, value: Any) -> "QueryBuilder":
         """Add a filter to the query."""
         self._add_filter(field, operator, value)
+        return self
+
+    def search(self, query: str) -> "QueryBuilder":
+        """Full-text search (requires search_vector field on table)."""
+        self._set_search(query)
         return self
 
     def sort(self, field: str, order: str = "asc") -> "QueryBuilder":

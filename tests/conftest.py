@@ -244,6 +244,18 @@ def sync_analytics_module(sync_client):
     return sync_client.analytics
 
 
+@pytest.fixture
+async def async_app_module(async_client):
+    """Real App module for async integration tests."""
+    return async_client.app
+
+
+@pytest.fixture
+def sync_app_module(sync_client):
+    """Real App module for sync integration tests."""
+    return sync_client.app
+
+
 # Auth module is accessed via client.auth - no separate fixtures needed
 
 
