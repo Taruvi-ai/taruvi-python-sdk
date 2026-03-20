@@ -174,14 +174,15 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         if metadatas:
             data["metadata"] = json.dumps(metadatas)
 
-        # Use httpx client directly with files parameter
-        # Note: httpx automatically sets Content-Type to multipart/form-data
+        # Exclude Content-Type so httpx auto-sets multipart/form-data with boundary
+        headers = {k: v for k, v in self._config.headers.items() if k != "Content-Type"}
         response = await self._http.client.post(
             f"{self._config.api_url}{path}",
             files=httpx_files,
             data=data,
-            headers=self._config.headers
+            headers=headers
         )
+        response.raise_for_status()
 
         response_data = response.json()
         files_data = response_data.get("data", [])
