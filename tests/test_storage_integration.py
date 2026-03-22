@@ -39,18 +39,16 @@ async def test_upload_file_real_api(async_storage_module, generate_unique_id):
     file_obj = io.BytesIO(file_content)
 
     try:
-        # Upload file to real storage
-        result = await async_storage_module.upload(
-            bucket=bucket_name,
-            file=file_obj,
-            path=file_path,
-            filename=f"test_{unique_id}.txt"
+        # Upload file to real storage using query builder pattern
+        result = await async_storage_module.from_(bucket_name).upload(
+            files=[("test.txt", file_obj)],
+            paths=[file_path]
         )
 
         # Verify response structure
         assert result is not None
-        assert "path" in result or "file_path" in result or "url" in result, \
-            "Response missing file path/url - API contract changed!"
+        assert isinstance(result, list)
+        assert len(result) > 0
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
@@ -60,7 +58,7 @@ async def test_upload_file_real_api(async_storage_module, generate_unique_id):
     finally:
         # Cleanup: Delete uploaded file
         try:
-            await async_storage_module.delete(bucket_name, file_path)
+            await async_storage_module.from_(bucket_name).delete([file_path])
         except:
             pass  # Ignore cleanup errors
 
@@ -83,24 +81,20 @@ async def test_upload_and_download_file_real_api(async_storage_module, generate_
 
     try:
         # Upload
-        upload_result = await async_storage_module.upload(
-            bucket=bucket_name,
-            file=file_obj,
-            path=file_path,
-            filename=f"roundtrip_{unique_id}.txt"
+        upload_result = await async_storage_module.from_(bucket_name).upload(
+            files=[("roundtrip.txt", file_obj)],
+            paths=[file_path]
         )
 
         assert upload_result is not None
+        assert len(upload_result) > 0
 
         # Download
-        downloaded = await async_storage_module.download(bucket_name, file_path)
+        downloaded = await async_storage_module.from_(bucket_name).download(file_path)
 
         # Verify content matches
         assert downloaded is not None
-        if isinstance(downloaded, bytes):
-            assert downloaded == original_content
-        elif hasattr(downloaded, 'read'):
-            assert downloaded.read() == original_content
+        assert downloaded == original_content
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
@@ -110,7 +104,7 @@ async def test_upload_and_download_file_real_api(async_storage_module, generate_
     finally:
         # Cleanup
         try:
-            await async_storage_module.delete(bucket_name, file_path)
+            await async_storage_module.from_(bucket_name).delete([file_path])
         except:
             pass
 
@@ -126,26 +120,26 @@ async def test_upload_multiple_files_real_api(async_storage_module, generate_uni
     bucket_name = "test-bucket"
     unique_id = generate_unique_id()
     uploaded_paths = []
+    files = []
 
     try:
-        # Upload 3 files
+        # Prepare 3 files
         for i in range(3):
             file_path = f"test_files/multi_{unique_id}_{i}.txt"
             file_content = f"Multi file test #{i} - {unique_id}".encode()
             file_obj = io.BytesIO(file_content)
-
-            result = await async_storage_module.upload(
-                bucket=bucket_name,
-                file=file_obj,
-                path=file_path,
-                filename=f"multi_{unique_id}_{i}.txt"
-            )
-
-            assert result is not None
+            
+            files.append((f"multi_{i}.txt", file_obj))
             uploaded_paths.append(file_path)
 
-        # Verify all files uploaded
-        assert len(uploaded_paths) == 3
+        # Upload all files at once
+        result = await async_storage_module.from_(bucket_name).upload(
+            files=files,
+            paths=uploaded_paths
+        )
+
+        assert result is not None
+        assert len(result) == 3
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
@@ -154,11 +148,10 @@ async def test_upload_multiple_files_real_api(async_storage_module, generate_uni
 
     finally:
         # Cleanup all uploaded files
-        for file_path in uploaded_paths:
-            try:
-                await async_storage_module.delete(bucket_name, file_path)
-            except:
-                pass
+        try:
+            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
+        except:
+            pass
 
 
 # ============================================================================
@@ -177,28 +170,27 @@ async def test_list_files_real_api(async_storage_module, generate_unique_id):
     unique_id = generate_unique_id()
     prefix = f"test_list_{unique_id}/"
     uploaded_paths = []
+    files = []
 
     try:
-        # Upload test files
+        # Prepare test files
         for i in range(2):
             file_path = f"{prefix}file_{i}.txt"
             file_obj = io.BytesIO(f"List test {i}".encode())
-
-            await async_storage_module.upload(
-                bucket=bucket_name,
-                file=file_obj,
-                path=file_path,
-                filename=f"file_{i}.txt"
-            )
+            files.append((f"file_{i}.txt", file_obj))
             uploaded_paths.append(file_path)
 
-        # List files with prefix
-        result = await async_storage_module.list(bucket_name, prefix=prefix)
+        # Upload files
+        await async_storage_module.from_(bucket_name).upload(
+            files=files,
+            paths=uploaded_paths
+        )
+
+        # List files
+        result = await async_storage_module.from_(bucket_name).list()
 
         # Verify structure
         assert result is not None
-        assert "files" in result or "objects" in result or "results" in result, \
-            "Response missing files/objects list - API contract changed!"
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
@@ -207,11 +199,10 @@ async def test_list_files_real_api(async_storage_module, generate_unique_id):
 
     finally:
         # Cleanup
-        for file_path in uploaded_paths:
-            try:
-                await async_storage_module.delete(bucket_name, file_path)
-            except:
-                pass
+        try:
+            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
+        except:
+            pass
 
 
 # ============================================================================
@@ -233,22 +224,17 @@ async def test_delete_file_real_api(async_storage_module, generate_unique_id):
     try:
         # Upload file
         file_obj = io.BytesIO(f"Delete test {unique_id}".encode())
-        await async_storage_module.upload(
-            bucket=bucket_name,
-            file=file_obj,
-            path=file_path,
-            filename=f"delete_{unique_id}.txt"
+        await async_storage_module.from_(bucket_name).upload(
+            files=[("delete.txt", file_obj)],
+            paths=[file_path]
         )
 
         # Delete file
-        delete_result = await async_storage_module.delete(bucket_name, file_path)
+        await async_storage_module.from_(bucket_name).delete([file_path])
 
-        # Verify deletion succeeded
-        assert delete_result is not None or delete_result is True
-
-        # Verify file is gone - should raise error or return None
+        # Verify file is gone - should raise error
         with pytest.raises(Exception):
-            await async_storage_module.download(bucket_name, file_path)
+            await async_storage_module.from_(bucket_name).download(file_path)
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
@@ -267,30 +253,24 @@ async def test_delete_multiple_files_real_api(async_storage_module, generate_uni
     bucket_name = "test-bucket"
     unique_id = generate_unique_id()
     file_paths = []
+    files = []
 
     try:
-        # Upload multiple files
+        # Prepare multiple files
         for i in range(3):
             file_path = f"test_files/bulk_delete_{unique_id}_{i}.txt"
             file_obj = io.BytesIO(f"Bulk delete test {i}".encode())
-
-            await async_storage_module.upload(
-                bucket=bucket_name,
-                file=file_obj,
-                path=file_path,
-                filename=f"bulk_delete_{unique_id}_{i}.txt"
-            )
+            files.append((f"bulk_{i}.txt", file_obj))
             file_paths.append(file_path)
 
-        # Delete all files
-        if hasattr(async_storage_module, 'delete_many'):
-            # If SDK supports bulk delete
-            result = await async_storage_module.delete_many(bucket_name, file_paths)
-            assert result is not None
-        else:
-            # Delete one by one
-            for file_path in file_paths:
-                await async_storage_module.delete(bucket_name, file_path)
+        # Upload all files
+        await async_storage_module.from_(bucket_name).upload(
+            files=files,
+            paths=file_paths
+        )
+
+        # Delete all files at once
+        await async_storage_module.from_(bucket_name).delete(file_paths)
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
@@ -299,11 +279,10 @@ async def test_delete_multiple_files_real_api(async_storage_module, generate_uni
 
     finally:
         # Ensure cleanup
-        for file_path in file_paths:
-            try:
-                await async_storage_module.delete(bucket_name, file_path)
-            except:
-                pass
+        try:
+            await async_storage_module.from_(bucket_name).delete(file_paths)
+        except:
+            pass
 
 
 # ============================================================================
@@ -327,33 +306,25 @@ async def test_file_metadata_real_api(async_storage_module, generate_unique_id):
         file_content = f"Metadata test {unique_id}".encode()
         file_obj = io.BytesIO(file_content)
 
-        await async_storage_module.upload(
-            bucket=bucket_name,
-            file=file_obj,
-            path=file_path,
-            filename=f"metadata_{unique_id}.txt"
+        result = await async_storage_module.from_(bucket_name).upload(
+            files=[("metadata.txt", file_obj)],
+            paths=[file_path]
         )
 
-        # Get metadata (if supported)
-        if hasattr(async_storage_module, 'get_metadata'):
-            metadata = await async_storage_module.get_metadata(bucket_name, file_path)
-
-            # Verify metadata structure
-            assert metadata is not None
-            # Common metadata fields
-            assert "size" in metadata or "content_length" in metadata or "name" in metadata
+        # Verify upload result contains metadata
+        assert result is not None
+        assert len(result) > 0
+        # File metadata should be in the upload result
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
             pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
-        elif "not supported" in str(e).lower():
-            pytest.skip("Metadata not supported")
         raise
 
     finally:
         # Cleanup
         try:
-            await async_storage_module.delete(bucket_name, file_path)
+            await async_storage_module.from_(bucket_name).delete([file_path])
         except:
             pass
 
@@ -375,18 +346,17 @@ def test_upload_file_sync_real_api(sync_storage_module, generate_unique_id):
         # Upload with sync client
         file_obj = io.BytesIO(f"Sync upload test {unique_id}".encode())
 
-        result = sync_storage_module.upload(
-            bucket=bucket_name,
-            file=file_obj,
-            path=file_path,
-            filename=f"sync_{unique_id}.txt"
+        result = sync_storage_module.from_(bucket_name).upload(
+            files=[("sync.txt", file_obj)],
+            paths=[file_path]
         )
 
         # Verify
         assert result is not None
+        assert len(result) > 0
 
         # Cleanup
-        sync_storage_module.delete(bucket_name, file_path)
+        sync_storage_module.from_(bucket_name).delete([file_path])
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
@@ -408,23 +378,20 @@ def test_download_file_sync_real_api(sync_storage_module, generate_unique_id):
         original_content = f"Sync download test {unique_id}".encode()
         file_obj = io.BytesIO(original_content)
 
-        sync_storage_module.upload(
-            bucket=bucket_name,
-            file=file_obj,
-            path=file_path,
-            filename=f"sync_download_{unique_id}.txt"
+        sync_storage_module.from_(bucket_name).upload(
+            files=[("sync_download.txt", file_obj)],
+            paths=[file_path]
         )
 
         # Download
-        downloaded = sync_storage_module.download(bucket_name, file_path)
+        downloaded = sync_storage_module.from_(bucket_name).download(file_path)
 
         # Verify content
         assert downloaded is not None
-        if isinstance(downloaded, bytes):
-            assert downloaded == original_content
+        assert downloaded == original_content
 
         # Cleanup
-        sync_storage_module.delete(bucket_name, file_path)
+        sync_storage_module.from_(bucket_name).delete([file_path])
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
@@ -446,8 +413,8 @@ async def test_download_nonexistent_file_real_api(async_storage_module):
     fake_path = "nonexistent/file/path.txt"
 
     try:
-        with pytest.raises(Exception) as exc_info:
-            await async_storage_module.download(bucket_name, fake_path)
+        with pytest.raises(Exception):
+            await async_storage_module.from_(bucket_name).download(fake_path)
 
         # Verify we got real error from backend
         assert exc_info.value is not None

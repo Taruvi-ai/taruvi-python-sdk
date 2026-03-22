@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 # API endpoint paths for settings
 _SETTINGS_METADATA = "/api/settings/metadata/"
+_USER_ATTRIBUTES = "/api/settings/user-attributes/"
 
 
 class SettingsModule(BaseModule):
@@ -41,4 +42,4 @@ class SettingsModule(BaseModule):
             ```
         """
         response = self._http.get(_SETTINGS_METADATA)
-        return response
+        return self._extract_data(response)

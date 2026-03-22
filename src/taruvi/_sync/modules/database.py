@@ -46,6 +46,10 @@ class _BaseQueryBuilder(BaseModule):
         self._include: Optional[str] = None
         self._depth: Optional[int] = None
         self._relationship_types: list[str] = []
+        self._aggregates: list[str] = []
+        self._group_by: list[str] = []
+        self._having: Optional[str] = None
+        self._search: Optional[str] = None
 
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
         """Add a filter (shared logic)."""
@@ -87,6 +91,22 @@ class _BaseQueryBuilder(BaseModule):
         """Set relationship types (shared logic)."""
         self._relationship_types = types
 
+    def _add_aggregate(self, *expressions: str) -> None:
+        """Add aggregate expressions (shared logic)."""
+        self._aggregates.extend(expressions)
+
+    def _set_group_by(self, *fields: str) -> None:
+        """Set GROUP BY fields (shared logic)."""
+        self._group_by = list(fields)
+
+    def _set_having(self, condition: str) -> None:
+        """Set HAVING condition (shared logic)."""
+        self._having = condition
+
+    def _set_search(self, query: str) -> None:
+        """Set full-text search query (shared logic)."""
+        self._search = query
+
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
         params = build_params_util(
@@ -98,6 +118,10 @@ class _BaseQueryBuilder(BaseModule):
             format=self._format,
             include=self._include,
             depth=self._depth,
+            _aggregate=",".join(self._aggregates) if self._aggregates else None,
+            _group_by=",".join(self._group_by) if self._group_by else None,
+            _having=self._having,
+            search=self._search,
         )
 
         # Add relationship types (can be multiple)
@@ -121,6 +145,11 @@ class QueryBuilder(_BaseQueryBuilder):
     def filter(self, field: str, operator: str, value: Any) -> "QueryBuilder":
         """Add a filter to the query."""
         self._add_filter(field, operator, value)
+        return self
+
+    def search(self, query: str) -> "QueryBuilder":
+        """Full-text search (requires search_vector field on table)."""
+        self._set_search(query)
         return self
 
     def sort(self, field: str, order: str = "asc") -> "QueryBuilder":
@@ -224,20 +253,91 @@ class QueryBuilder(_BaseQueryBuilder):
         self._set_relationship_types(types)
         return self
 
-    def execute(self) -> list[dict[str, Any]]:
-        """Execute query and get results."""
+    def aggregate(self, *expressions: str) -> "QueryBuilder":
+        """
+        Add aggregate functions to the query.
+
+        Args:
+            expressions: Aggregate expressions like 'count(*)', 'sum(price)', 'avg(rating)'
+
+        Returns:
+            QueryBuilder for chaining
+
+        Example:
+            # Single aggregate
+            result = db.from_('orders').aggregate('sum(total)').execute()
+
+            # Multiple aggregates
+            result = db.from_('products').aggregate('count(*)', 'avg(price)', 'sum(stock)').execute()
+        """
+        self._add_aggregate(*expressions)
+        return self
+
+    def group_by(self, *fields: str) -> "QueryBuilder":
+        """
+        Add GROUP BY clause for aggregations.
+
+        Args:
+            fields: Field names to group by
+
+        Returns:
+            QueryBuilder for chaining
+
+        Example:
+            # Group by single field
+            result = db.from_('orders') \\
+                .aggregate('sum(total)', 'count(*)') \\
+                .group_by('status') \\
+                .execute()
+
+            # Group by multiple fields
+            result = db.from_('sales') \\
+                .aggregate('sum(amount)') \\
+                .group_by('region', 'product_category') \\
+                .execute()
+        """
+        self._set_group_by(*fields)
+        return self
+
+    def having(self, condition: str) -> "QueryBuilder":
+        """
+        Add HAVING clause to filter aggregated results.
+
+        Args:
+            condition: HAVING condition (e.g., 'sum_total > 1000')
+
+        Returns:
+            QueryBuilder for chaining
+
+        Example:
+            # Filter aggregated results
+            result = db.from_('orders') \\
+                .aggregate('sum(total) as sum_total', 'count(*) as order_count') \\
+                .group_by('customer_id') \\
+                .having('sum_total > 1000') \\
+                .execute()
+        """
+        self._set_having(condition)
+        return self
+
+    def execute(self) -> dict[str, Any]:
+        """Execute query and get results with metadata."""
         path = _DATATABLE_DATA.format(
             app_slug=self.app_slug,
             table_name=self.table_name
         )
         params = self.build_params()
         response = self._http.get(path, params=params)
-        return self._extract_data_list(response)
+        
+        return {
+            "data": self._extract_data_list(response),
+            "total": response.get("total", 0)
+        }
 
     def first(self) -> Optional[dict[str, Any]]:
         """Get first result."""
-        results = self.page_size(1).execute()
-        return results[0] if results else None
+        result = self.page_size(1).execute()
+        return result['data'][0] if result['data'] else None
 
     def count(self) -> int:
         """Get count of matching records."""
@@ -270,8 +370,10 @@ class DatabaseModule(BaseModule):
         from_id: Optional[list[int]] = None,
         to_id: Optional[list[int]] = None,
         types: Optional[list[str]] = None,
-        page: int = 1,
-        page_size: int = 100,
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
+        limit: Optional[int] = 100,
+        offset: Optional[int] = 0,
         app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
         """
@@ -282,19 +384,20 @@ class DatabaseModule(BaseModule):
             from_id: Filter by source node ID(s)
             to_id: Filter by target node ID(s)
             types: Filter by relationship types
-            page: Page number (1-indexed, default: 1)
-            page_size: Number of edges per page (default: 100)
+            page: Page number (1-indexed, optional)
+            page_size: Records per page (required when using page)
+            limit: Max edges to return (legacy)
+            offset: Offset for pagination (legacy)
             app_slug: Optional app slug override
 
         Returns:
-            Dict with 'data' list, 'total' count, and 'pagination':
+            Dict with 'data' list and 'total' count:
             {
                 "data": [
                     {"id": 1, "from": 5, "to": 10, "type": "manager", "metadata": {...}},
                     ...
                 ],
                 "total": 42,
-                "pagination": {...}
             }
 
         Note:
@@ -328,6 +431,10 @@ class DatabaseModule(BaseModule):
             params["page"] = page
         if page_size is not None:
             params["page_size"] = page_size
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
 
         response = self._http.get(path, params=params)
         return response
@@ -351,7 +458,7 @@ class DatabaseModule(BaseModule):
             Dict with 'data' list and 'total' count:
             {
                 "data": [
-                    {"id": 1, "from_id": 5, "to_id": 10, "type": "manager", "metadata": {...}},
+                    {"id": 1, "from": 5, "to": 10, "type": "manager", "metadata": {...}},
                     ...
                 ],
                 "total": 3,
@@ -401,8 +508,8 @@ class DatabaseModule(BaseModule):
         Returns:
             Dict with deletion result:
             {
-                "deleted": 5,
-                "message": "Successfully deleted 5 records"
+                "data": {"deleted_count": 5},
+                "message": "Successfully deleted 5 record(s)"
             }
 
         Example:

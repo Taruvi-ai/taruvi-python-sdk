@@ -22,10 +22,42 @@ def test_config():
         "api_url": os.getenv("TARUVI_API_URL", "http://localhost:8000"),
         "app_slug": os.getenv("TARUVI_TEST_APP_SLUG", "test-app"),
         "api_key": os.getenv("TARUVI_API_KEY"),
-        "username": os.getenv("TARUVI_USERNAME"),
-        "password": os.getenv("TARUVI_PASSWORD"),
-        "jwt": os.getenv("TARUVI_JWT"),
+        "username": os.getenv("TARUVI_TEST_EMAIL", os.getenv("TARUVI_USERNAME")),
+        "password": os.getenv("TARUVI_TEST_PASSWORD", os.getenv("TARUVI_PASSWORD")),
     }
+
+
+@pytest.fixture(scope="session")
+def fresh_jwt_token(test_config):
+    """
+    Generate a fresh JWT token by logging in to the backend.
+    This ensures tests always use a valid, non-expired token.
+    """
+    import httpx
+    
+    username = test_config.get("username")
+    password = test_config.get("password")
+    
+    if not username or not password:
+        pytest.skip("Username/password not configured - cannot generate JWT token")
+    
+    # Login to get fresh token using allauth endpoint
+    try:
+        api_url = test_config['api_url'].rstrip('/')
+        response = httpx.post(
+            f"{api_url}/_allauth/app/v1/auth/login",
+            json={"email": username, "password": password},
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+        # Response structure: {"meta": {"access_token": "..."}}
+        token = data.get("meta", {}).get("access_token")
+        if not token:
+            pytest.skip("No access token in login response")
+        return token
+    except Exception as e:
+        pytest.skip(f"Cannot generate JWT token: {str(e)}")
 
 
 @pytest.fixture
@@ -61,90 +93,60 @@ def unauth_test_config(monkeypatch):
 # ============================================================================
 
 @pytest.fixture
-async def async_client(test_config):
+async def async_client(test_config, fresh_jwt_token):
     """
     Real async Taruvi client for integration tests.
     Makes ACTUAL API calls to the backend.
 
-    Uses new auth pattern: Create client, then authenticate via auth module.
+    Uses fresh JWT token generated at test session start.
     """
     from taruvi import Client
 
-    # Create base client (project-level configuration)
+    # Create base client
     base_client = Client(
         api_url=test_config["api_url"],
         app_slug=test_config["app_slug"],
         mode="async"
     )
 
-    # Authenticate if credentials provided (user-level authentication)
-    # Priority: api_key > jwt > username+password
-    if test_config.get("api_key"):
-        client = base_client.auth.signInWithToken(
-            token=test_config["api_key"],
-            token_type='api_key'
-        )
-    elif test_config.get("jwt"):
-        client = base_client.auth.signInWithToken(
-            token=test_config["jwt"],
-            token_type='jwt'
-        )
-    elif test_config.get("username") and test_config.get("password"):
-        client = base_client.auth.signInWithPassword(
-            username=test_config["username"],
-            password=test_config["password"]
-        )
-    else:
-        # No authentication - use base client
-        client = base_client
+    # Authenticate with fresh JWT token
+    client = base_client.auth.signInWithToken(
+        token=fresh_jwt_token,
+        token_type='jwt'
+    )
 
     yield client
 
-    # Cleanup: Close HTTP connections
+    # Cleanup
     await client._http_client.close()
 
 
 @pytest.fixture
-def sync_client(test_config):
+def sync_client(test_config, fresh_jwt_token):
     """
     Real sync Taruvi client for integration tests.
     Makes ACTUAL API calls to the backend.
 
-    Uses new auth pattern: Create client, then authenticate via auth module.
+    Uses fresh JWT token generated at test session start.
     """
     from taruvi import Client
 
-    # Create base client (project-level configuration)
+    # Create base client
     base_client = Client(
         api_url=test_config["api_url"],
         app_slug=test_config["app_slug"],
         mode="sync"
     )
 
-    # Authenticate if credentials provided (user-level authentication)
-    # Priority: api_key > jwt > username+password
-    if test_config.get("api_key"):
-        client = base_client.auth.signInWithToken(
-            token=test_config["api_key"],
-            token_type='api_key'
-        )
-    elif test_config.get("jwt"):
-        client = base_client.auth.signInWithToken(
-            token=test_config["jwt"],
-            token_type='jwt'
-        )
-    elif test_config.get("username") and test_config.get("password"):
-        client = base_client.auth.signInWithPassword(
-            username=test_config["username"],
-            password=test_config["password"]
-        )
-    else:
-        # No authentication - use base client
-        client = base_client
+    # Authenticate with fresh JWT token
+    client = base_client.auth.signInWithToken(
+        token=fresh_jwt_token,
+        token_type='jwt'
+    )
 
     yield client
 
-    # Cleanup: Close HTTP connections
+    # Cleanup
     client._http_client.close()
 
 
@@ -240,6 +242,18 @@ def sync_analytics_module(sync_client):
     All operations hit the actual backend.
     """
     return sync_client.analytics
+
+
+@pytest.fixture
+async def async_app_module(async_client):
+    """Real App module for async integration tests."""
+    return async_client.app
+
+
+@pytest.fixture
+def sync_app_module(sync_client):
+    """Real App module for sync integration tests."""
+    return sync_client.app
 
 
 # Auth module is accessed via client.auth - no separate fixtures needed

@@ -91,4 +91,4 @@ class AnalyticsModule(BaseModule):
         }
 
         response = self._http.post(path, json=body)
-        return response
+        return self._extract_data(response)
