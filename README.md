@@ -869,12 +869,15 @@ files = (
 )
 
 # Upload files (batch)
-uploaded = (
-    client.storage.from_("images")
-    .upload([
-        {"file": open("photo1.jpg", "rb"), "name": "photo1.jpg"},
-        {"file": open("photo2.jpg", "rb"), "name": "photo2.jpg"}
-    ])
+uploaded = client.storage.from_("images").upload(
+    files=[
+        ("photo1.jpg", open("photo1.jpg", "rb")),
+        ("photo2.jpg", open("photo2.jpg", "rb")),
+    ],
+    paths=[
+        "photos/photo1.jpg",
+        "photos/photo2.jpg",
+    ]
 )
 
 # Download file
@@ -889,18 +892,23 @@ client.storage.from_("images").update("photo1.jpg", {
 # Delete files (batch)
 client.storage.from_("images").delete(["photo1.jpg", "photo2.jpg"])
 
-# Copy file
+# Copy file (within same bucket)
 client.storage.from_("images").copy_object(
     "photo1.jpg",
-    destination_bucket="backups",
-    destination_name="photo1-backup.jpg"
+    "backups/photo1-backup.jpg"
 )
 
-# Move file
+# Copy file (cross-bucket)
+client.storage.from_("images").copy_object(
+    "photo1.jpg",
+    "photo1-backup.jpg",
+    destination_bucket="backups"
+)
+
+# Move file (within same bucket)
 client.storage.from_("images").move_object(
     "photo1.jpg",
-    destination_bucket="archive",
-    destination_name="old-photo1.jpg"
+    "archive/old-photo1.jpg"
 )
 ```
 
