@@ -51,7 +51,7 @@ class AsyncSecretsModule(BaseModule):
         Args:
             keys: Optional list of secret keys for batch retrieval
             search: Search by key (partial, case-insensitive)
-            app: Filter by app context
+            app: Filter by app context (defaults to client's app_slug if available)
             tags: Filter by tags (list of tag names)
             secret_type: Filter by type (e.g., "api_key", "database")
             include_metadata: If True, returns full secret objects for batch keys
@@ -95,6 +95,10 @@ class AsyncSecretsModule(BaseModule):
             )
             ```
         """
+        # Auto-use client's app_slug if no app specified
+        if app is None and self._config.app_slug:
+            app = self._config.app_slug
+        
         params = build_params(
             keys=",".join(keys) if keys else None,
             search=search,
@@ -120,7 +124,7 @@ class AsyncSecretsModule(BaseModule):
 
         Args:
             key: Secret key/name
-            app: App context for 2-tier inheritance (checks app-level first, then site-level)
+            app: App context for 2-tier inheritance (defaults to client's app_slug if available)
             tags: Tag validation (returns 404 if secret doesn't have these tags)
 
         Returns:
@@ -131,11 +135,11 @@ class AsyncSecretsModule(BaseModule):
 
         Example:
             ```python
-            # Simple get
+            # Simple get (uses client's app_slug if set)
             api_key = await client.secrets.get("API_KEY")
             print(f"API Key: {api_key['value']}")
 
-            # Get with app context (2-tier inheritance)
+            # Get with explicit app context (2-tier inheritance)
             db_pass = await client.secrets.get(
                 "DB_PASSWORD",
                 app="production"
@@ -148,6 +152,10 @@ class AsyncSecretsModule(BaseModule):
             )
             ```
         """
+        # Auto-use client's app_slug if no app specified
+        if app is None and self._config.app_slug:
+            app = self._config.app_slug
+        
         path = _SECRET_DETAIL.format(key=key)
 
         params = build_params(

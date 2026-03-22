@@ -72,6 +72,7 @@ The Taruvi Python SDK provides a clean, pythonic interface to all platform capab
 
 🗃️ **Database Query Builder**
 - Fluent API: `client.database.from_("users").filter(...).sort(...).execute()`
+- Full-text search with `search()` (PostgreSQL tsvector)
 - Pagination with `page_size()` and `page()`
 - Foreign key population with `populate()`
 - Filtering with operators: eq, gt, lt, gte, lte, ne, contains, etc.
@@ -535,6 +536,25 @@ orders = (
 .filter("email", "startswith", "test")  # Starts with
 .filter("email", "endswith", ".com")    # Ends with
 ```
+
+#### Full-Text Search
+
+```python
+# Search (requires search_vector field on table)
+results = client.database.from_("articles").search("machine learning").execute()
+
+# Combine with filters, sorting, pagination
+results = (
+    client.database.from_("articles")
+    .search("project roadmap")
+    .filter("is_published", "eq", True)
+    .sort("created_at", "desc")
+    .page_size(20)
+    .execute()
+)
+```
+
+**Note:** The table must have a `search_vector` field configured in its schema (via `x-search-fields`). The backend translates `?search=query` to a PostgreSQL full-text search using `tsvector`.
 
 #### Get Single Record
 
@@ -1075,6 +1095,14 @@ print(roles)  # ["admin", "editor", "viewer"]
 settings = client.settings.execute()
 print(settings['site_name'])
 print(settings['settings'])
+```
+
+#### Get User Attributes
+
+```python
+# Get all user attributes defined in the site
+attributes = client.settings.user_attributes()
+print(attributes)
 ```
 
 ---
