@@ -56,8 +56,34 @@ async def test_get_secret_real_api(async_secrets_module):
 async def test_list_secrets_real_api(async_secrets_module):
     """Test listing secrets."""
     try:
-        result = await async_secrets_module.list()
+        # Create multiple secrets
+        for i in range(3):
+            secret_key = f"LIST_TEST_{unique_id}_{i}"
+            await async_secrets_module.create(
+                key=secret_key,
+                value=f"list_value_{i}"
+            )
+            secret_keys.append(secret_key)
+
+        # List secrets
+        result = await async_secrets_module.list_secrets()
+
+        # Verify structure (list_secrets returns full response with data/total)
         assert result is not None
+        assert "data" in result, "Response missing 'data' field - API contract changed!"
+
+        # Get the list of secrets
+        secrets_list = result["data"]
+
+        # Verify we have secrets
+        assert len(secrets_list) > 0
+
+        # Verify our created secrets are in the list
+        secret_keys_in_list = [s.get("key") or s.get("name") for s in secrets_list]
+        for secret_key in secret_keys:
+            assert secret_key in secret_keys_in_list, \
+                f"Created secret {secret_key} not found in list!"
+
     except Exception as e:
         if "permission" in str(e).lower():
             pytest.skip(f"Skipping: {str(e)}")

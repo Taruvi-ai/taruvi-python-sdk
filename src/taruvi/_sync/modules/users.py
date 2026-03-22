@@ -119,15 +119,6 @@ def _build_user_list_path(
     return f"/api/users/{build_query_string(filters)}"
 
 
-def _parse_user_apps(response: Any) -> list[dict[str, Any]]:
-    """Parse user apps response."""
-    if isinstance(response, list):
-        return response
-    else:
-        apps_list = response.get("data", [])
-        return apps_list
-
-
 def _build_assign_roles_request(
     roles: list[str],
     usernames: list[str],
@@ -362,7 +353,7 @@ class UsersModule(BaseModule):
             ```
         """
         response = self._http.get(f"/api/users/{username}/apps/")
-        return _parse_user_apps(response)
+        return self._extract_data_list(response)
 
     def assign_roles(
         self,

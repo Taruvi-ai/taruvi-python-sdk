@@ -91,4 +91,4 @@ class AsyncAnalyticsModule(BaseModule):
         }
 
         response = await self._http.post(path, json=body)
-        return response
+        return self._extract_data(response)

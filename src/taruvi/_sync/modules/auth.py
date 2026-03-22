@@ -13,20 +13,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from taruvi.modules.base import BaseModule
 from taruvi.utils import safe_get_nested
 
 if TYPE_CHECKING:
     from taruvi._sync.client import SyncClient
 
 
-class AuthModule:
+class AuthModule(BaseModule):
     """Authentication module for user-level auth operations."""
 
     def __init__(self, client: "SyncClient") -> None:
         """Initialize Auth module."""
         self.client = client
-        self._http = client._http_client
-        self._config = client._config
+        super().__init__(client._http_client, client._config)
 
     def get_current_user(self) -> dict[str, Any]:
         """
@@ -42,7 +42,7 @@ class AuthModule:
             ```
         """
         response = self._http.get("/api/users/me/")
-        return response
+        return self._extract_data(response)
 
     # ============================================================================
     # Client Authentication Methods (return new authenticated clients)

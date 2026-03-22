@@ -42,20 +42,4 @@ class AsyncSettingsModule(BaseModule):
             ```
         """
         response = await self._http.get(_SETTINGS_METADATA)
-        return response
-
-    async def user_attributes(self) -> dict[str, Any]:
-        """
-        Get all user attributes defined in the site.
-
-        Returns:
-            dict: User attributes schema/list
-
-        Example:
-            ```python
-            attributes = await client.settings.user_attributes()
-            print(attributes)
-            ```
-        """
-        response = await self._http.get(_USER_ATTRIBUTES)
-        return response
+        return self._extract_data(response)

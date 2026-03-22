@@ -370,8 +370,10 @@ class DatabaseModule(BaseModule):
         from_id: Optional[list[int]] = None,
         to_id: Optional[list[int]] = None,
         types: Optional[list[str]] = None,
-        page: int = 1,
-        page_size: int = 100,
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
+        limit: Optional[int] = 100,
+        offset: Optional[int] = 0,
         app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
         """
@@ -382,19 +384,20 @@ class DatabaseModule(BaseModule):
             from_id: Filter by source node ID(s)
             to_id: Filter by target node ID(s)
             types: Filter by relationship types
-            page: Page number (1-indexed, default: 1)
-            page_size: Number of edges per page (default: 100)
+            page: Page number (1-indexed, optional)
+            page_size: Records per page (required when using page)
+            limit: Max edges to return (legacy)
+            offset: Offset for pagination (legacy)
             app_slug: Optional app slug override
 
         Returns:
-            Dict with 'data' list, 'total' count, and 'pagination':
+            Dict with 'data' list and 'total' count:
             {
                 "data": [
                     {"id": 1, "from": 5, "to": 10, "type": "manager", "metadata": {...}},
                     ...
                 ],
                 "total": 42,
-                "pagination": {...}
             }
 
         Note:
@@ -428,6 +431,10 @@ class DatabaseModule(BaseModule):
             params["page"] = page
         if page_size is not None:
             params["page_size"] = page_size
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
 
         response = self._http.get(path, params=params)
         return response
@@ -451,7 +458,7 @@ class DatabaseModule(BaseModule):
             Dict with 'data' list and 'total' count:
             {
                 "data": [
-                    {"id": 1, "from_id": 5, "to_id": 10, "type": "manager", "metadata": {...}},
+                    {"id": 1, "from": 5, "to": 10, "type": "manager", "metadata": {...}},
                     ...
                 ],
                 "total": 3,
@@ -501,8 +508,8 @@ class DatabaseModule(BaseModule):
         Returns:
             Dict with deletion result:
             {
-                "deleted": 5,
-                "message": "Successfully deleted 5 records"
+                "data": {"deleted_count": 5},
+                "message": "Successfully deleted 5 record(s)"
             }
 
         Example:
