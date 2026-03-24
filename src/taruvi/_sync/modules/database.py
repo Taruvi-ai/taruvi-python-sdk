@@ -173,84 +173,23 @@ class QueryBuilder(_BaseQueryBuilder):
         return self
 
     def format(self, format_type: str) -> "QueryBuilder":
-        """
-        Set response format for hierarchical/graph data.
-
-        Args:
-            format_type: Response format - 'flat' (default), 'tree', or 'graph'
-
-        Returns:
-            QueryBuilder for chaining
-
-        Example:
-            # Get data in tree format
-            tree = db.query('categories').format('tree').get()
-
-            # Get data in graph format
-            graph = db.query('categories').format('graph').get()
-        """
+        """Set response format: 'flat' (default), 'tree', or 'graph'."""
         self._set_format(format_type)
         return self
 
     def include(self, direction: str) -> "QueryBuilder":
-        """
-        Set traversal direction for graph/tree queries.
-
-        Args:
-            direction: Traversal direction - 'descendants', 'ancestors', or 'both'
-
-        Returns:
-            QueryBuilder for chaining
-
-        Example:
-            # Get node and all descendants
-            nodes = db.query('categories') \\
-                .filter('id', 'eq', 5) \\
-                .include('descendants') \\
-                .get()
-        """
+        """Set traversal direction: 'descendants', 'ancestors', or 'both'."""
         self._set_include(direction)
         return self
 
     def depth(self, depth: int) -> "QueryBuilder":
-        """
-        Set maximum traversal depth for graph/tree queries.
-
-        Args:
-            depth: Maximum depth to traverse (e.g., 3 for 3 levels)
-
-        Returns:
-            QueryBuilder for chaining
-
-        Example:
-            # Get node and 3 levels of descendants
-            nodes = db.query('categories') \\
-                .filter('id', 'eq', 5) \\
-                .include('descendants') \\
-                .depth(3) \\
-                .get()
-        """
+        """Set maximum traversal depth."""
         self._set_depth(depth)
         return self
 
-    def relationship_types(self, types: list[str]) -> "QueryBuilder":
-        """
-        Filter by relationship types for multi-type graphs.
-
-        Args:
-            types: List of relationship types to include (e.g., ['manager', 'dotted_line'])
-
-        Returns:
-            QueryBuilder for chaining
-
-        Example:
-            # Get only manager and dotted_line relationships
-            nodes = db.query('employees') \\
-                .relationship_types(['manager', 'dotted_line']) \\
-                .include('descendants') \\
-                .get()
-        """
-        self._set_relationship_types(types)
+    def types(self, relationship_types: list[str]) -> "QueryBuilder":
+        """Filter by relationship types (e.g., ['manager', 'dotted_line'])."""
+        self._set_relationship_types(relationship_types)
         return self
 
     def aggregate(self, *expressions: str) -> "QueryBuilder":
@@ -376,48 +315,11 @@ class DatabaseModule(BaseModule):
         offset: Optional[int] = 0,
         app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
-        """
-        List edges (relationships) with filters.
-
-        Args:
-            table_name: Name of the table
-            from_id: Filter by source node ID(s)
-            to_id: Filter by target node ID(s)
-            types: Filter by relationship types
-            page: Page number (1-indexed, optional)
-            page_size: Records per page (required when using page)
-            limit: Max edges to return (legacy)
-            offset: Offset for pagination (legacy)
-            app_slug: Optional app slug override
-
-        Returns:
-            Dict with 'data' list and 'total' count:
-            {
-                "data": [
-                    {"id": 1, "from": 5, "to": 10, "type": "manager", "metadata": {...}},
-                    ...
-                ],
-                "total": 42,
-            }
-
-        Note:
-            Response uses 'from' and 'to' field names (not 'from_id'/'to_id')
-
-        Example:
-            result = db.list_edges(
-                'employees',
-                from_id=[1, 2],
-                types=['manager', 'dotted_line'],
-                page=1,
-                page_size=10
-            )
-            edges = result['data']
-            total = result['total']
-        """
+        """List edges (relationships) with filters."""
         app_slug = self._ensure_app_slug(app_slug)
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/"
+        path = f"/api/apps/{app_slug}/datatables/{table_name}_edges/data/"
 
-        params = {}
+        params: dict[str, Any] = {}
         if from_id:
             for fid in from_id:
                 params.setdefault("from_id", []).append(fid)
@@ -436,8 +338,7 @@ class DatabaseModule(BaseModule):
         if offset is not None:
             params["offset"] = offset
 
-        response = self._http.get(path, params=params)
-        return response
+        return self._http.get(path, params=params)
 
     def create_edges(
         self,
@@ -446,49 +347,11 @@ class DatabaseModule(BaseModule):
         *,
         app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
-        """
-        Create multiple edges (relationships) at once.
-
-        Args:
-            table_name: Name of the table
-            edges: List of edge dicts with 'from_id', 'to_id', 'type', and optional 'metadata'
-            app_slug: Optional app slug override
-
-        Returns:
-            Dict with 'data' list and 'total' count:
-            {
-                "data": [
-                    {"id": 1, "from": 5, "to": 10, "type": "manager", "metadata": {...}},
-                    ...
-                ],
-                "total": 3,
-                "message": "Edges created successfully"
-            }
-
-        Example:
-            result = db.create_edges('employees', [
-                {'from_id': 1, 'to_id': 2, 'type': 'manager', 'metadata': {'primary': True}},
-                {'from_id': 1, 'to_id': 3, 'type': 'manager'},
-                {'from_id': 5, 'to_id': 2, 'type': 'dotted_line'}
-            ])
-        """
+        """Create multiple edges (relationships) at once."""
         app_slug = self._ensure_app_slug(app_slug)
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/"
+        path = f"/api/apps/{app_slug}/datatables/{table_name}_edges/data/"
 
-        # Convert edges to API format (use 'from' and 'to' as aliases)
-        formatted_edges = []
-        for edge in edges:
-            formatted_edge = {
-                "from": edge.get("from_id") or edge.get("from"),
-                "to": edge.get("to_id") or edge.get("to"),
-                "type": edge.get("type", "default"),
-            }
-            if "metadata" in edge:
-                formatted_edge["metadata"] = edge["metadata"]
-            formatted_edges.append(formatted_edge)
-
-        response = self._http.post(path, json=formatted_edges)
-        return response
+        return self._http.post(path, json=edges)
 
     def delete_edges(
         self,
@@ -497,97 +360,24 @@ class DatabaseModule(BaseModule):
         *,
         app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
-        """
-        Delete multiple edges (relationships) by IDs.
-
-        Args:
-            table_name: Name of the table
-            edge_ids: List of edge IDs to delete
-            app_slug: Optional app slug override
-
-        Returns:
-            Dict with deletion result:
-            {
-                "data": {"deleted_count": 5},
-                "message": "Successfully deleted 5 record(s)"
-            }
-
-        Example:
-            result = db.delete_edges('employees', edge_ids=[1, 2, 3])
-        """
+        """Delete multiple edges (relationships) by IDs."""
         app_slug = self._ensure_app_slug(app_slug)
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/"
-
-        payload = {"edge_ids": edge_ids}
-        response = self._http.delete(path, json=payload)
-        return response
+        path = f"/api/apps/{app_slug}/datatables/{table_name}_edges/data/"
+        return self._http.delete(path, json={"edge_ids": edge_ids})
 
     def update_edge(
         self,
         table_name: str,
-        edge_id: int,
+        edge_id: str | int,
         data: dict[str, Any],
         *,
         app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
-        """
-        Update a single edge (relationship) by ID.
-
-        Args:
-            table_name: Name of the table
-            edge_id: Edge ID to update
-            data: Update data with 'from_id'/'from', 'to_id'/'to', 'type', and/or 'metadata'
-            app_slug: Optional app slug override
-
-        Returns:
-            Dict with updated edge:
-            {
-                "data": {
-                    "id": 10,
-                    "from": 1,
-                    "to": 2,
-                    "type": "manager",
-                    "metadata": {...}
-                }
-            }
-
-        Note:
-            - SDK accepts both 'from_id'/'to_id' and 'from'/'to' in input
-            - Backend API uses 'from'/'to' in requests/responses
-            - SDK automatically transforms 'from_id'/'to_id' to 'from'/'to'
-
-        Example:
-            result = db.update_edge('employees', 10, {
-                'from_id': 1,
-                'to_id': 2,
-                'type': 'manager',
-                'metadata': {'effective_end_date': '2026-01-29'}
-            })
-            updated_edge = result['data']
-        """
+        """Update a single edge (relationship) by ID."""
         app_slug = self._ensure_app_slug(app_slug)
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/{edge_id}/"
+        path = f"/api/apps/{app_slug}/datatables/{table_name}_edges/data/{edge_id}/"
 
-        # Transform from_id/to_id to from/to for backend API
-        formatted_data = {}
-        if "from_id" in data:
-            formatted_data["from"] = data["from_id"]
-        elif "from" in data:
-            formatted_data["from"] = data["from"]
-        
-        if "to_id" in data:
-            formatted_data["to"] = data["to_id"]
-        elif "to" in data:
-            formatted_data["to"] = data["to"]
-        
-        if "type" in data:
-            formatted_data["type"] = data["type"]
-        
-        if "metadata" in data:
-            formatted_data["metadata"] = data["metadata"]
-
-        response = self._http.patch(path, json=formatted_data)
-        return response
+        return self._http.patch(path, json=data)
 
     def get(
         self,
