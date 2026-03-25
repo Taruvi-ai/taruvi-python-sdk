@@ -160,8 +160,8 @@ result = auth_client.functions.execute("process-order", params={"order_id": 123}
 print(result["data"])
 
 # Query database
-users = auth_client.database.from_("users").page_size(10).execute()
-print(f"Found {len(users)} users")
+result = auth_client.database.from_("users").page_size(10).execute()
+print(f"Found {result['total']} users")
 ```
 
 ### Async Client
@@ -189,8 +189,8 @@ async def main():
     print(result["data"])
 
     # Query database
-    users = await auth_client.database.from_("users").page_size(10).execute()
-    print(f"Found {len(users)} users")
+    result = await auth_client.database.from_("users").page_size(10).execute()
+    print(f"Found {result['total']} users")
 
     await auth_client.close()
 
@@ -214,9 +214,9 @@ def main(params, user_data):
     result = client.functions.execute("helper", {"test": True})
 
     # Query database
-    users = client.database.from_("users").page_size(10).execute()
+    result = client.database.from_("users").page_size(10).execute()
 
-    return {"result": result, "user_count": len(users)}
+    return {"result": result, "user_count": result["total"]}
 ```
 
 ---
@@ -497,18 +497,20 @@ print(f"Result: {invocation['result']}")
 
 ```python
 # Simple query
-users = client.database.from_("users").execute()
+result = client.database.from_("users").execute()
+users = result["data"]
 
 # With filtering
-active_users = (
+result = (
     client.database.from_("users")
     .filter("is_active", "eq", True)
     .filter("age", "gte", 18)
     .execute()
 )
+active_users = result["data"]
 
 # With sorting and pagination
-users_page = (
+result = (
     client.database.from_("users")
     .filter("email", "contains", "@example.com")
     .sort("created_at", "desc")
@@ -516,13 +518,15 @@ users_page = (
     .page(1)
     .execute()
 )
+users_page = result["data"]
 
 # Populate foreign keys
-orders = (
+result = (
     client.database.from_("orders")
     .populate("customer", "product")  # Load related records
     .execute()
 )
+orders = result["data"]
 ```
 
 #### Filter Operators
@@ -544,10 +548,10 @@ orders = (
 
 ```python
 # Search (requires search_vector field on table)
-results = client.database.from_("articles").search("machine learning").execute()
+result = client.database.from_("articles").search("machine learning").execute()
 
 # Combine with filters, sorting, pagination
-results = (
+result = (
     client.database.from_("articles")
     .search("project roadmap")
     .filter("is_published", "eq", True)
@@ -1131,7 +1135,8 @@ auth_client = client.auth.signInWithToken(token="jwt_here", token_type="jwt")
 
 # All methods are async
 result = await auth_client.functions.execute("my-func", params={})
-users = await auth_client.database.from_("users").execute()
+result = await auth_client.database.from_("users").execute()
+users = result["data"]
 ```
 
 ### When to Use Sync
@@ -1153,7 +1158,8 @@ auth_client = client.auth.signInWithToken(token="jwt_here", token_type="jwt")
 
 # All methods are blocking (no await)
 result = auth_client.functions.execute("my-func", params={})
-users = auth_client.database.from_("users").execute()
+result = auth_client.database.from_("users").execute()
+users = result["data"]
 ```
 
 ### Performance Note
