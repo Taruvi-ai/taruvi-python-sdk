@@ -93,7 +93,7 @@ class FunctionsModule(BaseModule):
         body = _build_execute_request(params, is_async)
 
         response = self._http.post(path, json=body, headers={})
-        return self._extract_data(response)
+        return response
 
     def get_result(
         self,
@@ -133,7 +133,7 @@ class FunctionsModule(BaseModule):
         """
         path = _FUNCTION_RESULT.format(task_id=task_id)
         response = self._http.get(path)
-        return self._extract_data(response)
+        return response
 
     def list(
         self,
@@ -166,7 +166,7 @@ class FunctionsModule(BaseModule):
 
         path = _FUNCTION_DETAIL.format(app_slug=app_slug, function_slug=function_slug)
         response = self._http.get(path)
-        return self._extract_data(response)
+        return response
 
     def get_invocation(
         self,
@@ -175,7 +175,7 @@ class FunctionsModule(BaseModule):
         """Get function invocation details."""
         path = _INVOCATION_DETAIL.format(invocation_id=invocation_id)
         response = self._http.get(path)
-        return self._extract_data(response)
+        return response
 
     def list_invocations(
         self,

@@ -42,7 +42,7 @@ class AuthModule(BaseModule):
             ```
         """
         response = self._http.get("/api/users/me/")
-        return self._extract_data(response)
+        return response
 
     # ============================================================================
     # Client Authentication Methods (return new authenticated clients)

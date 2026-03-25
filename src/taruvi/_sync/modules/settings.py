@@ -42,4 +42,4 @@ class SettingsModule(BaseModule):
             ```
         """
         response = self._http.get(_SETTINGS_METADATA)
-        return self._extract_data(response)
+        return response
