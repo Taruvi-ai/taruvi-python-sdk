@@ -104,9 +104,11 @@ class _BaseQueryBuilder(BaseModule):
 
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
+        ordering = None
+        if self._sort_field:
+            ordering = f"-{self._sort_field}" if self._sort_order == "desc" else self._sort_field
         params = build_params_util(
-            _sort=self._sort_field,
-            _order=self._sort_order if self._sort_field else None,
+            ordering=ordering,
             page_size=self._page_size,
             page=self._page if self._page != 1 else None,
             populate=",".join(self._populate_fields) if self._populate_fields else None,
