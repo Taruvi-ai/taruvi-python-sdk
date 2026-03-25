@@ -180,97 +180,61 @@ class AsyncUsersModule(BaseModule):
         response = await self._http.get(path)
         return response
 
-    async def create(
-        self,
-        username: str,
-        email: str,
-        password: str,
-        confirm_password: str,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
-        is_active: bool = True,
-        is_staff: bool = False,
-        attributes: Optional[str] = None
-    ) -> User:
+    async def create(self, data: dict[str, Any]) -> User:
         """
         Create a new user.
 
         Args:
-            username: Unique username
-            email: User email address
-            password: User password
-            confirm_password: Password confirmation (must match password)
-            first_name: Optional first name
-            last_name: Optional last name
-            is_active: Whether user is active (default: True)
-            is_staff: Whether user is staff (default: False)
-            attributes: Optional JSON string of custom attributes
+            data: Dict with user fields. Required keys:
+                  username, email, password, confirm_password
+                  Optional: first_name, last_name, is_active, is_staff, attributes
 
         Returns:
             User dict with created user details
 
         Example:
             ```python
-            user = await client.users.create(
-                username="alice",
-                email="alice@example.com",
-                password="secure123",
-                confirm_password="secure123",
-                first_name="Alice",
-                last_name="Smith"
-            )
+            user = await client.users.create({
+                "username": "alice",
+                "email": "alice@example.com",
+                "password": "secure123",
+                "confirm_password": "secure123",
+                "first_name": "Alice",
+                "last_name": "Smith"
+            })
             ```
         """
-        path, body = _build_user_create_request(
-            username, email, password, confirm_password,
-            first_name, last_name, is_active, is_staff, attributes
-        )
-        response = await self._http.post(path, json=body)
+        response = await self._http.post("/api/users/", json=data)
         return response
 
     async def update(
         self,
         username: str,
-        email: Optional[str] = None,
-        password: Optional[str] = None,
-        confirm_password: Optional[str] = None,
-        first_name: Optional[str] = None,
-        last_name: Optional[str] = None,
-        is_active: Optional[bool] = None,
-        is_staff: Optional[bool] = None,
-        attributes: Optional[str] = None
+        data: dict[str, Any],
     ) -> User:
         """
         Update an existing user.
 
         Args:
             username: Username of user to update
-            email: Updated email address
-            password: New password
-            confirm_password: Password confirmation
-            first_name: Updated first name
-            last_name: Updated last name
-            is_active: Updated active status
-            is_staff: Updated staff status
-            attributes: Updated JSON string of custom attributes
+            data: Dict with fields to update. Supported keys:
+                  email, password, confirm_password, first_name,
+                  last_name, is_active, is_staff, attributes
 
         Returns:
             User dict with updated user details
 
         Example:
             ```python
-            user = await client.users.update(
-                username="alice",
-                email="newemail@example.com",
-                is_active=False
-            )
+            user = await client.users.update("alice", {
+                "email": "newemail@example.com",
+                "first_name": "Alice",
+                "is_active": False
+            })
             ```
         """
-        path, body = _build_user_update_request(
-            username, email, password, confirm_password,
-            first_name, last_name, is_active, is_staff, attributes
-        )
-        response = await self._http.put(path, json=body)
+        path = f"/api/users/{username}/"
+        response = await self._http.put(path, json=data)
         return response
 
     async def delete(self, username: str) -> None:
