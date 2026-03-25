@@ -40,6 +40,7 @@ class _BaseQueryBuilder(BaseModule):
         self._record_id: Optional[str] = None
         self._operation: Optional[str] = None
         self._body: Any = None
+        self._delete_ids: Optional[list[int]] = None
         self._filters: dict[str, Any] = {}
         self._sort_field: Optional[str] = None
         self._sort_order: str = "asc"
@@ -163,7 +164,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         """Stage a DELETE operation. Pass int[] for bulk edge delete, str/int for single record."""
         self._operation = "DELETE"
         if isinstance(record_id_or_ids, list):
-            self._body = {"edge_ids": record_id_or_ids}
+            self._delete_ids = record_id_or_ids
         elif record_id_or_ids is not None:
             self._record_id = str(record_id_or_ids)
         return self
@@ -256,6 +257,9 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                 raise ValueError("PATCH requires a record ID. Call .get(id) first.")
             return await self._http.patch(path, json=self._body)
         if op == "DELETE":
+            if self._delete_ids:
+                ids_param = ",".join(str(i) for i in self._delete_ids)
+                return await self._http.delete(path, params={"ids": ids_param})
             if self._body:
                 return await self._http.delete(path, json=self._body)
             return await self._http.delete(path)
