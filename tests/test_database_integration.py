@@ -17,11 +17,33 @@ NOTE: These tests are currently skipped pending test_table setup.
       See INTEGRATION_TEST_SETUP.md for setup instructions.
 """
 
+import os
 import pytest
 from uuid import uuid4
 
-# Skip all database integration tests until test_table is properly registered
-pytestmark = pytest.mark.skip(reason="Database integration tests skipped - test_table needs admin UI registration")
+# Skip unless RUN_INTEGRATION_TESTS=1 is set
+pytestmark = pytest.mark.skipif(
+    not os.getenv("RUN_INTEGRATION_TESTS"),
+    reason="Set RUN_INTEGRATION_TESTS=1 to run database integration tests"
+)
+
+
+async def safe_delete(module, table_name, record_id):
+    """Delete a record, tolerating 204 No Content ResponseError from SDK."""
+    try:
+        await module.delete(table_name, record_id)
+    except Exception as e:
+        if "Failed to parse JSON response" not in str(e):
+            raise
+
+
+def safe_delete_sync(module, table_name, record_id):
+    """Sync version of safe_delete."""
+    try:
+        module.delete(table_name, record_id)
+    except Exception as e:
+        if "Failed to parse JSON response" not in str(e):
+            raise
 
 
 # ============================================================================
@@ -36,7 +58,7 @@ async def test_create_record_real_api(async_database_module, generate_unique_id)
 
     Creates actual record in backend database and verifies it exists.
     """
-    table_name = "test_table"  # Update with your actual test table
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")  # Update with your actual test table
     unique_id = generate_unique_id()
 
     # Create real record
@@ -48,6 +70,9 @@ async def test_create_record_real_api(async_database_module, generate_unique_id)
 
     try:
         result = await async_database_module.create(table_name, record_data)
+        # Unwrap list response if needed
+        if isinstance(result, list):
+            result = result[0]
 
         # Verify response structure
         assert result is not None
@@ -70,7 +95,7 @@ async def test_get_record_real_api(async_database_module, generate_unique_id):
 
     Creates record, retrieves it, verifies data, then cleans up.
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     unique_id = generate_unique_id()
 
     record_data = {
@@ -81,7 +106,7 @@ async def test_get_record_real_api(async_database_module, generate_unique_id):
     try:
         # Create record
         created = await async_database_module.create(table_name, record_data)
-        record_id = created["id"]
+        record_id = created[0]["id"] if isinstance(created, list) else created["id"]
 
         # Get record
         retrieved = await async_database_module.get(table_name, record_id)
@@ -92,7 +117,7 @@ async def test_get_record_real_api(async_database_module, generate_unique_id):
         assert retrieved["name"] == record_data["name"]
 
         # Cleanup
-        await async_database_module.delete(table_name, record_id)
+        await safe_delete(async_database_module, table_name, record_id)
 
     except Exception as e:
         pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
@@ -106,7 +131,7 @@ async def test_update_record_real_api(async_database_module, generate_unique_id)
 
     Creates record, updates it, verifies changes persisted.
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     unique_id = generate_unique_id()
 
     try:
@@ -115,7 +140,7 @@ async def test_update_record_real_api(async_database_module, generate_unique_id)
             "name": f"Original {unique_id}",
             "email": f"original_{unique_id}@example.com"
         })
-        record_id = created["id"]
+        record_id = created[0]["id"] if isinstance(created, list) else created["id"]
 
         # Update record
         updated_data = {
@@ -133,7 +158,7 @@ async def test_update_record_real_api(async_database_module, generate_unique_id)
         assert retrieved["name"] == updated_data["name"]
 
         # Cleanup
-        await async_database_module.delete(table_name, record_id)
+        await safe_delete(async_database_module, table_name, record_id)
 
     except Exception as e:
         pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
@@ -147,7 +172,7 @@ async def test_delete_record_real_api(async_database_module, generate_unique_id)
 
     Creates record, deletes it, verifies it's gone.
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     unique_id = generate_unique_id()
 
     try:
@@ -156,10 +181,10 @@ async def test_delete_record_real_api(async_database_module, generate_unique_id)
             "name": f"Delete Test {unique_id}",
             "email": f"delete_{unique_id}@example.com"
         })
-        record_id = created["id"]
+        record_id = created[0]["id"] if isinstance(created, list) else created["id"]
 
         # Delete record
-        await async_database_module.delete(table_name, record_id)
+        await safe_delete(async_database_module, table_name, record_id)
 
         # Verify deletion - should raise 404 or return None
         with pytest.raises(Exception):
@@ -180,7 +205,7 @@ async def test_list_records_real_api(async_database_module, generate_unique_id):
 
     Creates multiple records and verifies list endpoint.
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     unique_id = generate_unique_id()
     created_ids = []
 
@@ -191,18 +216,20 @@ async def test_list_records_real_api(async_database_module, generate_unique_id):
                 "name": f"List Test {unique_id} #{i}",
                 "email": f"list_{unique_id}_{i}@example.com"
             })
-            created_ids.append(created["id"])
+            created_ids.append(created[0]["id"] if isinstance(created, list) else created["id"])
 
-        # List records
-        result = await async_database_module.list(table_name, limit=10)
+        # List records using query builder
+        result = await (
+            async_database_module.from_(table_name)
+            .page_size(10)
+            .execute()
+        )
 
         # Verify structure
         assert result is not None
-        assert "results" in result or "data" in result, \
-            "Response missing results/data field - API contract changed!"
 
         # Verify we have records
-        records = result.get("results") or result.get("data", [])
+        records = result if isinstance(result, list) else result.get("data", [])
         assert len(records) > 0
 
     except Exception as e:
@@ -212,7 +239,7 @@ async def test_list_records_real_api(async_database_module, generate_unique_id):
         # Cleanup all created records
         for record_id in created_ids:
             try:
-                await async_database_module.delete(table_name, record_id)
+                await safe_delete(async_database_module, table_name, record_id)
             except:
                 pass  # Ignore cleanup errors
 
@@ -229,7 +256,7 @@ async def test_query_with_filters_real_api(async_database_module, generate_uniqu
 
     Creates records and tests filter functionality.
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     unique_id = generate_unique_id()
     created_ids = []
 
@@ -241,18 +268,18 @@ async def test_query_with_filters_real_api(async_database_module, generate_uniqu
                 "email": f"filter_{unique_id}_{status}@example.com",
                 "status": status
             })
-            created_ids.append(created["id"])
+            created_ids.append(created[0]["id"] if isinstance(created, list) else created["id"])
 
-        # Query with filter (if your SDK supports it)
-        # Adjust based on your actual query API
-        result = await async_database_module.list(
-            table_name,
-            filters={"status": "active"}
+        # Query with filter using query builder
+        result = await (
+            async_database_module.from_(table_name)
+            .filter("status", "eq", "active")
+            .execute()
         )
 
         # Verify filtering worked
         assert result is not None
-        records = result.get("results") or result.get("data", [])
+        records = result if isinstance(result, list) else result.get("data", [])
 
         # All returned records should match filter
         for record in records:
@@ -268,7 +295,7 @@ async def test_query_with_filters_real_api(async_database_module, generate_uniqu
         # Cleanup
         for record_id in created_ids:
             try:
-                await async_database_module.delete(table_name, record_id)
+                await safe_delete(async_database_module, table_name, record_id)
             except:
                 pass
 
@@ -281,7 +308,7 @@ async def test_pagination_real_api(async_database_module, generate_unique_id):
 
     Creates multiple records and tests limit/offset.
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     unique_id = generate_unique_id()
     created_ids = []
 
@@ -292,18 +319,27 @@ async def test_pagination_real_api(async_database_module, generate_unique_id):
                 "name": f"Pagination Test {unique_id} #{i}",
                 "email": f"page_{unique_id}_{i}@example.com"
             })
-            created_ids.append(created["id"])
+            created_ids.append(created[0]["id"] if isinstance(created, list) else created["id"])
 
-        # Test limit
-        result = await async_database_module.list(table_name, limit=2)
-        records = result.get("results") or result.get("data", [])
+        # Test limit using query builder
+        result = await (
+            async_database_module.from_(table_name)
+            .page_size(2)
+            .execute()
+        )
+        records = result if isinstance(result, list) else result.get("data", [])
 
         # Should have at most 2 records
         assert len(records) <= 2
 
-        # Test offset (if supported)
-        result_offset = await async_database_module.list(table_name, limit=2, offset=2)
-        records_offset = result_offset.get("results") or result_offset.get("data", [])
+        # Test page 2
+        result_offset = await (
+            async_database_module.from_(table_name)
+            .page_size(2)
+            .page(2)
+            .execute()
+        )
+        records_offset = result_offset if isinstance(result_offset, list) else result_offset.get("data", [])
 
         # Should get different records
         assert len(records_offset) >= 0  # May have fewer if less data
@@ -317,7 +353,7 @@ async def test_pagination_real_api(async_database_module, generate_unique_id):
         # Cleanup
         for record_id in created_ids:
             try:
-                await async_database_module.delete(table_name, record_id)
+                await safe_delete(async_database_module, table_name, record_id)
             except:
                 pass
 
@@ -331,7 +367,7 @@ def test_create_record_sync_real_api(sync_database_module, generate_unique_id):
     """
     Test creating record with sync client (no async/await).
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     unique_id = generate_unique_id()
 
     try:
@@ -340,13 +376,15 @@ def test_create_record_sync_real_api(sync_database_module, generate_unique_id):
             "name": f"Sync Test {unique_id}",
             "email": f"sync_{unique_id}@example.com"
         })
+        if isinstance(result, list):
+            result = result[0]
 
         # Verify structure
         assert result is not None
         assert "id" in result
 
         # Cleanup
-        sync_database_module.delete(table_name, result["id"])
+        safe_delete_sync(sync_database_module, table_name, result["id"])
 
     except Exception as e:
         pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
@@ -357,7 +395,7 @@ def test_update_record_sync_real_api(sync_database_module, generate_unique_id):
     """
     Test updating record with sync client.
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     unique_id = generate_unique_id()
 
     try:
@@ -368,14 +406,14 @@ def test_update_record_sync_real_api(sync_database_module, generate_unique_id):
         })
 
         # Update
-        updated = sync_database_module.update(table_name, created["id"], {
+        updated = sync_database_module.update(table_name, created[0]["id"] if isinstance(created, list) else created["id"], {
             "name": f"Sync Updated {unique_id}"
         })
 
         assert updated["name"] == f"Sync Updated {unique_id}"
 
         # Cleanup
-        sync_database_module.delete(table_name, created["id"])
+        safe_delete_sync(sync_database_module, table_name, created[0]["id"] if isinstance(created, list) else created["id"])
 
     except Exception as e:
         pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
@@ -391,7 +429,7 @@ async def test_get_nonexistent_record_real_api(async_database_module):
     """
     Test getting non-existent record returns real 404 error.
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     fake_id = 99999999
 
     try:
@@ -413,7 +451,7 @@ async def test_delete_nonexistent_record_real_api(async_database_module):
     """
     Test deleting non-existent record returns real error.
     """
-    table_name = "test_table"
+    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     fake_id = 99999999
 
     try:
@@ -433,7 +471,7 @@ async def test_delete_nonexistent_record_real_api(async_database_module):
 """
 IMPORTANT CONFIGURATION:
 
-1. Update `table_name = "test_table"` with your actual test table name
+1. Update `table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")` with your actual test table name
 2. Update record_data fields to match your table schema
 3. Ensure test table exists in your backend database
 

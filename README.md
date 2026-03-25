@@ -80,7 +80,7 @@ The Taruvi Python SDK provides a clean, pythonic interface to all platform capab
 
 🔗 **Graph & Edge API**
 - Graph/tree traversal: `client.database.from_("employees").include("descendants").depth(3).execute()`
-- Edge CRUD: `list_edges()`, `create_edges()`, `update_edge()`, `delete_edges()`
+- Edge CRUD via query builder: `.edges().create()`, `.edges().get(id).update()`, `.edges().delete()`
 - Multi-type relationship support with `.types()`
 
 ⚡ **High-Performance Sync Client**
@@ -688,22 +688,40 @@ graph = (
 
 ```python
 # List edges
-edges = client.database.list_edges("employees", types=["manager"], page=1, page_size=10)
+edges = client.database.from_("employees").edges().execute()
+
+# List edges with filters
+edges = (
+    client.database.from_("employees").edges()
+    .filter("type", "eq", "manager")
+    .page_size(10).page(1)
+    .execute()
+)
 
 # Create edges
-result = client.database.create_edges("employees", [
-    {"from": 1, "to": 2, "type": "manager", "metadata": {"primary": True}},
-    {"from": 2, "to": 10, "type": "manager"},
-    {"from": 5, "to": 10, "type": "dotted_line", "metadata": {"project": "AI Initiative"}}
-])
+result = (
+    client.database.from_("employees").edges()
+    .create([
+        {"from_id": 1, "to_id": 2, "type": "manager", "metadata": {"primary": True}},
+        {"from_id": 2, "to_id": 10, "type": "manager"},
+        {"from_id": 5, "to_id": 10, "type": "dotted_line", "metadata": {"project": "AI Initiative"}}
+    ])
+    .execute()
+)
 
 # Update edge
-result = client.database.update_edge("employees", 10, {
-    "metadata": {"effective_end_date": "2026-01-29"}
-})
+result = (
+    client.database.from_("employees").edges()
+    .get("10").update({"metadata": {"effective_end_date": "2026-01-29"}})
+    .execute()
+)
 
 # Delete edges
-result = client.database.delete_edges("employees", edge_ids=[9, 10])
+result = (
+    client.database.from_("employees").edges()
+    .delete([9, 10])
+    .execute()
+)
 ```
 
 ---

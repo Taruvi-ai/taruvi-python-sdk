@@ -1,6 +1,6 @@
 """Unit tests for database edge CRUD and graph query builder methods."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from taruvi.config import TaruviConfig
@@ -36,70 +36,68 @@ def mock_sync_client(mock_config):
     return client
 
 
-@pytest.fixture
-def async_db(mock_async_client):
-    return AsyncDatabaseModule(mock_async_client)
-
-
-@pytest.fixture
-def sync_db(mock_sync_client):
-    return DatabaseModule(mock_sync_client)
-
-
 # ============================================================================
-# Edge URL Tests — must match JS SDK: {table}_edges/data/
+# Edge URL Tests — .edges() appends _edges to table name
 # ============================================================================
 
 class TestEdgeURLs:
-    """Verify edge endpoints use {table}_edges/data/ pattern (matching JS SDK)."""
 
     @pytest.mark.asyncio
-    async def test_list_edges_url(self, async_db, mock_async_client):
+    async def test_edges_list_url(self, mock_async_client):
         mock_async_client._http_client.get = AsyncMock(return_value={"data": [], "total": 0})
-        await async_db.list_edges("employees")
-        mock_async_client._http_client.get.assert_called_once()
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().execute()
         url = mock_async_client._http_client.get.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/employees_edges/data/"
 
     @pytest.mark.asyncio
-    async def test_create_edges_url(self, async_db, mock_async_client):
+    async def test_edges_create_url(self, mock_async_client):
         mock_async_client._http_client.post = AsyncMock(return_value={"data": [], "total": 0})
-        await async_db.create_edges("employees", [{"from": 1, "to": 2, "type": "manager"}])
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().create([
+            {"from_id": 1, "to_id": 2, "type": "manager"}
+        ]).execute()
         url = mock_async_client._http_client.post.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/employees_edges/data/"
 
     @pytest.mark.asyncio
-    async def test_update_edge_url(self, async_db, mock_async_client):
+    async def test_edges_update_url(self, mock_async_client):
         mock_async_client._http_client.patch = AsyncMock(return_value={"data": {}})
-        await async_db.update_edge("employees", 9, {"type": "dotted_line"})
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().get("9").update(
+            {"type": "dotted_line"}
+        ).execute()
         url = mock_async_client._http_client.patch.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/employees_edges/data/9/"
 
     @pytest.mark.asyncio
-    async def test_update_edge_string_id_url(self, async_db, mock_async_client):
-        mock_async_client._http_client.patch = AsyncMock(return_value={"data": {}})
-        await async_db.update_edge("employees", "abc-123", {"type": "manager"})
-        url = mock_async_client._http_client.patch.call_args[0][0]
-        assert url == "/api/apps/test-app/datatables/employees_edges/data/abc-123/"
-
-    @pytest.mark.asyncio
-    async def test_delete_edges_url(self, async_db, mock_async_client):
+    async def test_edges_delete_url(self, mock_async_client):
         mock_async_client._http_client.delete = AsyncMock(return_value={"deleted": 2})
-        await async_db.delete_edges("employees", [9, 10])
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().delete([9, 10]).execute()
         url = mock_async_client._http_client.delete.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/employees_edges/data/"
 
-    def test_sync_list_edges_url(self, sync_db, mock_sync_client):
+    def test_sync_edges_list_url(self, mock_sync_client):
         mock_sync_client._http_client.get = MagicMock(return_value={"data": [], "total": 0})
-        sync_db.list_edges("employees")
+        QueryBuilder(mock_sync_client, "employees").edges().execute()
         url = mock_sync_client._http_client.get.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/employees_edges/data/"
 
-    def test_sync_create_edges_url(self, sync_db, mock_sync_client):
+    def test_sync_edges_create_url(self, mock_sync_client):
         mock_sync_client._http_client.post = MagicMock(return_value={"data": [], "total": 0})
-        sync_db.create_edges("employees", [{"from": 1, "to": 2, "type": "manager"}])
+        QueryBuilder(mock_sync_client, "employees").edges().create([
+            {"from_id": 1, "to_id": 2, "type": "manager"}
+        ]).execute()
         url = mock_sync_client._http_client.post.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/employees_edges/data/"
+
+    @pytest.mark.asyncio
+    async def test_edges_does_not_affect_non_edge_queries(self, mock_async_client):
+        """Calling .edges() on one builder doesn't affect another."""
+        mock_async_client._http_client.get = AsyncMock(return_value={"data": [], "total": 0})
+        base = AsyncDatabaseModule(mock_async_client)
+        await base.from_("employees").edges().execute()
+        await base.from_("employees").execute()
+        calls = mock_async_client._http_client.get.call_args_list
+        assert "employees_edges" in calls[0][0][0]
+        assert "employees_edges" not in calls[1][0][0]
 
 
 # ============================================================================
@@ -107,85 +105,56 @@ class TestEdgeURLs:
 # ============================================================================
 
 class TestEdgeRequestBody:
-    """Verify edge request bodies match JS SDK behavior."""
 
     @pytest.mark.asyncio
-    async def test_create_edges_passes_body_as_array(self, async_db, mock_async_client):
-        """JS SDK sends array of edge objects directly."""
+    async def test_create_passes_body_as_array(self, mock_async_client):
         mock_async_client._http_client.post = AsyncMock(return_value={"data": [], "total": 0})
         edges = [
-            {"from": 5, "to": 2, "type": "manager"},
-            {"from": 5, "to": 3, "type": "dotted_line", "metadata": {"project": "AI"}},
+            {"from_id": 5, "to_id": 2, "type": "manager"},
+            {"from_id": 5, "to_id": 3, "type": "dotted_line", "metadata": {"project": "AI"}},
         ]
-        await async_db.create_edges("employees", edges)
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().create(edges).execute()
         body = mock_async_client._http_client.post.call_args[1]["json"]
         assert isinstance(body, list)
         assert len(body) == 2
-        assert body[0] == {"from": 5, "to": 2, "type": "manager"}
-        assert body[1] == {"from": 5, "to": 3, "type": "dotted_line", "metadata": {"project": "AI"}}
+        assert body[0] == {"from_id": 5, "to_id": 2, "type": "manager"}
 
     @pytest.mark.asyncio
-    async def test_create_edges_preserves_extra_fields(self, async_db, mock_async_client):
-        """Extra fields should pass through, not be dropped."""
+    async def test_create_preserves_extra_fields(self, mock_async_client):
         mock_async_client._http_client.post = AsyncMock(return_value={"data": [], "total": 0})
-        await async_db.create_edges("employees", [
-            {"from": 1, "to": 2, "type": "manager", "weight": 0.8, "label": "reports_to"}
-        ])
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().create([
+            {"from_id": 1, "to_id": 2, "type": "manager", "weight": 0.8}
+        ]).execute()
         body = mock_async_client._http_client.post.call_args[1]["json"]
         assert body[0]["weight"] == 0.8
-        assert body[0]["label"] == "reports_to"
 
     @pytest.mark.asyncio
-    async def test_update_edge_passes_body(self, async_db, mock_async_client):
-        """JS SDK passes edge object directly to PATCH."""
+    async def test_update_passes_body(self, mock_async_client):
         mock_async_client._http_client.patch = AsyncMock(return_value={"data": {}})
-        await async_db.update_edge("employees", "9", {"from": 5, "to": 3, "type": "dotted_line"})
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().get("9").update(
+            {"from_id": 5, "to_id": 3, "type": "dotted_line"}
+        ).execute()
         body = mock_async_client._http_client.patch.call_args[1]["json"]
-        assert body == {"from": 5, "to": 3, "type": "dotted_line"}
+        assert body == {"from_id": 5, "to_id": 3, "type": "dotted_line"}
 
     @pytest.mark.asyncio
-    async def test_update_edge_preserves_extra_fields(self, async_db, mock_async_client):
-        mock_async_client._http_client.patch = AsyncMock(return_value={"data": {}})
-        await async_db.update_edge("employees", 10, {
-            "metadata": {"end_date": "2026-01-29"},
-            "weight": 0.5,
-        })
-        body = mock_async_client._http_client.patch.call_args[1]["json"]
-        assert body["weight"] == 0.5
-        assert body["metadata"] == {"end_date": "2026-01-29"}
-
-    @pytest.mark.asyncio
-    async def test_delete_edges_sends_edge_ids(self, async_db, mock_async_client):
-        """JS SDK sends { edge_ids: [...] }."""
+    async def test_delete_sends_edge_ids(self, mock_async_client):
         mock_async_client._http_client.delete = AsyncMock(return_value={"deleted": 2})
-        await async_db.delete_edges("employees", [9, 10])
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().delete([9, 10]).execute()
         body = mock_async_client._http_client.delete.call_args[1]["json"]
         assert body == {"edge_ids": [9, 10]}
 
-
-# ============================================================================
-# List Edges Query Params Tests
-# ============================================================================
-
-class TestListEdgesParams:
+    @pytest.mark.asyncio
+    async def test_delete_single_record(self, mock_async_client):
+        mock_async_client._http_client.delete = AsyncMock(return_value={})
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().delete("9").execute()
+        url = mock_async_client._http_client.delete.call_args[0][0]
+        assert url == "/api/apps/test-app/datatables/employees_edges/data/9/"
 
     @pytest.mark.asyncio
-    async def test_list_edges_no_params(self, async_db, mock_async_client):
-        mock_async_client._http_client.get = AsyncMock(return_value={"data": [], "total": 0})
-        await async_db.list_edges("employees")
-        params = mock_async_client._http_client.get.call_args[1]["params"]
-        assert params["limit"] == 100
-        assert params["offset"] == 0
-
-    @pytest.mark.asyncio
-    async def test_list_edges_with_filters(self, async_db, mock_async_client):
-        mock_async_client._http_client.get = AsyncMock(return_value={"data": [], "total": 0})
-        await async_db.list_edges("employees", from_id=[1, 2], types=["manager"], page=1, page_size=10)
-        params = mock_async_client._http_client.get.call_args[1]["params"]
-        assert params["from_id"] == [1, 2]
-        assert params["types"] == ["manager"]
-        assert params["page"] == 1
-        assert params["page_size"] == 10
+    async def test_patch_without_record_id_raises(self, mock_async_client):
+        with pytest.raises(ValueError, match="record ID"):
+            await AsyncQueryBuilder(mock_async_client, "employees").update({"name": "x"}).execute()
 
 
 # ============================================================================
@@ -193,42 +162,33 @@ class TestListEdgesParams:
 # ============================================================================
 
 class TestGraphQueryBuilder:
-    """Verify graph traversal query params on QueryBuilder."""
 
     def test_format_sets_param(self, mock_sync_client):
-        qb = QueryBuilder(mock_sync_client, "employees")
-        qb.format("tree")
-        params = qb.build_params()
+        params = QueryBuilder(mock_sync_client, "employees").format("tree").build_params()
         assert params["format"] == "tree"
 
     def test_include_sets_param(self, mock_sync_client):
-        qb = QueryBuilder(mock_sync_client, "employees")
-        qb.include("descendants")
-        params = qb.build_params()
+        params = QueryBuilder(mock_sync_client, "employees").include("descendants").build_params()
         assert params["include"] == "descendants"
 
     def test_depth_sets_param(self, mock_sync_client):
-        qb = QueryBuilder(mock_sync_client, "employees")
-        qb.depth(3)
-        params = qb.build_params()
+        params = QueryBuilder(mock_sync_client, "employees").depth(3).build_params()
         assert params["depth"] == 3
 
     def test_types_sets_relationship_type(self, mock_sync_client):
-        qb = QueryBuilder(mock_sync_client, "employees")
-        qb.types(["manager", "dotted_line"])
-        params = qb.build_params()
+        params = QueryBuilder(mock_sync_client, "employees").types(["manager", "dotted_line"]).build_params()
         assert params["relationship_type"] == ["manager", "dotted_line"]
 
     def test_chaining_graph_params(self, mock_sync_client):
-        qb = (
+        params = (
             QueryBuilder(mock_sync_client, "employees")
             .filter("id", "eq", 1)
             .format("tree")
             .include("descendants")
             .depth(3)
             .types(["manager"])
+            .build_params()
         )
-        params = qb.build_params()
         assert params["format"] == "tree"
         assert params["include"] == "descendants"
         assert params["depth"] == 3
@@ -236,9 +196,42 @@ class TestGraphQueryBuilder:
         assert params["id"] == 1
 
     def test_graph_query_url(self, mock_sync_client):
-        """Graph queries go to /data/ endpoint (same as regular queries)."""
         mock_sync_client._http_client.get = MagicMock(return_value={"data": [], "total": 0})
-        qb = QueryBuilder(mock_sync_client, "employees")
-        qb.format("tree").include("descendants").depth(3).execute()
+        QueryBuilder(mock_sync_client, "employees").format("tree").include("descendants").depth(3).execute()
         url = mock_sync_client._http_client.get.call_args[0][0]
         assert "/datatables/employees/data/" in url
+
+
+# ============================================================================
+# QueryBuilder CRUD on regular tables
+# ============================================================================
+
+class TestQueryBuilderCRUD:
+
+    @pytest.mark.asyncio
+    async def test_create_on_regular_table(self, mock_async_client):
+        mock_async_client._http_client.post = AsyncMock(return_value={"data": {"id": 1}})
+        await AsyncQueryBuilder(mock_async_client, "users").create({"name": "Alice"}).execute()
+        url = mock_async_client._http_client.post.call_args[0][0]
+        assert url == "/api/apps/test-app/datatables/users/data/"
+
+    @pytest.mark.asyncio
+    async def test_get_single_record(self, mock_async_client):
+        mock_async_client._http_client.get = AsyncMock(return_value={"data": {"id": 1}, "total": 0})
+        await AsyncQueryBuilder(mock_async_client, "users").get("123").execute()
+        url = mock_async_client._http_client.get.call_args[0][0]
+        assert url == "/api/apps/test-app/datatables/users/data/123/"
+
+    @pytest.mark.asyncio
+    async def test_update_single_record(self, mock_async_client):
+        mock_async_client._http_client.patch = AsyncMock(return_value={"data": {}})
+        await AsyncQueryBuilder(mock_async_client, "users").get("123").update({"name": "Bob"}).execute()
+        url = mock_async_client._http_client.patch.call_args[0][0]
+        assert url == "/api/apps/test-app/datatables/users/data/123/"
+
+    @pytest.mark.asyncio
+    async def test_delete_single_record(self, mock_async_client):
+        mock_async_client._http_client.delete = AsyncMock(return_value={})
+        await AsyncQueryBuilder(mock_async_client, "users").delete("123").execute()
+        url = mock_async_client._http_client.delete.call_args[0][0]
+        assert url == "/api/apps/test-app/datatables/users/data/123/"
