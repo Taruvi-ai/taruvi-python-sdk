@@ -74,6 +74,8 @@ The Taruvi Python SDK provides a clean, pythonic interface to all platform capab
 🗃️ **Database Query Builder**
 - Fluent API: `client.database.from_("users").filter(...).sort(...).execute()`
 - Full-text search with `search()` (PostgreSQL tsvector)
+- Aggregations with `aggregate()`, `group_by()`, `having()`
+- Lazy CRUD via query builder: `.get(id)`, `.create(body)`, `.update(body)`, `.delete(id)`
 - Pagination with `page_size()` and `page()`
 - Foreign key population with `populate()`
 - Filtering with operators: eq, gt, lt, gte, lte, ne, contains, etc.
@@ -529,6 +531,24 @@ result = (
 orders = result["data"]
 ```
 
+#### Query Builder CRUD
+
+All CRUD operations can be performed through the query builder with lazy execution:
+
+```python
+# Get single record by ID
+result = client.database.from_("users").get(123).execute()
+
+# Create record
+result = client.database.from_("users").create({"name": "Alice", "age": 30}).execute()
+
+# Update record (call .get(id) first)
+result = client.database.from_("users").get(123).update({"name": "Alice Smith"}).execute()
+
+# Delete record
+result = client.database.from_("users").delete(123).execute()
+```
+
 #### Filter Operators
 
 ```python
@@ -600,8 +620,8 @@ updated = client.database.update(
     data={"name": "Alice Smith", "age": 31}
 )
 
-# Update multiple records
-updated_many = client.database.update("users", data=[
+# Update multiple records (bulk)
+updated_many = client.database.update("users", record_id=[
     {"id": 123, "name": "Alice Updated"},
     {"id": 456, "name": "Bob Updated"}
 ])
@@ -614,10 +634,10 @@ updated_many = client.database.update("users", data=[
 client.database.delete("users", record_id=123)
 
 # Delete by IDs (bulk)
-client.database.delete("users", record_ids=[123, 456, 789])
+client.database.delete("users", ids=[123, 456, 789])
 
 # Delete by filter
-client.database.delete("users", filters={"is_active": False})
+client.database.delete("users", filter={"is_active": False})
 ```
 
 #### Query Helpers
@@ -633,6 +653,34 @@ user_count = (
     .count()
 )
 print(f"Active users: {user_count}")
+```
+
+#### Aggregations
+
+```python
+# Simple aggregation
+result = (
+    client.database.from_("orders")
+    .aggregate("count(*)", "sum(total)")
+    .execute()
+)
+
+# Group by with aggregation
+result = (
+    client.database.from_("orders")
+    .aggregate("count(*)", "sum(total)")
+    .group_by("status")
+    .execute()
+)
+
+# With HAVING clause
+result = (
+    client.database.from_("orders")
+    .aggregate("count(*)", "sum(total)")
+    .group_by("customer_id")
+    .having("count(*) > 5")
+    .execute()
+)
 ```
 
 ---
@@ -774,23 +822,22 @@ users = client.users.list(
 user = client.users.get("alice")
 
 # Create user
-new_user = client.users.create(
-    username="bob",
-    email="bob@example.com",
-    password="secret456",
-    confirm_password="secret456",
-    first_name="Bob",
-    last_name="Smith",
-    is_active=True,
-    is_staff=False
-)
+new_user = client.users.create({
+    "username": "bob",
+    "email": "bob@example.com",
+    "password": "secret456",
+    "confirm_password": "secret456",
+    "first_name": "Bob",
+    "last_name": "Smith",
+    "is_active": True,
+    "is_staff": False
+})
 
 # Update user
-updated = client.users.update(
-    username="bob",
-    email="bob.smith@example.com",
-    first_name="Robert"
-)
+updated = client.users.update("bob", {
+    "email": "bob.smith@example.com",
+    "first_name": "Robert"
+})
 
 # Delete user
 client.users.delete("bob")
@@ -920,17 +967,19 @@ client.storage.from_("images").move_object(
 
 ```python
 # List all secrets
-secrets = client.secrets.list()
+result = client.secrets.list()
+secrets = result["data"]
+total = result["total"]
 
 # List with filters
-api_secrets = client.secrets.list(
+result = client.secrets.list(
     search="API",
     secret_type="api_key",
-    tags="production",
+    tags=["production"],
     page_size=50
 )
 
-for secret in api_secrets['results']:
+for secret in result["data"]:
     print(f"{secret['key']}: {secret['secret_type']}")
 ```
 
@@ -959,14 +1008,14 @@ secret = client.secrets.get(
 ```python
 # Get multiple secrets at once - single efficient GET request
 keys = ["API_KEY", "DATABASE_URL", "STRIPE_KEY"]
-secrets = client.secrets.list(keys=keys)
+result = client.secrets.list(keys=keys)
 
-# Returns: {"API_KEY": {...}, "DATABASE_URL": {...}, "STRIPE_KEY": {...}}
-for key, secret in secrets.items():
-    print(f"{key}: {secret['secret_type']}")
+# Returns: {"status": "success", "data": [...], "total": 3}
+for secret in result["data"]:
+    print(f"{secret['key']}: {secret['secret_type']}")
 
 # With app context
-prod_secrets = client.secrets.list(
+result = client.secrets.list(
     keys=["API_KEY", "DATABASE_URL"],
     app="production"
 )
@@ -1096,21 +1145,22 @@ roles = client.app.roles()
 print(roles)  # ["admin", "editor", "viewer"]
 ```
 
+#### Get App Settings
+
+```python
+# Get app display settings
+settings = client.app.settings()
+print(settings['display_name'])
+print(settings['primary_color'])
+```
+
 #### Get Site Settings
 
 ```python
 # Get site metadata/settings
-settings = client.settings.execute()
+settings = client.settings.get()
 print(settings['site_name'])
 print(settings['settings'])
-```
-
-#### Get User Attributes
-
-```python
-# Get all user attributes defined in the site
-attributes = client.settings.user_attributes()
-print(attributes)
 ```
 
 ---

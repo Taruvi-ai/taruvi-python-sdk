@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.7] - 2026-03-26
+## [0.1.6] - 2026-03-26
 
 ### Added
 - **Database: Full-text search** via `.search(query)` on QueryBuilder
@@ -157,8 +157,8 @@ secrets = client.secrets.get_secrets(["key1", "key2", "key3"])
 - RestrictedPython sandbox support
 - Thread-local storage for client isolation
 
-[Unreleased]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.7...HEAD
-[0.1.7]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.3...v0.1.7
+[Unreleased]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.3...v0.1.6
 [0.1.3]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v1.3.0...v0.1.3
 [1.3.0]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.0...v1.3.0
 [0.1.0]: https://github.com/taruvi-ai/taruvi-python-sdk/releases/tag/v0.1.0
