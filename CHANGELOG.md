@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-03-26
+
+### Added
+- **Database: Full-text search** via `.search(query)` on QueryBuilder
+  - Translates to PostgreSQL `tsvector` search on tables with `search_vector` field
+- **Database: Aggregation support** via `.aggregate()`, `.group_by()`, `.having()` on QueryBuilder
+- **Database: Edge CRUD via QueryBuilder** — chainable `.edges()` toggle
+  - `client.database.from_("table").edges().create([...]).execute()`
+  - `client.database.from_("table").edges().get(id).update({...}).execute()`
+  - `client.database.from_("table").edges().delete([ids]).execute()`
+  - Replaces standalone `list_edges`, `create_edges`, `delete_edges`, `update_edge` methods
+- **Database: Lazy CRUD on QueryBuilder** — `.get(id)`, `.create(body)`, `.update(body)`, `.delete(id)` are now chainable and execute lazily via `.execute()`
+- **App settings endpoint** — `client.app.settings()` returns app display_name, colors, icon, category, URLs, etc.
+- **User attributes endpoint** — new `_USER_ATTRIBUTES` path in settings module
+- New test suites: aggregations (sync + async), app settings integration, database edges, database search, live edge tests
+
+### Changed
+- **BREAKING: `users.create()` signature** — now accepts a single `data: dict` instead of individual keyword arguments
+  ```python
+  # Before
+  client.users.create(username="alice", email="alice@example.com", password="...", confirm_password="...")
+
+  # After
+  client.users.create({"username": "alice", "email": "alice@example.com", "password": "...", "confirm_password": "..."})
+  ```
+- **BREAKING: `users.update()` signature** — now accepts `(username, data: dict)` instead of individual keyword arguments
+  ```python
+  # Before
+  client.users.update(username="alice", email="new@example.com", is_active=False)
+
+  # After
+  client.users.update("alice", {"email": "new@example.com", "is_active": False})
+  ```
+- **BREAKING: `secrets.list()` response format** — now returns the full API response `{"status", "message", "data", "total"}` instead of extracting data
+- **Database sorting** — now uses `ordering` parameter (`-field` for desc) instead of separate `_sort`/`_order` params
+- **AuthModule** now extends `BaseModule` for consistent inheritance
+- Removed `_parse_user_apps` helper in users module; uses `_extract_data_list` instead
+- Trimmed verbose docstrings across database module methods
+
+### Fixed
+- Delete edge API path handling
+- Sort ordering in database queries
+
 ## [0.1.3] - 2026-02-18
 
 ### Changed
@@ -114,7 +157,8 @@ secrets = client.secrets.get_secrets(["key1", "key2", "key3"])
 - RestrictedPython sandbox support
 - Thread-local storage for client isolation
 
-[Unreleased]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v1.3.0...HEAD
-[0.1.3]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.2...v0.1.3
+[Unreleased]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.3...v0.1.7
+[0.1.3]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v1.3.0...v0.1.3
 [1.3.0]: https://github.com/taruvi-ai/taruvi-python-sdk/compare/v0.1.0...v1.3.0
 [0.1.0]: https://github.com/taruvi-ai/taruvi-python-sdk/releases/tag/v0.1.0
