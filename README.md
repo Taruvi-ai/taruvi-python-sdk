@@ -818,6 +818,9 @@ users = client.users.list(
     page_size=20
 )
 
+# Filter by reference attributes (e.g., department_id from user attributes schema)
+users = client.users.list(department_id=123, is_active=True)
+
 # Get specific user
 user = client.users.get("alice")
 

@@ -92,31 +92,9 @@ def _build_user_update_request(
     return f"/api/users/{username}/", body
 
 
-def _build_user_list_path(
-    search: Optional[str],
-    is_active: Optional[bool],
-    is_staff: Optional[bool],
-    is_superuser: Optional[bool],
-    is_deleted: Optional[bool],
-    roles: Optional[str],
-    ordering: Optional[str],
-    page: Optional[int],
-    page_size: Optional[int]
-) -> str:
+def _build_user_list_path(**kwargs: Any) -> str:
     """Build user list request path with query params."""
-    filters = build_params(
-        search=search,
-        is_active=is_active,
-        is_staff=is_staff,
-        is_superuser=is_superuser,
-        is_deleted=is_deleted,
-        roles=roles,
-        ordering=ordering,
-        page=page,
-        page_size=page_size,
-    )
-
-    return f"/api/users/{build_query_string(filters)}"
+    return f"/api/users/{build_query_string(build_params(**kwargs))}"
 
 
 def _build_assign_roles_request(
@@ -251,31 +229,22 @@ class AsyncUsersModule(BaseModule):
         """
         await self._http.delete(f"/api/users/{username}/")
 
-    async def list(
-        self,
-        search: Optional[str] = None,
-        is_active: Optional[bool] = None,
-        is_staff: Optional[bool] = None,
-        is_superuser: Optional[bool] = None,
-        is_deleted: Optional[bool] = None,
-        roles: Optional[str] = None,
-        ordering: Optional[str] = None,
-        page: Optional[int] = None,
-        page_size: Optional[int] = None
-    ) -> dict[str, Any]:
+    async def list(self, **kwargs: Any) -> dict[str, Any]:
         """
         List users with optional filters.
 
-        Args:
+        Supports all API query parameters as keyword arguments:
             search: Search by username/email/name
             is_active: Filter by active status
             is_staff: Filter by staff status
             is_superuser: Filter by superuser status
             is_deleted: Filter by deleted status
+            is_cloud_user: Filter by cloud user status
             roles: Comma-separated role slugs (e.g., "admin,manager")
-            ordering: Sort field (e.g., "-created_at")
+            ordering: Sort field (e.g., "-date_joined")
             page: Page number
             page_size: Items per page
+            **kwargs: Reference attribute filters (e.g., department_id=123)
 
         Returns:
             dict: User list response with pagination
@@ -285,6 +254,7 @@ class AsyncUsersModule(BaseModule):
             users = await client.users.list(
                 is_active=True,
                 roles="admin",
+                department_id=123,
                 page=1,
                 page_size=20
             )
@@ -292,10 +262,7 @@ class AsyncUsersModule(BaseModule):
                 print(user["username"])
             ```
         """
-        path = _build_user_list_path(
-            search, is_active, is_staff, is_superuser,
-            is_deleted, roles, ordering, page, page_size
-        )
+        path = _build_user_list_path(**kwargs)
         response = await self._http.get(path)
         return response
 

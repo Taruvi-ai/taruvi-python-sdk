@@ -198,7 +198,11 @@ class UserFilters(TypedDict, total=False):
     search: str
     is_active: bool
     is_staff: bool
+    is_superuser: bool
+    is_deleted: bool
+    is_cloud_user: bool
     roles: str  # Comma-separated
+    ordering: str
     page: int
     page_size: int
 
