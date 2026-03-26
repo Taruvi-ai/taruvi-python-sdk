@@ -13,20 +13,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from taruvi.modules.base import BaseModule
 from taruvi.utils import safe_get_nested
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
 
 
-class AsyncAuthModule:
+class AsyncAuthModule(BaseModule):
     """Authentication module for user-level auth operations."""
 
     def __init__(self, client: "AsyncClient") -> None:
         """Initialize Auth module."""
         self.client = client
-        self._http = client._http_client
-        self._config = client._config
+        super().__init__(client._http_client, client._config)
 
     async def get_current_user(self) -> dict[str, Any]:
         """

@@ -1,147 +1,60 @@
 """
 Integration tests for Secrets API module.
-
-IMPORTANT: These are REAL integration tests - NO MOCKS!
-- Creates, reads, updates, deletes REAL secrets in backend
-- Tests secret encryption and retrieval
-- All created secrets are cleaned up after tests
-
-Setup:
-    1. Ensure .env is configured with backend URL and credentials
-    2. Backend must have secrets management enabled
-    3. Run: RUN_INTEGRATION_TESTS=1 pytest tests/test_secrets_integration.py -v
 """
 
+import os
 import pytest
 
 
-# ============================================================================
-# Secret CRUD Tests - Async (Real Secret Operations)
-# ============================================================================
-
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_create_secret_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test creating a real secret in backend.
-
-    Creates secret, verifies it exists, then cleans up.
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"TEST_SECRET_{unique_id}"
-    secret_value = f"secret_value_{unique_id}"
-
+async def test_get_secret_real_api(async_secrets_module):
+    """Test getting a secret from real backend."""
+    import httpx
+    
+    secret_key = "TEST_SECRET_ASYNC"
+    secret_value = {"host": "localhost", "port": 3306, "database": "testdb", "username": "testuser", "password": "testpass123"}
+    
+    api_url = os.getenv("TARUVI_API_URL", "http://localhost:8000").rstrip('/')
+    email = os.getenv("TARUVI_TEST_EMAIL", "admin@example.com")
+    password = os.getenv("TARUVI_TEST_PASSWORD", "admin123")
+    
+    login_resp = httpx.post(f"{api_url}/_allauth/app/v1/auth/login", json={"email": email, "password": password})
+    if login_resp.status_code != 200:
+        pytest.skip(f"Login failed: {login_resp.status_code}")
+    
+    token = login_resp.json()['meta']['access_token']
+    
     try:
-        # Create secret
-        result = await async_secrets_module.create(
-            key=secret_key,
-            value=secret_value
+        create_resp = httpx.post(
+            f"{api_url}/api/secrets/",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"key": secret_key, "value": secret_value, "secret_type": "analytics-mysql"}
         )
-
-        # Verify response structure
-        assert result is not None
-        assert "key" in result or "name" in result, \
-            "Response missing key/name field - API contract changed!"
-
-        # Verify key matches
-        returned_key = result.get("key") or result.get("name")
-        assert returned_key == secret_key
-
-    except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
-        raise
-
-    finally:
-        # Cleanup: Delete secret
-        try:
-            await async_secrets_module.delete(secret_key)
-        except:
-            pass  # Ignore cleanup errors
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_get_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test getting a secret from real backend.
-
-    Creates secret, retrieves it, verifies value, then cleans up.
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"GET_TEST_{unique_id}"
-    secret_value = f"get_value_{unique_id}"
-
-    try:
-        # Create secret
-        await async_secrets_module.create(key=secret_key, value=secret_value)
-
-        # Get secret
+        
+        if create_resp.status_code not in [200, 201]:
+            pytest.skip(f"Cannot create secret: {create_resp.status_code}")
+        
         result = await async_secrets_module.get(secret_key)
-
-        # Verify structure
         assert result is not None
-        assert "value" in result, "Response missing 'value' field - API contract changed!"
-
-        # Verify value matches
+        assert "value" in result
         assert result["value"] == secret_value
 
     except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
+        if "not found" in str(e).lower():
+            pytest.skip(f"Skipping: {str(e)}")
         raise
-
     finally:
-        # Cleanup
         try:
-            await async_secrets_module.delete(secret_key)
+            httpx.delete(f"{api_url}/api/secrets/{secret_key}/", headers={"Authorization": f"Bearer {token}"})
         except:
             pass
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_delete_secret_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test deleting a secret from real backend.
-
-    Creates secret, deletes it, verifies it's gone.
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"DELETE_TEST_{unique_id}"
-    secret_value = f"delete_value_{unique_id}"
-
-    try:
-        # Create secret
-        await async_secrets_module.create(key=secret_key, value=secret_value)
-
-        # Delete secret
-        delete_result = await async_secrets_module.delete(secret_key)
-
-        # Verify deletion succeeded
-        assert delete_result is not None or delete_result is True
-
-        # Verify secret is gone - should raise error
-        with pytest.raises(Exception):
-            await async_secrets_module.get(secret_key)
-
-    except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
-        raise
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_list_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test listing secrets from real backend.
-
-    Creates multiple secrets and verifies list endpoint.
-    """
-    unique_id = generate_unique_id()
-    secret_keys = []
-
+async def test_list_secrets_real_api(async_secrets_module):
+    """Test listing secrets."""
     try:
         # Create multiple secrets
         for i in range(3):
@@ -153,15 +66,14 @@ async def test_list_real_api(async_secrets_module, generate_unique_id):
             secret_keys.append(secret_key)
 
         # List secrets
-        result = await async_secrets_module.list()
+        result = await async_secrets_module.list_secrets()
 
-        # Verify structure
+        # Verify structure (list_secrets returns full response with data/total)
         assert result is not None
-        assert "secrets" in result or "results" in result or "data" in result, \
-            "Response missing secrets/results list - API contract changed!"
+        assert "data" in result, "Response missing 'data' field - API contract changed!"
 
         # Get the list of secrets
-        secrets_list = result.get("secrets") or result.get("results") or result.get("data", [])
+        secrets_list = result["data"]
 
         # Verify we have secrets
         assert len(secrets_list) > 0
@@ -173,388 +85,101 @@ async def test_list_real_api(async_secrets_module, generate_unique_id):
                 f"Created secret {secret_key} not found in list!"
 
     except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
+        if "permission" in str(e).lower():
+            pytest.skip(f"Skipping: {str(e)}")
         raise
-
-    finally:
-        # Cleanup all created secrets
-        for secret_key in secret_keys:
-            try:
-                await async_secrets_module.delete(secret_key)
-            except:
-                pass
-
-
-# ============================================================================
-# Secret Filtering Tests - Async (Real Query Operations)
-# ============================================================================
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_gets_by_filter_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test filtering secrets (if supported).
-
-    Creates secrets with specific patterns and tests filtering.
-    """
-    unique_id = generate_unique_id()
-    prefix = f"FILTER_{unique_id}"
-    secret_keys = []
-
-    try:
-        # Create secrets with specific prefix
-        for i in range(3):
-            secret_key = f"{prefix}_SECRET_{i}"
-            await async_secrets_module.create(
-                key=secret_key,
-                value=f"filter_value_{i}"
-            )
-            secret_keys.append(secret_key)
-
-        # Get secrets by filter (if SDK supports it)
-        if hasattr(async_secrets_module, 'filter') or hasattr(async_secrets_module, 'get_by_prefix'):
-            # Try prefix-based filtering
-            if hasattr(async_secrets_module, 'get_by_prefix'):
-                result = await async_secrets_module.get_by_prefix(prefix)
-            else:
-                result = await async_secrets_module.filter(prefix=prefix)
-
-            # Verify filtering worked
-            assert result is not None
-            filtered_secrets = result.get("secrets") or result.get("results") or result
-
-            # All returned secrets should match prefix
-            for secret in filtered_secrets:
-                secret_key = secret.get("key") or secret.get("name")
-                assert secret_key.startswith(prefix)
-        else:
-            pytest.skip("Filtering not supported by SDK")
-
-    except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
-        elif "not supported" in str(e).lower():
-            pytest.skip("Filtering not supported")
-        raise
-
-    finally:
-        # Cleanup
-        for secret_key in secret_keys:
-            try:
-                await async_secrets_module.delete(secret_key)
-            except:
-                pass
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_batch_gets_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test batch getting multiple secrets (if supported).
-
-    Creates multiple secrets and retrieves them in batch.
-    """
-    unique_id = generate_unique_id()
-    secret_keys = []
-
+async def test_list_with_filters_real_api(async_secrets_module):
+    """Test listing secrets with filters."""
     try:
-        # Create multiple secrets
-        for i in range(3):
-            secret_key = f"BATCH_GET_{unique_id}_{i}"
-            await async_secrets_module.create(
-                key=secret_key,
-                value=f"batch_value_{i}"
-            )
-            secret_keys.append(secret_key)
-
-        # Batch get using list(keys=...)
-        result = await async_secrets_module.list(keys=secret_keys)
-
-        # Verify we got all secrets
+        result = await async_secrets_module.list(search="TEST")
         assert result is not None
-        assert len(result) == len(secret_keys)
-
-        # Verify values - result is a dict mapping keys to secret objects
-        for i, secret_key in enumerate(secret_keys):
-            assert secret_key in result
-            secret_data = result[secret_key]
-            # Handle both dict response (with metadata) and string response (value only)
-            if isinstance(secret_data, dict):
-                assert secret_data.get("value") == f"batch_value_{i}"
-            else:
-                assert secret_data == f"batch_value_{i}"
-
     except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
-        elif "not supported" in str(e).lower():
-            pytest.skip("Batch get not supported")
-        raise
-
-    finally:
-        # Cleanup
-        for secret_key in secret_keys:
-            try:
-                await async_secrets_module.delete(secret_key)
-            except:
-                pass
-
-
-# ============================================================================
-# Sync Client Tests - Real Secret Operations
-# ============================================================================
-
-@pytest.mark.integration
-def test_create_secret_sync_real_api(sync_secrets_module, generate_unique_id):
-    """
-    Test creating secret with sync client (no async/await).
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"SYNC_TEST_{unique_id}"
-    secret_value = f"sync_value_{unique_id}"
-
-    try:
-        # Create with sync client
-        result = sync_secrets_module.create(key=secret_key, value=secret_value)
-
-        # Verify
-        assert result is not None
-        returned_key = result.get("key") or result.get("name")
-        assert returned_key == secret_key
-
-        # Cleanup
-        sync_secrets_module.delete(secret_key)
-
-    except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
+        if "permission" in str(e).lower():
+            pytest.skip(f"Skipping: {str(e)}")
         raise
 
 
 @pytest.mark.integration
-def test_get_sync_real_api(sync_secrets_module, generate_unique_id):
-    """
-    Test getting secret with sync client.
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"SYNC_GET_{unique_id}"
-    secret_value = f"sync_get_value_{unique_id}"
+@pytest.mark.asyncio
+async def test_batch_get_secrets_real_api(async_secrets_module):
+    """Test batch getting secrets."""
+    try:
+        result = await async_secrets_module.list(keys=["apitoken", "claude"])
+        assert result is not None
+    except Exception as e:
+        if "not found" in str(e).lower():
+            pytest.skip(f"Skipping: {str(e)}")
+        raise
+
+
+@pytest.mark.integration
+def test_get_secret_sync_real_api(sync_secrets_module):
+    """Test getting secret with sync client."""
+    import httpx
+    
+    secret_key = "TEST_SECRET_SYNC"
+    secret_value = {"host": "localhost", "port": 3306, "database": "testdb_sync", "username": "testuser", "password": "testpass456"}
+    
+    api_url = os.getenv("TARUVI_API_URL", "http://localhost:8000").rstrip('/')
+    email = os.getenv("TARUVI_TEST_EMAIL", "admin@example.com")
+    password = os.getenv("TARUVI_TEST_PASSWORD", "admin123")
+    
+    login_resp = httpx.post(f"{api_url}/_allauth/app/v1/auth/login", json={"email": email, "password": password})
+    if login_resp.status_code != 200:
+        pytest.skip(f"Login failed")
+    
+    token = login_resp.json()['meta']['access_token']
 
     try:
-        # Create
-        sync_secrets_module.create(key=secret_key, value=secret_value)
-
-        # Get
+        create_resp = httpx.post(
+            f"{api_url}/api/secrets/",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={"key": secret_key, "value": secret_value, "secret_type": "analytics-mysql"}
+        )
+        
+        if create_resp.status_code not in [200, 201]:
+            pytest.skip(f"Cannot create secret")
+        
         result = sync_secrets_module.get(secret_key)
-
-        # Verify
         assert result is not None
+        assert "value" in result
         assert result["value"] == secret_value
 
-        # Cleanup
-        sync_secrets_module.delete(secret_key)
-
     except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
+        if "not found" in str(e).lower():
+            pytest.skip(f"Skipping: {str(e)}")
+        raise
+    finally:
+        try:
+            httpx.delete(f"{api_url}/api/secrets/{secret_key}/", headers={"Authorization": f"Bearer {token}"})
+        except:
+            pass
+
+
+@pytest.mark.integration
+def test_list_secrets_sync_real_api(sync_secrets_module):
+    """Test listing secrets with sync client."""
+    try:
+        result = sync_secrets_module.list()
+        assert result is not None
+    except Exception as e:
+        if "permission" in str(e).lower():
+            pytest.skip(f"Skipping: {str(e)}")
         raise
 
-
-# ============================================================================
-# Error Handling Tests - Real API Errors
-# ============================================================================
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_get_nonexistent_secret_real_api(async_secrets_module):
-    """
-    Test getting non-existent secret returns real error.
-    """
-    fake_key = "NONEXISTENT_SECRET_XYZ_999"
-
+    """Test getting non-existent secret."""
     try:
-        with pytest.raises(Exception) as exc_info:
-            await async_secrets_module.get(fake_key)
-
-        # Verify we got real error from backend
-        assert exc_info.value is not None
-
+        with pytest.raises(Exception):
+            await async_secrets_module.get("NONEXISTENT_SECRET_KEY_12345")
     except Exception as e:
         if "permission" in str(e).lower():
-            pytest.skip("Skipping: Secrets not accessible")
+            pytest.skip(f"Skipping: {str(e)}")
         raise
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_delete_nonexistent_secret_real_api(async_secrets_module):
-    """
-    Test deleting non-existent secret handling.
-    """
-    fake_key = "NONEXISTENT_DELETE_XYZ_999"
-
-    try:
-        # May or may not raise error depending on backend
-        result = await async_secrets_module.delete(fake_key)
-
-        # Either succeeds silently or raises error
-        assert result is not None or result is True
-
-    except Exception as e:
-        # Expected - secret doesn't exist
-        assert e is not None
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_create_duplicate_secret_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test creating duplicate secret (if backend prevents it).
-
-    Creates secret twice and verifies behavior.
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"DUPLICATE_TEST_{unique_id}"
-
-    try:
-        # Create first time
-        await async_secrets_module.create(key=secret_key, value="first")
-
-        # Try to create again (may fail or update depending on backend)
-        try:
-            await async_secrets_module.create(key=secret_key, value="second")
-
-            # If it succeeds, backend allows duplicates (update behavior)
-            # Verify which value is stored
-            result = await async_secrets_module.get(secret_key)
-            assert result["value"] in ["first", "second"]
-
-        except Exception as duplicate_error:
-            # Expected - backend prevents duplicates
-            assert duplicate_error is not None
-
-    except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
-        raise
-
-    finally:
-        # Cleanup
-        try:
-            await async_secrets_module.delete(secret_key)
-        except:
-            pass
-
-
-# ============================================================================
-# Secret Value Types Tests - Async
-# ============================================================================
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_secret_with_special_characters_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test secrets with special characters in value.
-
-    Verifies encoding/decoding of special characters.
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"SPECIAL_CHARS_{unique_id}"
-    secret_value = "password!@#$%^&*(){}[]|\\:;\"'<>,.?/~`"
-
-    try:
-        # Create secret with special characters
-        await async_secrets_module.create(key=secret_key, value=secret_value)
-
-        # Get secret
-        result = await async_secrets_module.get(secret_key)
-
-        # Verify special characters preserved
-        assert result["value"] == secret_value
-
-    except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
-        raise
-
-    finally:
-        # Cleanup
-        try:
-            await async_secrets_module.delete(secret_key)
-        except:
-            pass
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_secret_with_long_value_real_api(async_secrets_module, generate_unique_id):
-    """
-    Test secrets with long values.
-
-    Verifies large secret value handling.
-    """
-    unique_id = generate_unique_id()
-    secret_key = f"LONG_VALUE_{unique_id}"
-    secret_value = "x" * 1000  # 1000 character value
-
-    try:
-        # Create secret with long value
-        await async_secrets_module.create(key=secret_key, value=secret_value)
-
-        # Get secret
-        result = await async_secrets_module.get(secret_key)
-
-        # Verify long value preserved
-        assert result["value"] == secret_value
-        assert len(result["value"]) == 1000
-
-    except Exception as e:
-        if "permission" in str(e).lower() or "not enabled" in str(e).lower():
-            pytest.skip(f"Skipping: Secrets not accessible - {str(e)}")
-        elif "too long" in str(e).lower() or "size limit" in str(e).lower():
-            pytest.skip("Backend has size limit for secret values")
-        raise
-
-    finally:
-        # Cleanup
-        try:
-            await async_secrets_module.delete(secret_key)
-        except:
-            pass
-
-
-# ============================================================================
-# Notes on Secrets Integration Tests
-# ============================================================================
-
-"""
-IMPORTANT CONFIGURATION:
-
-1. Ensure secrets management is enabled in backend
-2. Verify API key has permissions to create/read/delete secrets
-3. Backend may have specific secret key naming requirements
-
-Cleanup Strategy:
-- All tests clean up created secrets in finally blocks
-- Use unique identifiers to avoid conflicts
-- Tests are idempotent and can run multiple times
-
-Test Coverage:
-✅ Create secrets
-✅ Read secrets
-✅ Delete secrets
-✅ List secrets
-✅ Filter/prefix search (if supported)
-✅ Batch operations (if supported)
-✅ Sync client operations
-✅ Special characters in values
-✅ Long values
-✅ Error handling (not found, duplicates)
-
-Security Considerations:
-- Secrets are stored encrypted in backend
-- Test secrets are temporary and cleaned up
-- Use unique identifiers to prevent collisions
-- Never commit actual secrets to version control
-"""

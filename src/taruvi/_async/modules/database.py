@@ -5,7 +5,7 @@ Provides methods for:
 - Querying data tables
 - Filtering, sorting, pagination
 - CRUD operations on records
-- Edge (relationship) management
+- Edge (relationship) management via .edges()
 - Graph/tree queries
 """
 
@@ -36,6 +36,11 @@ class _BaseQueryBuilder(BaseModule):
         super().__init__(http_client, config)
         self.app_slug = self._ensure_app_slug(app_slug)
         self.table_name = table_name
+        self._is_edges: bool = False
+        self._record_id: Optional[str] = None
+        self._operation: Optional[str] = None
+        self._body: Any = None
+        self._delete_ids: Optional[list[int]] = None
         self._filters: dict[str, Any] = {}
         self._sort_field: Optional[str] = None
         self._sort_order: str = "asc"
@@ -46,68 +51,81 @@ class _BaseQueryBuilder(BaseModule):
         self._include: Optional[str] = None
         self._depth: Optional[int] = None
         self._relationship_types: list[str] = []
+        self._aggregates: list[str] = []
+        self._group_by: list[str] = []
+        self._having: Optional[str] = None
+        self._search: Optional[str] = None
+
+    def _get_table_name(self) -> str:
+        return f"{self.table_name}_edges" if self._is_edges else self.table_name
 
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
-        """Add a filter (shared logic)."""
         if operator == "eq":
             self._filters[field] = value
         else:
             self._filters[f"{field}__{operator}"] = value
 
     def _set_sort(self, field: str, order: str) -> None:
-        """Set sort (shared logic)."""
         self._sort_field = field
         self._sort_order = order
 
     def _set_page_size(self, page_size: int) -> None:
-        """Set page size (shared logic)."""
         self._page_size = page_size
 
     def _set_page(self, page: int) -> None:
-        """Set page number (shared logic)."""
         self._page = page
 
     def _add_populate(self, *fields: str) -> None:
-        """Add populate fields (shared logic)."""
         self._populate_fields.extend(fields)
 
     def _set_format(self, format_type: str) -> None:
-        """Set response format (shared logic)."""
         self._format = format_type
 
     def _set_include(self, direction: str) -> None:
-        """Set traversal direction (shared logic)."""
         self._include = direction
 
     def _set_depth(self, depth: int) -> None:
-        """Set traversal depth (shared logic)."""
         self._depth = depth
 
     def _set_relationship_types(self, types: list[str]) -> None:
-        """Set relationship types (shared logic)."""
         self._relationship_types = types
+
+    def _add_aggregate(self, *expressions: str) -> None:
+        self._aggregates.extend(expressions)
+
+    def _set_group_by(self, *fields: str) -> None:
+        self._group_by = list(fields)
+
+    def _set_having(self, condition: str) -> None:
+        self._having = condition
+
+    def _set_search(self, query: str) -> None:
+        self._search = query
 
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
+        ordering = None
+        if self._sort_field:
+            ordering = f"-{self._sort_field}" if self._sort_order == "desc" else self._sort_field
         params = build_params_util(
-            _sort=self._sort_field,
-            _order=self._sort_order if self._sort_field else None,
+            ordering=ordering,
             page_size=self._page_size,
             page=self._page if self._page != 1 else None,
             populate=",".join(self._populate_fields) if self._populate_fields else None,
             format=self._format,
             include=self._include,
             depth=self._depth,
+            _aggregate=",".join(self._aggregates) if self._aggregates else None,
+            _group_by=",".join(self._group_by) if self._group_by else None,
+            _having=self._having,
+            search=self._search,
         )
 
-        # Add relationship types (can be multiple)
         if self._relationship_types:
             for rel_type in self._relationship_types:
                 params.setdefault("relationship_type", []).append(rel_type)
 
-        # Merge filters
         params.update(self._filters)
-
         return params
 
 
@@ -118,133 +136,154 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         self.client = client
         super().__init__(client._http_client, client._config, table_name, app_slug)
 
+    # -- Edge toggle --
+
+    def edges(self) -> "AsyncQueryBuilder":
+        """Target the edges table (e.g., employees → employees_edges)."""
+        self._is_edges = True
+        return self
+
+    # -- CRUD setters (lazy — actual request happens in execute()) --
+
+    def get(self, record_id: str | int) -> "AsyncQueryBuilder":
+        """Set record ID for GET or as target for update/delete."""
+        self._record_id = str(record_id)
+        return self
+
+    def create(self, body: dict[str, Any] | list[dict[str, Any]]) -> "AsyncQueryBuilder":
+        """Stage a POST (create) operation."""
+        self._operation = "POST"
+        self._body = body
+        return self
+
+    def update(self, body: dict[str, Any] | list[dict[str, Any]]) -> "AsyncQueryBuilder":
+        """Stage a PATCH (update) operation. Call .get(id) first for single record."""
+        self._operation = "PATCH"
+        self._body = body
+        return self
+
+    def delete(self, record_id_or_ids: str | int | list[int] | None = None) -> "AsyncQueryBuilder":
+        """Stage a DELETE operation. Pass int[] for bulk edge delete, str/int for single record."""
+        self._operation = "DELETE"
+        if isinstance(record_id_or_ids, list):
+            self._delete_ids = record_id_or_ids
+        elif record_id_or_ids is not None:
+            self._record_id = str(record_id_or_ids)
+        return self
+
+    # -- Filter & query methods --
+
     def filter(self, field: str, operator: str, value: Any) -> "AsyncQueryBuilder":
-        """Add a filter to the query."""
         self._add_filter(field, operator, value)
         return self
 
+    def search(self, query: str) -> "AsyncQueryBuilder":
+        self._set_search(query)
+        return self
+
     def sort(self, field: str, order: str = "asc") -> "AsyncQueryBuilder":
-        """Add sorting to the query."""
         self._set_sort(field, order)
         return self
 
     def page_size(self, page_size: int) -> "AsyncQueryBuilder":
-        """Set number of records per page."""
         self._set_page_size(page_size)
         return self
 
     def page(self, page: int) -> "AsyncQueryBuilder":
-        """Set page number (1-indexed)."""
         self._set_page(page)
         return self
 
     def populate(self, *fields: str) -> "AsyncQueryBuilder":
-        """Populate related fields (foreign keys)."""
         self._add_populate(*fields)
         return self
 
+    # -- Graph traversal methods --
+
     def format(self, format_type: str) -> "AsyncQueryBuilder":
-        """
-        Set response format for hierarchical/graph data.
-
-        Args:
-            format_type: Response format - 'flat' (default), 'tree', or 'graph'
-
-        Returns:
-            AsyncQueryBuilder for chaining
-
-        Example:
-            # Get data in tree format
-            tree = await db.query('categories').format('tree').get()
-
-            # Get data in graph format
-            graph = await db.query('categories').format('graph').get()
-        """
+        """Set response format: 'tree' or 'graph'."""
         self._set_format(format_type)
         return self
 
     def include(self, direction: str) -> "AsyncQueryBuilder":
-        """
-        Set traversal direction for graph/tree queries.
-
-        Args:
-            direction: Traversal direction - 'descendants', 'ancestors', or 'both'
-
-        Returns:
-            AsyncQueryBuilder for chaining
-
-        Example:
-            # Get node and all descendants
-            nodes = await db.query('categories') \\
-                .filter('id', 'eq', 5) \\
-                .include('descendants') \\
-                .get()
-        """
+        """Set traversal direction: 'descendants', 'ancestors', or 'both'."""
         self._set_include(direction)
         return self
 
     def depth(self, depth: int) -> "AsyncQueryBuilder":
-        """
-        Set maximum traversal depth for graph/tree queries.
-
-        Args:
-            depth: Maximum depth to traverse (e.g., 3 for 3 levels)
-
-        Returns:
-            AsyncQueryBuilder for chaining
-
-        Example:
-            # Get node and 3 levels of descendants
-            nodes = await db.query('categories') \\
-                .filter('id', 'eq', 5) \\
-                .include('descendants') \\
-                .depth(3) \\
-                .get()
-        """
+        """Set maximum traversal depth."""
         self._set_depth(depth)
         return self
 
-    def relationship_types(self, types: list[str]) -> "AsyncQueryBuilder":
-        """
-        Filter by relationship types for multi-type graphs.
-
-        Args:
-            types: List of relationship types to include (e.g., ['manager', 'dotted_line'])
-
-        Returns:
-            AsyncQueryBuilder for chaining
-
-        Example:
-            # Get only manager and dotted_line relationships
-            nodes = await db.query('employees') \\
-                .relationship_types(['manager', 'dotted_line']) \\
-                .include('descendants') \\
-                .get()
-        """
-        self._set_relationship_types(types)
+    def types(self, relationship_types: list[str]) -> "AsyncQueryBuilder":
+        """Filter by relationship types (e.g., ['manager', 'dotted_line'])."""
+        self._set_relationship_types(relationship_types)
         return self
 
-    async def execute(self) -> list[dict[str, Any]]:
-        """Execute query and get results."""
-        path = _DATATABLE_DATA.format(
-            app_slug=self.app_slug,
-            table_name=self.table_name
-        )
+    # -- Aggregation methods --
+
+    def aggregate(self, *expressions: str) -> "AsyncQueryBuilder":
+        """Add aggregate functions (e.g., 'count(*)', 'sum(price)')."""
+        self._add_aggregate(*expressions)
+        return self
+
+    def group_by(self, *fields: str) -> "AsyncQueryBuilder":
+        """Add GROUP BY clause for aggregations."""
+        self._set_group_by(*fields)
+        return self
+
+    def having(self, condition: str) -> "AsyncQueryBuilder":
+        """Add HAVING clause to filter aggregated results."""
+        self._set_having(condition)
+        return self
+
+    # -- Execution --
+
+    def _build_path(self) -> str:
+        table = self._get_table_name()
+        if self._record_id:
+            return _DATATABLE_RECORD.format(
+                app_slug=self.app_slug, table_name=table, record_id=self._record_id
+            )
+        return _DATATABLE_DATA.format(app_slug=self.app_slug, table_name=table)
+
+    async def execute(self) -> dict[str, Any]:
+        """Execute the staged operation (GET/POST/PATCH/DELETE)."""
+        path = self._build_path()
         params = self.build_params()
+        op = self._operation or "GET"
+
+        if op == "POST":
+            return await self._http.post(path, json=self._body)
+        if op == "PATCH":
+            if not self._record_id:
+                raise ValueError("PATCH requires a record ID. Call .get(id) first.")
+            return await self._http.patch(path, json=self._body)
+        if op == "DELETE":
+            if self._delete_ids:
+                ids_param = ",".join(str(i) for i in self._delete_ids)
+                return await self._http.delete(path, params={"ids": ids_param})
+            if self._body:
+                return await self._http.delete(path, json=self._body)
+            return await self._http.delete(path)
+
+        # Default: GET
         response = await self._http.get(path, params=params)
-        return self._extract_data_list(response)
+        return {
+            "data": self._extract_data_list(response),
+            "total": response.get("total", 0)
+        }
 
     async def first(self) -> Optional[dict[str, Any]]:
         """Get first result."""
-        results = await self.page_size(1).execute()
-        return results[0] if results else None
+        result = await self.page_size(1).execute()
+        data = result.get("data", [])
+        if isinstance(data, list):
+            return data[0] if data else None
+        return data
 
     async def count(self) -> int:
         """Get count of matching records."""
-        path = _DATATABLE_DATA.format(
-            app_slug=self.app_slug,
-            table_name=self.table_name
-        )
+        path = self._build_path()
         params = self.build_params()
         params["_count"] = "true"
         response = await self._http.get(path, params=params)
@@ -255,232 +294,12 @@ class AsyncDatabaseModule(BaseModule):
     """Database API operations."""
 
     def __init__(self, client: "AsyncClient") -> None:
-        """Initialize Database module."""
         self.client = client
         super().__init__(client._http_client, client._config)
 
     def from_(self, table_name: str, app_slug: Optional[str] = None) -> AsyncQueryBuilder:
         """Create a query builder for a table."""
         return AsyncQueryBuilder(self.client, table_name, app_slug)
-
-    async def list_edges(
-        self,
-        table_name: str,
-        *,
-        from_id: Optional[list[int]] = None,
-        to_id: Optional[list[int]] = None,
-        types: Optional[list[str]] = None,
-        page: int = 1,
-        page_size: int = 100,
-        app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """
-        List edges (relationships) with filters.
-
-        Args:
-            table_name: Name of the table
-            from_id: Filter by source node ID(s)
-            to_id: Filter by target node ID(s)
-            types: Filter by relationship types
-            page: Page number (1-indexed, default: 1)
-            page_size: Number of edges per page (default: 100)
-            app_slug: Optional app slug override
-
-        Returns:
-            Dict with 'data' list, 'total' count, and 'pagination':
-            {
-                "data": [
-                    {"id": 1, "from": 5, "to": 10, "type": "manager", "metadata": {...}},
-                    ...
-                ],
-                "total": 42,
-                "pagination": {...}
-            }
-
-        Note:
-            Response uses 'from' and 'to' field names (not 'from_id'/'to_id')
-
-        Example:
-            result = await db.list_edges(
-                'employees',
-                from_id=[1, 2],
-                types=['manager', 'dotted_line'],
-                page=1,
-                page_size=10
-            )
-            edges = result['data']
-            total = result['total']
-        """
-        app_slug = self._ensure_app_slug(app_slug)
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/"
-
-        params = {}
-        if from_id:
-            for fid in from_id:
-                params.setdefault("from_id", []).append(fid)
-        if to_id:
-            for tid in to_id:
-                params.setdefault("to_id", []).append(tid)
-        if types:
-            for t in types:
-                params.setdefault("types", []).append(t)
-        if page is not None:
-            params["page"] = page
-        if page_size is not None:
-            params["page_size"] = page_size
-
-        response = await self._http.get(path, params=params)
-        return response
-
-    async def create_edges(
-        self,
-        table_name: str,
-        edges: list[dict[str, Any]],
-        *,
-        app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """
-        Create multiple edges (relationships) at once.
-
-        Args:
-            table_name: Name of the table
-            edges: List of edge dicts with 'from_id', 'to_id', 'type', and optional 'metadata'
-            app_slug: Optional app slug override
-
-        Returns:
-            Dict with 'data' list and 'total' count:
-            {
-                "data": [
-                    {"id": 1, "from_id": 5, "to_id": 10, "type": "manager", "metadata": {...}},
-                    ...
-                ],
-                "total": 3,
-                "message": "Edges created successfully"
-            }
-
-        Example:
-            result = await db.create_edges('employees', [
-                {'from_id': 1, 'to_id': 2, 'type': 'manager', 'metadata': {'primary': True}},
-                {'from_id': 1, 'to_id': 3, 'type': 'manager'},
-                {'from_id': 5, 'to_id': 2, 'type': 'dotted_line'}
-            ])
-        """
-        app_slug = self._ensure_app_slug(app_slug)
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/"
-
-        # Convert edges to API format (use 'from' and 'to' as aliases)
-        formatted_edges = []
-        for edge in edges:
-            formatted_edge = {
-                "from": edge.get("from_id") or edge.get("from"),
-                "to": edge.get("to_id") or edge.get("to"),
-                "type": edge.get("type", "default"),
-            }
-            if "metadata" in edge:
-                formatted_edge["metadata"] = edge["metadata"]
-            formatted_edges.append(formatted_edge)
-
-        response = await self._http.post(path, json=formatted_edges)
-        return response
-
-    async def delete_edges(
-        self,
-        table_name: str,
-        edge_ids: list[int],
-        *,
-        app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """
-        Delete multiple edges (relationships) by IDs.
-
-        Args:
-            table_name: Name of the table
-            edge_ids: List of edge IDs to delete
-            app_slug: Optional app slug override
-
-        Returns:
-            Dict with deletion result:
-            {
-                "deleted": 5,
-                "message": "Successfully deleted 5 records"
-            }
-
-        Example:
-            result = await db.delete_edges('employees', edge_ids=[1, 2, 3])
-        """
-        app_slug = self._ensure_app_slug(app_slug)
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/"
-
-        payload = {"edge_ids": edge_ids}
-        response = await self._http.delete(path, json=payload)
-        return response
-
-    async def update_edge(
-        self,
-        table_name: str,
-        edge_id: int,
-        data: dict[str, Any],
-        *,
-        app_slug: Optional[str] = None,
-    ) -> dict[str, Any]:
-        """
-        Update a single edge (relationship) by ID.
-
-        Args:
-            table_name: Name of the table
-            edge_id: Edge ID to update
-            data: Update data with 'from_id'/'from', 'to_id'/'to', 'type', and/or 'metadata'
-            app_slug: Optional app slug override
-
-        Returns:
-            Dict with updated edge:
-            {
-                "data": {
-                    "id": 10,
-                    "from": 1,
-                    "to": 2,
-                    "type": "manager",
-                    "metadata": {...}
-                }
-            }
-
-        Note:
-            - SDK accepts both 'from_id'/'to_id' and 'from'/'to' in input
-            - Backend API uses 'from'/'to' in requests/responses
-            - SDK automatically transforms 'from_id'/'to_id' to 'from'/'to'
-
-        Example:
-            result = await db.update_edge('employees', 10, {
-                'from_id': 1,
-                'to_id': 2,
-                'type': 'manager',
-                'metadata': {'effective_end_date': '2026-01-29'}
-            })
-            updated_edge = result['data']
-        """
-        app_slug = self._ensure_app_slug(app_slug)
-        path = f"/api/apps/{app_slug}/datatables/{table_name}/edges/{edge_id}/"
-
-        # Transform from_id/to_id to from/to for backend API
-        formatted_data = {}
-        if "from_id" in data:
-            formatted_data["from"] = data["from_id"]
-        elif "from" in data:
-            formatted_data["from"] = data["from"]
-        
-        if "to_id" in data:
-            formatted_data["to"] = data["to_id"]
-        elif "to" in data:
-            formatted_data["to"] = data["to"]
-        
-        if "type" in data:
-            formatted_data["type"] = data["type"]
-        
-        if "metadata" in data:
-            formatted_data["metadata"] = data["metadata"]
-
-        response = await self._http.patch(path, json=formatted_data)
-        return response
 
     async def get(
         self,
@@ -489,25 +308,10 @@ class AsyncDatabaseModule(BaseModule):
         *,
         app_slug: Optional[str] = None,
     ) -> DatabaseRecord:
-        """
-        Get a single record by ID.
-
-        Args:
-            table_name: Name of the table
-            record_id: Record ID
-            app_slug: Optional app slug override
-
-        Returns:
-            DatabaseRecord dict with record data
-
-        Example:
-            record = await db.get('users', 123)
-        """
+        """Get a single record by ID."""
         app_slug = self._ensure_app_slug(app_slug)
         path = _DATATABLE_RECORD.format(
-            app_slug=app_slug,
-            table_name=table_name,
-            record_id=str(record_id)
+            app_slug=app_slug, table_name=table_name, record_id=str(record_id)
         )
         response = await self._http.get(path)
         return self._extract_data(response)
@@ -519,28 +323,7 @@ class AsyncDatabaseModule(BaseModule):
         *,
         app_slug: Optional[str] = None,
     ) -> DatabaseRecord | list[DatabaseRecord]:
-        """
-        Create single or multiple records.
-
-        Args:
-            table_name: Name of the table
-            data: Single record (dict) or multiple records (list of dicts)
-            app_slug: Optional app slug override
-
-        Returns:
-            DatabaseRecord dict if input was dict
-            List of DatabaseRecord dicts if input was list
-
-        Examples:
-            # Single record
-            record = await db.create('users', {'name': 'John', 'age': 30})
-
-            # Bulk records
-            records = await db.create('users', [
-                {'name': 'Alice', 'age': 25},
-                {'name': 'Bob', 'age': 35}
-            ])
-        """
+        """Create single or multiple records."""
         app_slug = self._ensure_app_slug(app_slug)
         path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
         response = await self._http.post(path, json=data)
@@ -554,50 +337,20 @@ class AsyncDatabaseModule(BaseModule):
         *,
         app_slug: Optional[str] = None,
     ) -> DatabaseRecord | list[DatabaseRecord]:
-        """
-        Update single record by ID or multiple records in bulk.
-
-        Args:
-            table_name: Name of the table
-            record_id:
-                - For single update: Record ID (int/str)
-                - For bulk update: List of dicts with 'id' field
-            data: Update data (only for single record update)
-            app_slug: Optional app slug override
-
-        Returns:
-            DatabaseRecord dict if single update
-            List of DatabaseRecord dicts if bulk update
-
-        Examples:
-            # Single record update
-            record = await db.update('users', 123, {'name': 'John Updated'})
-
-            # Bulk record update
-            records = await db.update('users', [
-                {'id': 1, 'status': 'active'},
-                {'id': 2, 'status': 'inactive'},
-                {'id': 3, 'age': 25}
-            ])
-        """
+        """Update single record by ID or multiple records in bulk."""
         app_slug = self._ensure_app_slug(app_slug)
 
-        # Detect single vs bulk update
         if isinstance(record_id, list):
-            # Bulk update
             if data is not None:
                 raise ValueError("data parameter not allowed for bulk update")
             path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
             response = await self._http.patch(path, json=record_id)
             return self._extract_data_list(response)
         else:
-            # Single record update
             if data is None:
                 raise ValueError("data is required for single record update")
             path = _DATATABLE_RECORD.format(
-                app_slug=app_slug,
-                table_name=table_name,
-                record_id=str(record_id)
+                app_slug=app_slug, table_name=table_name, record_id=str(record_id)
             )
             response = await self._http.patch(path, json=data)
             return self._extract_data(response)
@@ -611,68 +364,32 @@ class AsyncDatabaseModule(BaseModule):
         filter: Optional[dict[str, Any]] = None,
         app_slug: Optional[str] = None,
     ) -> None | dict[str, Any]:
-        """
-        Delete single record by ID, multiple records by IDs, or records matching filter.
-
-        Args:
-            table_name: Name of the table
-            record_id: Single record ID (for single delete)
-            ids: List of record IDs (for bulk delete by IDs)
-            filter: Filter dict (for bulk delete by filter)
-            app_slug: Optional app slug override
-
-        Returns:
-            None for single delete
-            Dict with deleted_count for bulk delete
-
-        Examples:
-            # Single record delete
-            await db.delete('users', 123)
-
-            # Bulk delete by IDs
-            result = await db.delete('users', ids=[1, 2, 3])
-            # Returns: {"deleted": 3, "message": "..."}
-
-            # Bulk delete by filter
-            result = await db.delete('users', filter={'status': 'inactive'})
-            # Returns: {"deleted": 42, "message": "..."}
-        """
+        """Delete single record by ID, multiple by IDs, or by filter."""
         app_slug = self._ensure_app_slug(app_slug)
 
-        # Validate exactly one delete method is provided
         methods_provided = sum([
             record_id is not None,
             ids is not None,
             filter is not None
         ])
-
         if methods_provided == 0:
             raise ValueError("Provide either record_id, ids, or filter parameter")
         if methods_provided > 1:
             raise ValueError("Provide only ONE of: record_id, ids, or filter")
 
-        # Single record delete
         if record_id is not None:
             path = _DATATABLE_RECORD.format(
-                app_slug=app_slug,
-                table_name=table_name,
-                record_id=str(record_id)
+                app_slug=app_slug, table_name=table_name, record_id=str(record_id)
             )
             await self._http.delete(path)
             return None
 
-        # Bulk delete by IDs or filter
         path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
 
         if ids is not None:
-            # Delete by IDs - pass as query parameter
             ids_str = ','.join(str(id) for id in ids)
-            response = await self._http.delete(path, params={"ids": ids_str})
-            return response
+            return await self._http.delete(path, params={"ids": ids_str})
 
         if filter is not None:
-            # Delete by filter - pass as JSON query parameter
             import json
-            filter_json = json.dumps(filter)
-            response = await self._http.delete(path, params={"filter": filter_json})
-            return response
+            return await self._http.delete(path, params={"filter": json.dumps(filter)})

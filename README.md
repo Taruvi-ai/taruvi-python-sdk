@@ -19,6 +19,7 @@ Official Python SDK for the Taruvi Cloud Platform - A modern, type-safe SDK for 
 - [Usage Examples](#usage-examples)
   - [Functions](#functions)
   - [Database Operations](#database-operations)
+  - [Graph & Edges](#graph--edges)
   - [User Authentication & Management](#user-authentication--management)
   - [Storage & Files](#storage--files)
   - [Secrets Management](#secrets-management)
@@ -72,12 +73,15 @@ The Taruvi Python SDK provides a clean, pythonic interface to all platform capab
 
 🗃️ **Database Query Builder**
 - Fluent API: `client.database.from_("users").filter(...).sort(...).execute()`
+- Full-text search with `search()` (PostgreSQL tsvector)
 - Pagination with `page_size()` and `page()`
 - Foreign key population with `populate()`
 - Filtering with operators: eq, gt, lt, gte, lte, ne, contains, etc.
-- **Edge management**: Create, list, and delete relationships
-- **Graph queries**: Tree/graph formats with traversal (descendants, ancestors)
-- **Relationship filtering**: Multi-type relationship support
+
+🔗 **Graph & Edge API**
+- Graph/tree traversal: `client.database.from_("employees").include("descendants").depth(3).execute()`
+- Edge CRUD via query builder: `.edges().create()`, `.edges().get(id).update()`, `.edges().delete()`
+- Multi-type relationship support with `.types()`
 
 ⚡ **High-Performance Sync Client**
 - Native `httpx.Client` (blocking) - NOT asyncio wrapper
@@ -156,8 +160,8 @@ result = auth_client.functions.execute("process-order", params={"order_id": 123}
 print(result["data"])
 
 # Query database
-users = auth_client.database.from_("users").page_size(10).execute()
-print(f"Found {len(users)} users")
+result = auth_client.database.from_("users").page_size(10).execute()
+print(f"Found {result['total']} users")
 ```
 
 ### Async Client
@@ -185,8 +189,8 @@ async def main():
     print(result["data"])
 
     # Query database
-    users = await auth_client.database.from_("users").page_size(10).execute()
-    print(f"Found {len(users)} users")
+    result = await auth_client.database.from_("users").page_size(10).execute()
+    print(f"Found {result['total']} users")
 
     await auth_client.close()
 
@@ -210,9 +214,9 @@ def main(params, user_data):
     result = client.functions.execute("helper", {"test": True})
 
     # Query database
-    users = client.database.from_("users").page_size(10).execute()
+    result = client.database.from_("users").page_size(10).execute()
 
-    return {"result": result, "user_count": len(users)}
+    return {"result": result, "user_count": result["total"]}
 ```
 
 ---
@@ -493,18 +497,20 @@ print(f"Result: {invocation['result']}")
 
 ```python
 # Simple query
-users = client.database.from_("users").execute()
+result = client.database.from_("users").execute()
+users = result["data"]
 
 # With filtering
-active_users = (
+result = (
     client.database.from_("users")
     .filter("is_active", "eq", True)
     .filter("age", "gte", 18)
     .execute()
 )
+active_users = result["data"]
 
 # With sorting and pagination
-users_page = (
+result = (
     client.database.from_("users")
     .filter("email", "contains", "@example.com")
     .sort("created_at", "desc")
@@ -512,13 +518,15 @@ users_page = (
     .page(1)
     .execute()
 )
+users_page = result["data"]
 
 # Populate foreign keys
-orders = (
+result = (
     client.database.from_("orders")
     .populate("customer", "product")  # Load related records
     .execute()
 )
+orders = result["data"]
 ```
 
 #### Filter Operators
@@ -535,6 +543,25 @@ orders = (
 .filter("email", "startswith", "test")  # Starts with
 .filter("email", "endswith", ".com")    # Ends with
 ```
+
+#### Full-Text Search
+
+```python
+# Search (requires search_vector field on table)
+result = client.database.from_("articles").search("machine learning").execute()
+
+# Combine with filters, sorting, pagination
+result = (
+    client.database.from_("articles")
+    .search("project roadmap")
+    .filter("is_published", "eq", True)
+    .sort("created_at", "desc")
+    .page_size(20)
+    .execute()
+)
+```
+
+**Note:** The table must have a `search_vector` field configured in its schema (via `x-search-fields`). The backend translates `?search=query` to a PostgreSQL full-text search using `tsvector`.
 
 #### Get Single Record
 
@@ -608,60 +635,16 @@ user_count = (
 print(f"Active users: {user_count}")
 ```
 
-#### Edge Management (Relationships)
+---
+
+### Graph & Edges
+
+#### Graph Traversal Queries
 
 ```python
-# List edges (relationships) with filters
-edges = client.database.list_edges(
-    "employees",
-    from_id=[1, 2],  # Filter by source nodes
-    types=["manager", "dotted_line"],  # Filter by relationship types
-    page=1,          # Page number (1-indexed)
-    page_size=10     # Records per page
-)
-print(f"Found {edges['total']} relationships")
-
-# Create edges (bulk)
-result = client.database.create_edges("employees", [
-    {
-        "from_id": 1,  # CEO
-        "to_id": 2,    # VP Engineering
-        "type": "manager",
-        "metadata": {"primary": True, "effective_date": "2024-01-01"}
-    },
-    {
-        "from_id": 2,  # VP Engineering
-        "to_id": 10,   # Senior Engineer
-        "type": "manager"
-    },
-    {
-        "from_id": 5,  # Project Manager
-        "to_id": 10,   # Senior Engineer
-        "type": "dotted_line",
-        "metadata": {"project": "AI Initiative"}
-    }
-])
-print(f"Created {result['total']} edges")
-
-# Update edge
-result = client.database.update_edge("employees", 10, {
-    "metadata": {"effective_end_date": "2026-01-29"}
-})
-print(f"Updated edge {result['data']['id']}")
-
-# Delete edges (bulk)
-result = client.database.delete_edges("employees", edge_ids=[1, 2, 3])
-print(f"Deleted {result['deleted']} edges")
-```
-
-**Note:** Backend supports `page`/`page_size` pagination (not `limit`/`offset`).
-
-#### Graph & Tree Queries
-
-```python
-# Get data in tree format (hierarchical)
+# Get descendants in tree format
 tree = (
-    client.database.from_("categories")
+    client.database.from_("employees")
     .filter("id", "eq", 1)
     .format("tree")
     .include("descendants")
@@ -672,41 +655,78 @@ tree = (
 # Get org chart (manager relationships only)
 org_chart = (
     client.database.from_("employees")
-    .filter("id", "eq", 1)  # CEO
+    .filter("id", "eq", 1)
     .format("tree")
     .include("descendants")
     .depth(5)
-    .relationship_types(["manager"])
+    .types(["manager"])
     .execute()
 )
 
 # Get reporting chain (ancestors)
 chain = (
     client.database.from_("employees")
-    .filter("id", "eq", 10)  # Employee
-    .format("flat")
+    .filter("id", "eq", 10)
     .include("ancestors")
-    .relationship_types(["manager"])
+    .types(["manager"])
     .execute()
 )
 
-# Multi-type graph (manager + dotted line)
+# Multi-type graph
 graph = (
     client.database.from_("employees")
-    .filter("id", "eq", 1)
     .format("graph")
-    .include("descendants")
+    .types(["manager", "dotted_line"])
     .depth(3)
-    .relationship_types(["manager", "dotted_line"])
     .execute()
 )
 ```
 
-**Graph Query Options:**
-- `.format()` - Response format: `"flat"` (default), `"tree"`, or `"graph"`
-- `.include()` - Traversal direction: `"descendants"`, `"ancestors"`, or `"both"`
-- `.depth()` - Maximum traversal depth (e.g., `3` for 3 levels)
-- `.relationship_types()` - Filter by relationship types (e.g., `["manager", "dotted_line"]`)
+**Traversal Options:**
+- `.format(fmt)` - Response format: `"tree"` or `"graph"`
+- `.include(direction)` - Traversal direction: `"descendants"`, `"ancestors"`, or `"both"`
+- `.depth(n)` - Maximum traversal depth
+- `.types(list)` - Filter by relationship types (e.g., `["manager", "dotted_line"]`)
+
+#### Edge CRUD
+
+```python
+# List edges
+edges = client.database.from_("employees").edges().execute()
+
+# List edges with filters
+edges = (
+    client.database.from_("employees").edges()
+    .filter("type", "eq", "manager")
+    .page_size(10).page(1)
+    .execute()
+)
+
+# Create edges
+result = (
+    client.database.from_("employees").edges()
+    .create([
+        {"from_id": 1, "to_id": 2, "type": "manager", "metadata": {"primary": True}},
+        {"from_id": 2, "to_id": 10, "type": "manager"},
+        {"from_id": 5, "to_id": 10, "type": "dotted_line", "metadata": {"project": "AI Initiative"}}
+    ])
+    .execute()
+)
+
+# Update edge
+result = (
+    client.database.from_("employees").edges()
+    .get("10").update({"metadata": {"effective_end_date": "2026-01-29"}})
+    .execute()
+)
+
+# Delete edges
+result = (
+    client.database.from_("employees").edges()
+    .delete([9, 10])
+    .execute()
+)
+```
 
 ---
 
@@ -1085,6 +1105,14 @@ print(settings['site_name'])
 print(settings['settings'])
 ```
 
+#### Get User Attributes
+
+```python
+# Get all user attributes defined in the site
+attributes = client.settings.user_attributes()
+print(attributes)
+```
+
 ---
 
 ## Async vs Sync
@@ -1107,7 +1135,8 @@ auth_client = client.auth.signInWithToken(token="jwt_here", token_type="jwt")
 
 # All methods are async
 result = await auth_client.functions.execute("my-func", params={})
-users = await auth_client.database.from_("users").execute()
+result = await auth_client.database.from_("users").execute()
+users = result["data"]
 ```
 
 ### When to Use Sync
@@ -1129,7 +1158,8 @@ auth_client = client.auth.signInWithToken(token="jwt_here", token_type="jwt")
 
 # All methods are blocking (no await)
 result = auth_client.functions.execute("my-func", params={})
-users = auth_client.database.from_("users").execute()
+result = auth_client.database.from_("users").execute()
+users = result["data"]
 ```
 
 ### Performance Note
@@ -1482,26 +1512,31 @@ mypy src/taruvi
 ```
 taruvi-python-sdk/
 ├── src/taruvi/
-│   ├── __init__.py           # Public API exports
-│   ├── client.py             # Async client & factory
-│   ├── sync_client.py        # Sync client
+│   ├── __init__.py           # Public API exports & Client factory
 │   ├── config.py             # Configuration
-│   ├── auth.py               # Auth manager
 │   ├── exceptions.py         # Exception hierarchy
-│   ├── http_client.py        # Async HTTP client
-│   ├── sync_http_client.py   # Sync HTTP client
 │   ├── runtime.py            # Runtime detection
-│   └── modules/              # API modules
-│       ├── functions.py
-│       ├── database.py
-│       ├── auth.py
-│       ├── storage.py
-│       ├── secrets.py
-│       ├── policy.py
-│       ├── app.py
-│       └── settings.py
+│   ├── _async/               # Async implementation
+│   │   ├── client.py         # AsyncClient
+│   │   ├── http_client.py    # Async HTTP client
+│   │   └── modules/
+│   │       ├── functions.py
+│   │       ├── database.py       # Includes graph traversal & edge CRUD
+│   │       ├── auth.py
+│   │       ├── storage.py
+│   │       ├── secrets.py
+│   │       ├── policy.py
+│   │       ├── users.py
+│   │       ├── analytics.py
+│   │       ├── app.py
+│   │       └── settings.py
+│   └── _sync/                # Sync implementation (auto-generated)
+│       ├── client.py
+│       ├── http_client.py
+│       └── modules/          # Mirrors _async/modules/
 ├── tests/                    # Test suite
 ├── examples/                 # Usage examples
+├── _unasync.py              # Sync code generator
 ├── pyproject.toml           # Project configuration
 ├── LICENSE                  # MIT License
 └── README.md               # This file
