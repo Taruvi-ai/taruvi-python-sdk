@@ -166,5 +166,9 @@ class BaseHTTPClient:
         if response.status_code >= 400:
             self._handle_error_response(response)
 
+        # 204 No Content has no body to parse
+        if response.status_code == 204:
+            return {}
+
         # Parse and return JSON
         return self._parse_json_response(response)
