@@ -329,6 +329,43 @@ class UsersModule(BaseModule):
         response = self._http.post(path, json=body)
         return response
 
+    def get_preferences(self) -> dict[str, Any]:
+        """
+        Get current user's preferences. Auto-creates with defaults if not exists.
+
+        Returns:
+            dict with date_format, time_format, timezone, theme, widget_config
+
+        Example:
+            ```python
+            prefs = client.users.get_preferences()
+            print(prefs["data"]["theme"])
+            ```
+        """
+        return self._http.get("/api/users/me/preferences/")
+
+    def update_preferences(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Create or update current user's preferences (upsert).
+
+        Args:
+            data: Preference fields to update:
+                - date_format: "YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD-MMM-YYYY"
+                - time_format: "24h", "12h"
+                - timezone: IANA timezone (e.g. "Asia/Kolkata")
+                - theme: "light", "dark"
+                - widget_config: dict with arbitrary UI config
+
+        Returns:
+            dict with updated preference data
+
+        Example:
+            ```python
+            prefs = client.users.update_preferences({"theme": "dark", "timezone": "Asia/Kolkata"})
+            ```
+        """
+        return self._http.put("/api/users/me/preferences/", json=data)
+
     def revoke_roles(
         self,
         roles: list[str],

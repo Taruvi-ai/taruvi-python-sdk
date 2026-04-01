@@ -866,6 +866,24 @@ client.users.revoke_roles(
 apps = client.users.apps("alice")
 ```
 
+#### User Preferences
+
+```python
+# Get current user's preferences (auto-creates with defaults)
+prefs = client.users.get_preferences()
+print(prefs["data"]["theme"])       # "light"
+print(prefs["data"]["timezone"])    # "UTC"
+
+# Update preferences
+prefs = client.users.update_preferences({
+    "theme": "dark",
+    "timezone": "Asia/Kolkata",
+    "date_format": "DD/MM/YYYY",
+    "time_format": "12h",
+    "widget_config": {"sidebar_collapsed": True}
+})
+```
+
 ---
 
 ### Storage & Files
