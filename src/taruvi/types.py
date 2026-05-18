@@ -49,6 +49,14 @@ class DatabaseRecord(TypedDict, total=False):
     # Additional fields allowed via total=False
 
 
+class PgRangeValue(TypedDict):
+    """PostgreSQL range column value as returned by the API."""
+    lower: str | int | float | None
+    upper: str | int | float | None
+    bounds: Literal["()", "(]", "[)", "[]"]
+    empty: bool
+
+
 class StorageFile(TypedDict):
     """Storage file metadata (type hint only)."""
     id: str

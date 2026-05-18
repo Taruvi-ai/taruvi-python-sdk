@@ -23,6 +23,19 @@ if TYPE_CHECKING:
 # API endpoint paths for database
 _DATATABLE_DATA = "/api/apps/{app_slug}/datatables/{table_name}/data/"
 _DATATABLE_RECORD = "/api/apps/{app_slug}/datatables/{table_name}/data/{record_id}/"
+_DATATABLE_UPSERT = "/api/apps/{app_slug}/datatables/{table_name}/data/upsert/"
+
+# Operators whose values must be comma-joined when passed as list/tuple.
+# httpx serializes Python lists as repeated keys, but Django QueryDict.dict()
+# keeps only the last value — so we must send comma-separated strings.
+_LIST_OPERATORS = frozenset({
+    "in", "nin", "ina", "nina",
+    "between", "nbetween",
+    "acontains", "nacontains", "acontainedby", "nacontainedby",
+    "aoverlap", "naoverlap",
+    "rcontains", "rcontainedby", "roverlaps",
+    "radjacent", "rstrictleft", "rstrictright",
+})
 
 
 # ============================================================================
@@ -41,9 +54,10 @@ class _BaseQueryBuilder(BaseModule):
         self._operation: Optional[str] = None
         self._body: Any = None
         self._delete_ids: Optional[list[int]] = None
+        self._is_upsert: bool = False
+        self._unique_fields: Optional[str] = None
         self._filters: dict[str, Any] = {}
-        self._sort_field: Optional[str] = None
-        self._sort_order: str = "asc"
+        self._ordering_parts: list[str] = []
         self._page_size: Optional[int] = None
         self._page: int = 1
         self._populate_fields: list[str] = []
@@ -60,14 +74,20 @@ class _BaseQueryBuilder(BaseModule):
         return f"{self.table_name}_edges" if self._is_edges else self.table_name
 
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
+        if isinstance(value, (list, tuple)) and operator in _LIST_OPERATORS:
+            value = ",".join(str(v) for v in value)
         if operator == "eq":
             self._filters[field] = value
         else:
             self._filters[f"{field}__{operator}"] = value
 
     def _set_sort(self, field: str, order: str) -> None:
-        self._sort_field = field
-        self._sort_order = order
+        ordering = f"-{field}" if order == "desc" else field
+        self._ordering_parts = [ordering]
+
+    def _add_sort(self, field: str, order: str) -> None:
+        ordering = f"-{field}" if order == "desc" else field
+        self._ordering_parts.append(ordering)
 
     def _set_page_size(self, page_size: int) -> None:
         self._page_size = page_size
@@ -104,9 +124,7 @@ class _BaseQueryBuilder(BaseModule):
 
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
-        ordering = None
-        if self._sort_field:
-            ordering = f"-{self._sort_field}" if self._sort_order == "desc" else self._sort_field
+        ordering = ",".join(self._ordering_parts) if self._ordering_parts else None
         params = build_params_util(
             ordering=ordering,
             page_size=self._page_size,
@@ -171,6 +189,15 @@ class QueryBuilder(_BaseQueryBuilder):
             self._record_id = str(record_id_or_ids)
         return self
 
+    def upsert(self, body: dict[str, Any] | list[dict[str, Any]], *, unique_fields: list[str] | None = None) -> "QueryBuilder":
+        """Stage an upsert (insert or update) operation."""
+        self._operation = "POST"
+        self._body = body
+        self._is_upsert = True
+        if unique_fields:
+            self._unique_fields = ",".join(unique_fields)
+        return self
+
     # -- Filter & query methods --
 
     def filter(self, field: str, operator: str, value: Any) -> "QueryBuilder":
@@ -183,6 +210,19 @@ class QueryBuilder(_BaseQueryBuilder):
 
     def sort(self, field: str, order: str = "asc") -> "QueryBuilder":
         self._set_sort(field, order)
+        return self
+
+    def order_by(self, *fields: tuple[str, str] | str) -> "QueryBuilder":
+        """Multi-sort: order_by(("salary", "desc"), ("name", "asc")) or order_by("-salary", "name")."""
+        self._ordering_parts = []
+        for f in fields:
+            if isinstance(f, (list, tuple)):
+                self._add_sort(f[0], f[1] if len(f) > 1 else "asc")
+            elif isinstance(f, str):
+                if f.startswith("-"):
+                    self._add_sort(f[1:], "desc")
+                else:
+                    self._add_sort(f, "asc")
         return self
 
     def page_size(self, page_size: int) -> "QueryBuilder":
@@ -240,6 +280,8 @@ class QueryBuilder(_BaseQueryBuilder):
 
     def _build_path(self) -> str:
         table = self._get_table_name()
+        if self._is_upsert:
+            return _DATATABLE_UPSERT.format(app_slug=self.app_slug, table_name=table)
         if self._record_id:
             return _DATATABLE_RECORD.format(
                 app_slug=self.app_slug, table_name=table, record_id=self._record_id
@@ -253,9 +295,12 @@ class QueryBuilder(_BaseQueryBuilder):
         op = self._operation or "GET"
 
         if op == "POST":
-            return self._http.post(path, json=self._body)
+            post_params = {}
+            if self._unique_fields:
+                post_params["unique_fields"] = self._unique_fields
+            return self._http.post(path, json=self._body, params=post_params or None)
         if op == "PATCH":
-            if not self._record_id:
+            if not self._record_id and not isinstance(self._body, list):
                 raise ValueError("PATCH requires a record ID. Call .get(id) first.")
             return self._http.patch(path, json=self._body)
         if op == "DELETE":

@@ -146,12 +146,13 @@ class HTTPClient(BaseHTTPClient):
         self,
         path: str,
         *,
+        params: Optional[dict[str, Any]] = None,
         json: Optional[dict[str, Any]] = None,
         data: Optional[dict[str, Any]] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         """Make a POST request."""
-        return self.request("POST", path, json=json, data=data, headers=headers)
+        return self.request("POST", path, params=params, json=json, data=data, headers=headers)
 
     def put(
         self,
