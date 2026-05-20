@@ -70,6 +70,7 @@ class _BaseQueryBuilder(BaseModule):
         self._having: Optional[str] = None
         self._search: Optional[str] = None
         self._raw_filters: Optional[str] = None
+        self._allowed_actions: list[str] = []
 
     def _get_table_name(self) -> str:
         return f"{self.table_name}_edges" if self._is_edges else self.table_name
@@ -152,6 +153,10 @@ class _BaseQueryBuilder(BaseModule):
             params["filters"] = self._raw_filters
         else:
             params.update(self._filters)
+
+        if self._allowed_actions:
+            params["allowed_actions"] = ",".join(self._allowed_actions)
+
         return params
 
 
@@ -195,6 +200,17 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             self._delete_ids = record_id_or_ids
         elif record_id_or_ids is not None:
             self._record_id = str(record_id_or_ids)
+        return self
+
+    def bulk_delete(self, ids: list[str | int]) -> "AsyncQueryBuilder":
+        """Stage a bulk DELETE by IDs (?ids=1,2,3)."""
+        self._operation = "DELETE"
+        self._delete_ids = ids
+        return self
+
+    def delete_filtered(self) -> "AsyncQueryBuilder":
+        """Stage a DELETE using current filters. Deletes all matching records."""
+        self._operation = "DELETE"
         return self
 
     def upsert(self, body: dict[str, Any] | list[dict[str, Any]], *, unique_fields: list[str] | None = None) -> "AsyncQueryBuilder":
@@ -251,6 +267,16 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
 
     def populate(self, *fields: str) -> "AsyncQueryBuilder":
         self._add_populate(*fields)
+        return self
+
+    def populate_all(self) -> "AsyncQueryBuilder":
+        """Populate all first-level relations (?populate=*)."""
+        self._populate_fields = ["*"]
+        return self
+
+    def allowed_actions(self, actions: list[str]) -> "AsyncQueryBuilder":
+        """Request per-row allowed actions annotation (?allowed_actions=update,delete)."""
+        self._allowed_actions = actions
         return self
 
     # -- Graph traversal methods --
@@ -325,6 +351,9 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                 return await self._http.delete(path, params={"ids": ids_param})
             if self._body:
                 return await self._http.delete(path, json=self._body)
+            # delete_filtered: pass current filters as query params
+            if self._filters or self._raw_filters:
+                return await self._http.delete(path, params=params)
             return await self._http.delete(path)
 
         # Default: GET
