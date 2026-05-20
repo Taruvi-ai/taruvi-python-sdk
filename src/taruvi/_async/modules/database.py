@@ -69,6 +69,7 @@ class _BaseQueryBuilder(BaseModule):
         self._group_by: list[str] = []
         self._having: Optional[str] = None
         self._search: Optional[str] = None
+        self._raw_filters: Optional[str] = None
 
     def _get_table_name(self) -> str:
         return f"{self.table_name}_edges" if self._is_edges else self.table_name
@@ -122,6 +123,10 @@ class _BaseQueryBuilder(BaseModule):
     def _set_search(self, query: str) -> None:
         self._search = query
 
+    def _set_raw_filters(self, filters: dict | list) -> None:
+        import json
+        self._raw_filters = json.dumps(filters)
+
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
         ordering = ",".join(self._ordering_parts) if self._ordering_parts else None
@@ -143,7 +148,10 @@ class _BaseQueryBuilder(BaseModule):
             for rel_type in self._relationship_types:
                 params.setdefault("relationship_type", []).append(rel_type)
 
-        params.update(self._filters)
+        if self._raw_filters:
+            params["filters"] = self._raw_filters
+        else:
+            params.update(self._filters)
         return params
 
 
@@ -200,8 +208,16 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
 
     # -- Filter & query methods --
 
-    def filter(self, field: str, operator: str, value: Any) -> "AsyncQueryBuilder":
-        self._add_filter(field, operator, value)
+    def filter(self, field_or_logic: str | dict | list, operator: str | None = None, value: Any = None) -> "AsyncQueryBuilder":
+        """Filter records. Supports simple and complex filters.
+
+        Simple: .filter("age", "gte", 30)
+        Complex: .filter({"or": [{"department": "eng"}, {"department": "hr"}]})
+        """
+        if isinstance(field_or_logic, (dict, list)):
+            self._set_raw_filters(field_or_logic)
+        else:
+            self._add_filter(field_or_logic, operator, value)
         return self
 
     def search(self, query: str) -> "AsyncQueryBuilder":
