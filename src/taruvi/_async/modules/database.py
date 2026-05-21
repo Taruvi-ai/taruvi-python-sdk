@@ -351,9 +351,12 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                 return await self._http.delete(path, params={"ids": ids_param})
             if self._body:
                 return await self._http.delete(path, json=self._body)
-            # delete_filtered: pass current filters as query params
-            if self._filters or self._raw_filters:
-                return await self._http.delete(path, params=params)
+            # delete_filtered: send filters as JSON in ?filter= param
+            if self._raw_filters:
+                return await self._http.delete(path, params={"filter": self._raw_filters})
+            if self._filters:
+                import json
+                return await self._http.delete(path, params={"filter": json.dumps(self._filters)})
             return await self._http.delete(path)
 
         # Default: GET
