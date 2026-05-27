@@ -78,10 +78,15 @@ class _BaseQueryBuilder(BaseModule):
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
         if isinstance(value, (list, tuple)) and operator in _LIST_OPERATORS:
             value = ",".join(str(v) for v in value)
-        if operator == "eq":
-            self._filters[field] = value
+        key = field if operator == "eq" else f"{field}__{operator}"
+        if key in self._filters:
+            existing = self._filters[key]
+            if isinstance(existing, list):
+                existing.append(value)
+            else:
+                self._filters[key] = [existing, value]
         else:
-            self._filters[f"{field}__{operator}"] = value
+            self._filters[key] = value
 
     def _set_sort(self, field: str, order: str) -> None:
         ordering = f"-{field}" if order == "desc" else field
