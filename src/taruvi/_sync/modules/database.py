@@ -246,7 +246,15 @@ class QueryBuilder(_BaseQueryBuilder):
         return self
 
     def sort(self, field: str, order: str = "asc") -> "QueryBuilder":
-        self._set_sort(field, order)
+        if "," in field:
+            for part in field.split(","):
+                part = part.strip()
+                if part.startswith("-"):
+                    self._add_sort(part[1:], "desc")
+                else:
+                    self._add_sort(part, "asc")
+        else:
+            self._add_sort(field, order)
         return self
 
     def order_by(self, *fields: tuple[str, str] | str) -> "QueryBuilder":
