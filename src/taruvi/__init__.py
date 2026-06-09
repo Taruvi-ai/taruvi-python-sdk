@@ -147,6 +147,7 @@ from taruvi.types import (
     # Response types
     User,
     DatabaseRecord,
+    PgRangeValue,
     StorageFile,
     Function,
     FunctionInvocation,
