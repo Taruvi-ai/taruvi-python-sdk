@@ -64,10 +64,51 @@ class StorageFile(TypedDict):
     path: str
     size: int
     mimetype: str
+    storage_provider: Literal["s3", "sharepoint"]
+    is_office_editable: bool
     visibility: Literal["public", "private"]
     created_at: str
     url: NotRequired[str]
     metadata: NotRequired[dict[str, Any]]
+
+
+class StorageAccessLinkResult(TypedDict):
+    """Result of a SharePoint view or edit access grant."""
+    url: str
+    mode: Literal["view", "edit"]
+
+
+class StorageBrowseFolder(TypedDict):
+    """Virtual folder entry from browse (type hint only)."""
+    type: Literal["folder"]
+    name: str
+    path: str  # e.g. "reports/2024/" — pass back as prefix to browse deeper
+
+
+class StorageBrowseFile(TypedDict):
+    """File entry from browse (type hint only)."""
+    type: Literal["file"]
+    id: int
+    uuid: str
+    name: str
+    path: str
+    size: int
+    mimetype: str
+    visibility: str
+    is_office_editable: bool
+    created_at: str
+    updated_at: str
+    download_url: NotRequired[str | None]
+
+
+class StorageBrowseData(TypedDict):
+    """Response payload from browse (type hint only)."""
+    prefix: str
+    folders: list["StorageBrowseFolder"]
+    objects: list["StorageBrowseFile"]
+    has_next: bool
+    page: int
+    page_size: int
 
 
 class Function(TypedDict):
@@ -236,6 +277,10 @@ __all__ = [
     "User",
     "DatabaseRecord",
     "StorageFile",
+    "StorageAccessLinkResult",
+    "StorageBrowseFolder",
+    "StorageBrowseFile",
+    "StorageBrowseData",
     "Function",
     "FunctionInvocation",
     "Secret",
