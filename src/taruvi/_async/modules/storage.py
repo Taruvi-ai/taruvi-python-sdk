@@ -219,7 +219,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         )
 
         body = _build_update_body(metadata, visibility)
-        response = await self._http.put(path, json=body)
+        response = await self._http.patch(path, json=body)
         return self._extract_data(response)
 
     async def delete(self, paths: list[str]) -> None:

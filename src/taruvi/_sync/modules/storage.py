@@ -219,7 +219,7 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         )
 
         body = _build_update_body(metadata, visibility)
-        response = self._http.put(path, json=body)
+        response = self._http.patch(path, json=body)
         return self._extract_data(response)
 
     def delete(self, paths: list[str]) -> None:
