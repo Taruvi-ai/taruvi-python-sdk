@@ -71,6 +71,15 @@ class _BaseQueryBuilder(BaseModule):
         self._search: Optional[str] = None
         self._raw_filters: Optional[str] = None
         self._allowed_actions: list[str] = []
+        # Vector search state
+        self._vector_field: Optional[str] = None
+        self._vector_value: Optional[list[float]] = None
+        self._topk: Optional[int] = None
+        self._vector_threshold: Optional[float] = None
+        self._ef_search: Optional[int] = None
+        self._vector_metric: Optional[str] = None
+        self._hybrid_strategy: Optional[str] = None
+        self._hybrid_alpha: Optional[float] = None
 
     def _get_table_name(self) -> str:
         return f"{self.table_name}_edges" if self._is_edges else self.table_name
@@ -133,6 +142,32 @@ class _BaseQueryBuilder(BaseModule):
         import json
         self._raw_filters = json.dumps(filters)
 
+    def _set_vector_search(
+        self,
+        field: str,
+        query_vector: list[float],
+        *,
+        topk: int = 10,
+        threshold: Optional[float] = None,
+        ef_search: Optional[int] = None,
+        metric: Optional[str] = None,
+    ) -> None:
+        self._vector_field = field
+        self._vector_value = query_vector
+        self._topk = topk
+        self._vector_threshold = threshold
+        self._ef_search = ef_search
+        self._vector_metric = metric
+
+    def _set_hybrid(
+        self,
+        *,
+        strategy: str = "rrf",
+        alpha: float = 0.5,
+    ) -> None:
+        self._hybrid_strategy = strategy
+        self._hybrid_alpha = alpha
+
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
         ordering = ",".join(self._ordering_parts) if self._ordering_parts else None
@@ -161,6 +196,21 @@ class _BaseQueryBuilder(BaseModule):
 
         if self._allowed_actions:
             params["allowed_actions"] = ",".join(self._allowed_actions)
+
+        # Vector search params
+        if self._vector_value is not None:
+            import json
+            params[f"{self._vector_field}__vector_near"] = json.dumps(self._vector_value)
+            params["_topk"] = self._topk
+            if self._vector_threshold is not None:
+                params["_vector_threshold"] = self._vector_threshold
+            if self._ef_search is not None:
+                params["_vector_ef_search"] = self._ef_search
+            if self._vector_metric is not None:
+                params["_vector_metric"] = self._vector_metric
+            if self._hybrid_strategy:
+                params["_hybrid_strategy"] = self._hybrid_strategy
+                params["_hybrid_alpha"] = self._hybrid_alpha
 
         return params
 
@@ -243,6 +293,46 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
 
     def search(self, query: str) -> "AsyncQueryBuilder":
         self._set_search(query)
+        return self
+
+    def vector_search(
+        self,
+        field: str,
+        query_vector: list[float],
+        *,
+        topk: int = 10,
+        threshold: Optional[float] = None,
+        ef_search: Optional[int] = None,
+        metric: Optional[str] = None,
+    ) -> "AsyncQueryBuilder":
+        """Semantic similarity search on a vector field.
+
+        Args:
+            field: Vector column name (e.g., "embedding")
+            query_vector: Pre-embedded float array
+            topk: Maximum results to return (default 10)
+            threshold: Maximum distance cutoff (discard results beyond this)
+            ef_search: HNSW probe depth (higher = more accurate, slower)
+            metric: Distance metric validation ("cosine", "l2", "ip")
+        """
+        self._set_vector_search(field, query_vector, topk=topk, threshold=threshold, ef_search=ef_search, metric=metric)
+        return self
+
+    def hybrid(
+        self,
+        *,
+        strategy: str = "rrf",
+        alpha: float = 0.5,
+    ) -> "AsyncQueryBuilder":
+        """Enable hybrid search (vector + full-text with RRF fusion).
+
+        Must be combined with .vector_search() and .search().
+
+        Args:
+            strategy: Fusion strategy ("rrf" for Reciprocal Rank Fusion)
+            alpha: Balance between vector and FTS (0.0 = pure FTS, 1.0 = pure vector, default 0.5)
+        """
+        self._set_hybrid(strategy=strategy, alpha=alpha)
         return self
 
     def sort(self, field: str, order: str = "asc") -> "AsyncQueryBuilder":

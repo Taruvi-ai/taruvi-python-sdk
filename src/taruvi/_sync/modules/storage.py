@@ -10,11 +10,11 @@ Provides methods for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, BinaryIO
+from typing import TYPE_CHECKING, Any, Literal, Optional, BinaryIO
 
 from taruvi.modules.base import BaseModule
 from taruvi.utils import build_query_string, build_params
-from taruvi.types import StorageFile, Bucket
+from taruvi.types import StorageFile, Bucket, StorageAccessLinkResult, StorageBrowseData
 import json
 
 
@@ -34,6 +34,9 @@ _STORAGE_BUCKET = "/api/apps/{app_slug}/storage/buckets/{slug}/"
 # API endpoint paths for object operations
 _STORAGE_COPY = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/copy/"
 _STORAGE_MOVE = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/move/"
+_STORAGE_VIEW = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/{path}/view/"
+_STORAGE_EDIT = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/{path}/edit/"
+_STORAGE_BROWSE = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/browse/"
 
 
 # ============================================================================
@@ -216,7 +219,7 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         )
 
         body = _build_update_body(metadata, visibility)
-        response = self._http.put(path, json=body)
+        response = self._http.patch(path, json=body)
         return self._extract_data(response)
 
     def delete(self, paths: list[str]) -> None:
@@ -227,6 +230,48 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         )
 
         self._http.post(path, json={"paths": paths})
+
+    def view_access(self, file_path: str) -> StorageAccessLinkResult:
+        """Get a SharePoint view-access URL for an Office file."""
+        path = _STORAGE_VIEW.format(
+            app_slug=self.app_slug,
+            bucket=self.bucket,
+            path=file_path
+        )
+        response = self._http.get(path)
+        return self._extract_data(response)
+
+    def edit_access(self, file_path: str) -> StorageAccessLinkResult:
+        """Get a SharePoint edit-access URL for an Office file."""
+        path = _STORAGE_EDIT.format(
+            app_slug=self.app_slug,
+            bucket=self.bucket,
+            path=file_path
+        )
+        response = self._http.get(path)
+        return self._extract_data(response)
+
+    def browse(
+        self,
+        *,
+        prefix: str = "",
+        page: int = 1,
+        page_size: int = 50,
+        sort: Optional[Literal["name", "size", "created_at", "updated_at"]] = None,
+        order: Optional[Literal["asc", "desc"]] = None,
+    ) -> StorageBrowseData:
+        """Browse bucket as a folder view — returns virtual folders and files at a prefix."""
+        path = _STORAGE_BROWSE.format(app_slug=self.app_slug, bucket=self.bucket)
+        params = build_params(
+            prefix=prefix,
+            page=page,
+            page_size=page_size,
+            sort=sort,
+            order=order,
+        )
+        qs = build_query_string(params)
+        response = self._http.get(path + qs)
+        return self._extract_data(response)
 
     def copy_object(
         self,

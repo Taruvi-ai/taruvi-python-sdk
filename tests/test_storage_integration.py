@@ -447,6 +447,269 @@ async def test_delete_nonexistent_file_real_api(async_storage_module):
 
 
 # ============================================================================
+# Browse Tests — Async (folder navigation)
+# ============================================================================
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_browse_root_real_api(async_storage_module, generate_unique_id):
+    """
+    Test browse() returns folders and files at bucket root.
+
+    Uploads files into two prefixes, then browses root and verifies structure.
+    """
+    bucket_name = "test-bucket"
+    unique_id = generate_unique_id()
+    uploaded_paths = []
+
+    try:
+        # Seed: one root file + one file in a sub-prefix
+        root_path = f"browse_{unique_id}_root.txt"
+        sub_path = f"browse_{unique_id}_sub/file.txt"
+
+        await async_storage_module.from_(bucket_name).upload(
+            files=[
+                ("root.txt", io.BytesIO(b"root")),
+                ("file.txt", io.BytesIO(b"sub")),
+            ],
+            paths=[root_path, sub_path],
+        )
+        uploaded_paths = [root_path, sub_path]
+
+        # Browse root
+        data = await async_storage_module.from_(bucket_name).browse()
+
+        assert isinstance(data, dict)
+        assert "folders" in data
+        assert "objects" in data
+        assert "has_next" in data
+        assert "page" in data
+        assert "page_size" in data
+        assert isinstance(data["folders"], list)
+        assert isinstance(data["objects"], list)
+
+        # All folder entries must have type="folder"
+        for folder in data["folders"]:
+            assert folder["type"] == "folder"
+            assert isinstance(folder["name"], str)
+            assert folder["path"].endswith("/")
+
+        # All file entries must have type="file"
+        for obj in data["objects"]:
+            assert obj["type"] == "file"
+            assert isinstance(obj["name"], str)
+            assert isinstance(obj["size"], int)
+
+    except Exception as e:
+        if "bucket" in str(e).lower() or "not found" in str(e).lower():
+            pytest.skip(f"Skipping: {bucket_name} bucket not accessible - {str(e)}")
+        raise
+
+    finally:
+        try:
+            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
+        except Exception:
+            pass
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_browse_subfolder_real_api(async_storage_module, generate_unique_id):
+    """
+    Test browse() navigation into a subfolder via prefix.
+    """
+    bucket_name = "test-bucket"
+    unique_id = generate_unique_id()
+    prefix = f"browse_nav_{unique_id}/"
+    uploaded_paths = []
+
+    try:
+        # Seed two files in a known prefix
+        for i in range(2):
+            uploaded_paths.append(f"{prefix}file_{i}.txt")
+
+        await async_storage_module.from_(bucket_name).upload(
+            files=[(f"file_{i}.txt", io.BytesIO(f"content {i}".encode())) for i in range(2)],
+            paths=uploaded_paths,
+        )
+
+        # Browse that prefix
+        data = await async_storage_module.from_(bucket_name).browse(prefix=prefix)
+
+        assert data["prefix"] == prefix
+        file_names = [o["name"] for o in data["objects"]]
+        assert "file_0.txt" in file_names
+        assert "file_1.txt" in file_names
+
+        # Verify file paths are prefixed correctly
+        for obj in data["objects"]:
+            assert obj["path"].startswith(prefix)
+
+    except Exception as e:
+        if "bucket" in str(e).lower() or "not found" in str(e).lower():
+            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+        raise
+
+    finally:
+        try:
+            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
+        except Exception:
+            pass
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_browse_pagination_real_api(async_storage_module, generate_unique_id):
+    """
+    Test browse() pagination — page_size and has_next.
+    """
+    bucket_name = "test-bucket"
+    unique_id = generate_unique_id()
+    prefix = f"browse_page_{unique_id}/"
+    uploaded_paths = []
+
+    try:
+        # Seed 4 files
+        for i in range(4):
+            uploaded_paths.append(f"{prefix}file_{i}.txt")
+
+        await async_storage_module.from_(bucket_name).upload(
+            files=[(f"file_{i}.txt", io.BytesIO(f"content {i}".encode())) for i in range(4)],
+            paths=uploaded_paths,
+        )
+
+        # Fetch first page of 2
+        page1 = await async_storage_module.from_(bucket_name).browse(
+            prefix=prefix, page=1, page_size=2
+        )
+        assert page1["page"] == 1
+        assert page1["page_size"] == 2
+        p1_count = len(page1["folders"]) + len(page1["objects"])
+        assert p1_count <= 2
+        assert page1["has_next"] is True
+
+        # Fetch second page
+        page2 = await async_storage_module.from_(bucket_name).browse(
+            prefix=prefix, page=2, page_size=2
+        )
+        assert page2["page"] == 2
+
+    except Exception as e:
+        if "bucket" in str(e).lower() or "not found" in str(e).lower():
+            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+        raise
+
+    finally:
+        try:
+            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
+        except Exception:
+            pass
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_browse_sorting_real_api(async_storage_module, generate_unique_id):
+    """
+    Test browse() sort parameter — name asc vs desc produces different orders.
+    """
+    bucket_name = "test-bucket"
+    unique_id = generate_unique_id()
+    prefix = f"browse_sort_{unique_id}/"
+    uploaded_paths = [f"{prefix}a_file.txt", f"{prefix}z_file.txt"]
+
+    try:
+        await async_storage_module.from_(bucket_name).upload(
+            files=[("a_file.txt", io.BytesIO(b"a")), ("z_file.txt", io.BytesIO(b"z"))],
+            paths=uploaded_paths,
+        )
+
+        asc = await async_storage_module.from_(bucket_name).browse(
+            prefix=prefix, sort="name", order="asc"
+        )
+        desc = await async_storage_module.from_(bucket_name).browse(
+            prefix=prefix, sort="name", order="desc"
+        )
+
+        assert asc["status"] if "status" in asc else True
+        assert desc["status"] if "status" in desc else True
+
+        asc_names = [o["name"] for o in asc["objects"]]
+        desc_names = [o["name"] for o in desc["objects"]]
+        if len(asc_names) > 1:
+            assert asc_names != desc_names
+
+    except Exception as e:
+        if "bucket" in str(e).lower() or "not found" in str(e).lower():
+            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+        raise
+
+    finally:
+        try:
+            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
+        except Exception:
+            pass
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_browse_empty_prefix_real_api(async_storage_module):
+    """
+    Test browse() with a nonexistent prefix returns empty folders/objects.
+    """
+    bucket_name = "test-bucket"
+
+    try:
+        data = await async_storage_module.from_(bucket_name).browse(
+            prefix="nonexistent_prefix_xyz_abc/"
+        )
+        assert data["folders"] == []
+        assert data["objects"] == []
+        assert data["has_next"] is False
+
+    except Exception as e:
+        if "bucket" in str(e).lower() or "not found" in str(e).lower():
+            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+        raise
+
+
+# ============================================================================
+# Browse Tests — Sync client
+# ============================================================================
+
+@pytest.mark.integration
+def test_browse_sync_real_api(sync_storage_module, generate_unique_id):
+    """
+    Test browse() with sync client — same assertions, no async/await.
+    """
+    bucket_name = "test-bucket"
+    unique_id = generate_unique_id()
+    prefix = f"browse_sync_{unique_id}/"
+    uploaded_paths = [f"{prefix}file.txt"]
+
+    try:
+        sync_storage_module.from_(bucket_name).upload(
+            files=[("file.txt", io.BytesIO(b"hello"))],
+            paths=uploaded_paths,
+        )
+
+        data = sync_storage_module.from_(bucket_name).browse(prefix=prefix)
+
+        assert isinstance(data, dict)
+        assert "folders" in data
+        assert "objects" in data
+        assert data["prefix"] == prefix
+        file_names = [o["name"] for o in data["objects"]]
+        assert "file.txt" in file_names
+
+        sync_storage_module.from_(bucket_name).delete(uploaded_paths)
+
+    except Exception as e:
+        if "bucket" in str(e).lower() or "not found" in str(e).lower():
+            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+        raise
+
+
+# ============================================================================
 # Notes on Storage Integration Tests
 # ============================================================================
 
