@@ -12,10 +12,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, Optional, BinaryIO
 
+from taruvi.http_client_base import transport_error
 from taruvi.modules.base import BaseModule
 from taruvi.utils import build_query_string, build_params
 from taruvi.types import StorageFile, Bucket, StorageAccessLinkResult, StorageBrowseData
 import json
+import mimetypes
+
+import httpx
+from urllib.parse import quote
 
 
 if TYPE_CHECKING:
@@ -42,6 +47,16 @@ _STORAGE_BROWSE = "/api/apps/{app_slug}/storage/buckets/{bucket}/objects/browse/
 # ============================================================================
 # Shared Query Builder Logic
 # ============================================================================
+
+
+def _encode_object_path(file_path: str) -> str:
+    """URL-encode each segment of an object path, keeping the slashes."""
+    return "/".join(quote(segment, safe="") for segment in file_path.split("/"))
+
+
+def _guess_content_type(filename: str) -> str:
+    """Guess a file's content type from its name."""
+    return mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
 class _BaseStorageQueryBuilder:
     """Base storage query builder with shared logic."""
@@ -155,11 +170,20 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
 
     async def upload(
         self,
-        files: list[tuple[str, BinaryIO]],
+        files: list[tuple[str, BinaryIO]] | list[tuple[str, BinaryIO, str]],
         paths: list[str],
         metadatas: Optional[list[dict[str, Any]]] = None
-    ) -> list[StorageFile]:
-        """Upload multiple files to the bucket."""
+    ) -> dict[str, Any]:
+        """Upload multiple files to the bucket.
+
+        Each entry of ``files`` is ``(filename, file_obj)`` or
+        ``(filename, file_obj, content_type)``. Without a content type, it is
+        guessed from the filename.
+
+        Returns:
+            The batch result: ``uploaded_count``, ``failed_count``, ``total``,
+            and the ``successful`` and ``failed`` entries.
+        """
         path = _STORAGE_BATCH_UPLOAD.format(
             app_slug=self.app_slug,
             bucket=self.bucket
@@ -168,8 +192,8 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         # Prepare multipart files for httpx
         # Format: [('field_name', ('filename', file_obj, 'content_type'))]
         httpx_files = [
-            ("files", (filename, file_obj, "application/octet-stream"))
-            for filename, file_obj in files
+            ("files", (entry[0], entry[1], entry[2] if len(entry) > 2 else _guess_content_type(entry[0])))
+            for entry in files
         ]
 
         # Prepare form data (paths and metadata as JSON strings)
@@ -179,30 +203,39 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
 
         # Exclude Content-Type so httpx auto-sets multipart/form-data with boundary
         headers = {k: v for k, v in self._config.headers.items() if k != "Content-Type"}
-        response = await self._http.client.post(
-            f"{self._config.api_url}{path}",
-            files=httpx_files,
-            data=data,
-            headers=headers
-        )
-        response.raise_for_status()
-
-        response_data = response.json()
-        files_data = response_data.get("data", [])
-        return files_data
+        try:
+            response = await self._http.client.post(
+                f"{self._config.api_url}{path}",
+                files=httpx_files,
+                data=data,
+                headers=headers
+            )
+        except httpx.TransportError as error:
+            raise transport_error(
+                error, method="POST", path=path, api_url=self._config.api_url, timeout=self._config.timeout
+            ) from error
+        response_data = self._http._handle_response(response)
+        return response_data.get("data", {})
 
     async def download(self, file_path: str) -> bytes:
         """Download a file from the bucket."""
         path = _STORAGE_OBJECT.format(
             app_slug=self.app_slug,
             bucket=self.bucket,
-            path=file_path
+            path=_encode_object_path(file_path)
         )
 
-        response = await self._http.client.get(
-            f"{self._config.api_url}{path}",
-            headers=self._config.headers
-        )
+        try:
+            response = await self._http.client.get(
+                f"{self._config.api_url}{path}",
+                headers=self._config.headers
+            )
+        except httpx.TransportError as error:
+            raise transport_error(
+                error, method="GET", path=path, api_url=self._config.api_url, timeout=self._config.timeout
+            ) from error
+        if response.status_code >= 400:
+            self._http._handle_error_response(response)
         return response.content
 
     async def update(
@@ -215,28 +248,35 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         path = _STORAGE_OBJECT.format(
             app_slug=self.app_slug,
             bucket=self.bucket,
-            path=file_path
+            path=_encode_object_path(file_path)
         )
 
         body = _build_update_body(metadata, visibility)
         response = await self._http.patch(path, json=body)
         return self._extract_data(response)
 
-    async def delete(self, paths: list[str]) -> None:
-        """Delete multiple files from the bucket."""
+    async def delete(self, paths: list[str]) -> dict[str, Any]:
+        """Delete multiple files from the bucket.
+
+        Returns:
+            The batch result: ``deleted_count`` and ``failed``. Objects the
+            platform skips, because they're missing or a policy denies the
+            delete, are listed in ``failed`` rather than raising.
+        """
         path = _STORAGE_BATCH_DELETE.format(
             app_slug=self.app_slug,
             bucket=self.bucket
         )
 
-        await self._http.post(path, json={"paths": paths})
+        response = await self._http.post(path, json={"paths": paths})
+        return response.get("data", {})
 
     async def view_access(self, file_path: str) -> StorageAccessLinkResult:
         """Get a SharePoint view-access URL for an Office file."""
         path = _STORAGE_VIEW.format(
             app_slug=self.app_slug,
             bucket=self.bucket,
-            path=file_path
+            path=_encode_object_path(file_path)
         )
         response = await self._http.get(path)
         return self._extract_data(response)
@@ -246,7 +286,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         path = _STORAGE_EDIT.format(
             app_slug=self.app_slug,
             bucket=self.bucket,
-            path=file_path
+            path=_encode_object_path(file_path)
         )
         response = await self._http.get(path)
         return self._extract_data(response)

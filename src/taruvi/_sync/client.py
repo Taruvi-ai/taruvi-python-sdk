@@ -21,21 +21,20 @@ class SyncClient:
     External Application Mode:
         ```python
         client = Client(
-            api_url="http://localhost:8000",
-            api_key="your_jwt_token",
-            site_slug="your-site",
-            mode="sync"
+            api_url="https://api.example.com",
+            app_slug="my-app",
+            mode="sync",
+            api_key="your_api_key",
         )
 
         result = client.functions.execute("my-function", {"param": "value"})
         ```
 
-    Function Runtime Mode (auto-configured):
+    Function Runtime Mode:
         ```python
-        # No configuration needed - auto-detects from environment!
-        client = Client(mode="sync")
-
-        result = client.functions.execute("other-function", {"data": 123})
+        # The platform passes an authenticated client as the third argument.
+        def main(params, user_data, sdk_client):
+            return sdk_client.functions.execute("other-function", {"data": 123})
         ```
     """
 
@@ -135,18 +134,14 @@ class SyncClient:
             >>> # Sign in with JWT
             >>> auth_client = client.auth.signInWithToken(token='jwt_token', token_type='jwt')
 
-            >>> # Sign in with username/password
-            >>> auth_client = client.auth.signInWithPassword(username='...', password='...')
-
-            >>> # Refresh token
-            >>> new_client = client.auth.refreshToken(refresh_token='...')
+            >>> # Sign in with email/password
+            >>> auth_client = client.auth.signInWithPassword(email='...', password='...')
 
             >>> # Sign out
             >>> unauth_client = auth_client.auth.signOut()
 
-            >>> # Low-level API calls
-            >>> response = client.auth.login(username='...', password='...')
-            >>> user = client.auth.get_current_user()
+            >>> # Current user
+            >>> user = auth_client.auth.get_current_user()
         """
         if self._auth is None:
             from taruvi._sync.modules.auth import AuthModule

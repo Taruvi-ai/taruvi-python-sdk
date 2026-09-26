@@ -1,5 +1,6 @@
 """Unit tests for database edge CRUD and graph query builder methods."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 
@@ -141,8 +142,42 @@ class TestEdgeRequestBody:
     async def test_delete_sends_edge_ids(self, mock_async_client):
         mock_async_client._http_client.delete = AsyncMock(return_value={"deleted": 2})
         await AsyncQueryBuilder(mock_async_client, "employees").edges().delete([9, 10]).execute()
-        body = mock_async_client._http_client.delete.call_args[1]["json"]
-        assert body == {"edge_ids": [9, 10]}
+        params = mock_async_client._http_client.delete.call_args[1]["params"]
+        assert params == {"ids": "9,10"}
+
+    @pytest.mark.asyncio
+    async def test_delete_filtered_sends_filter_object(self, mock_async_client):
+        mock_async_client._http_client.delete = AsyncMock(return_value={"deleted": 2})
+        await (
+            AsyncQueryBuilder(mock_async_client, "employees")
+            .filter("status", "eq", "archived")
+            .filter("id", "in", [1, 2])
+            .delete_filtered()
+            .execute()
+        )
+        params = mock_async_client._http_client.delete.call_args[1]["params"]
+        assert json.loads(params["filter"]) == {"status": "archived", "id__in": "1,2"}
+
+    @pytest.mark.asyncio
+    async def test_delete_filtered_wraps_filter_tree(self, mock_async_client):
+        mock_async_client._http_client.delete = AsyncMock(return_value={"deleted": 1})
+        tree = {"or": [{"status": "archived"}, {"status": "draft"}]}
+        await (
+            AsyncQueryBuilder(mock_async_client, "employees")
+            .filter(tree)
+            .delete_filtered()
+            .execute()
+        )
+        params = mock_async_client._http_client.delete.call_args[1]["params"]
+        sent = json.loads(params["filter"])
+        assert json.loads(sent["filters"]) == tree
+
+    @pytest.mark.asyncio
+    async def test_delete_filtered_without_filters_raises(self, mock_async_client):
+        mock_async_client._http_client.delete = AsyncMock(return_value={})
+        with pytest.raises(ValueError, match="requires at least one filter"):
+            await AsyncQueryBuilder(mock_async_client, "employees").delete_filtered().execute()
+        mock_async_client._http_client.delete.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_delete_single_record(self, mock_async_client):
@@ -235,3 +270,28 @@ class TestQueryBuilderCRUD:
         await AsyncQueryBuilder(mock_async_client, "users").delete("123").execute()
         url = mock_async_client._http_client.delete.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/users/data/123/"
+
+
+class TestFilterTreeWithFlatFilters:
+
+    def test_list_read_sends_flat_filters_and_tree(self, mock_sync_client):
+        qb = QueryBuilder(mock_sync_client, "tasks").filter("owner", "eq", "ada").filter(
+            {"or": [{"status": "open"}, {"status": "blocked"}]}
+        )
+        params = qb.build_params()
+        assert params["owner"] == "ada"
+        assert json.loads(params["filters"]) == {"or": [{"status": "open"}, {"status": "blocked"}]}
+
+    @pytest.mark.asyncio
+    async def test_filtered_delete_sends_flat_filters_and_tree(self, mock_async_client):
+        mock_async_client._http_client.delete = AsyncMock(return_value={"deleted_count": 1})
+        await (
+            AsyncQueryBuilder(mock_async_client, "tasks")
+            .filter("owner", "eq", "ada")
+            .filter({"or": [{"status": "open"}]})
+            .delete_filtered()
+            .execute()
+        )
+        sent = json.loads(mock_async_client._http_client.delete.call_args[1]["params"]["filter"])
+        assert sent["owner"] == "ada"
+        assert json.loads(sent["filters"]) == {"or": [{"status": "open"}]}

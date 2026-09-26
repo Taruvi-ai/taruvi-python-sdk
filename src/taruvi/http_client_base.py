@@ -22,6 +22,29 @@ from taruvi.exceptions import (
 
 logger = logging.getLogger(__name__)
 
+# Methods that are safe to resend after the server may have received them.
+_IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
+
+# Failures that happen before the request reaches the server.
+_NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
+
+
+def transport_error(error: httpx.TransportError, *, method: str, path: str, api_url: str, timeout: object) -> Exception:
+    """Convert an httpx transport failure into the matching SDK error."""
+    from taruvi.exceptions import ConnectionError, TimeoutError
+
+    details = {"path": path, "method": method, "error": str(error)}
+    if isinstance(error, httpx.TimeoutException):
+        return TimeoutError(f"Request timed out after {timeout}s", details=details)
+    return ConnectionError(f"Failed to connect to {api_url}", details=details)
+
+
+def can_retry(method: str, error: Exception) -> bool:
+    """Return True when resending the request cannot apply it twice."""
+    if isinstance(error, _NOT_SENT_ERRORS):
+        return True
+    return method.upper() in _IDEMPOTENT_METHODS
+
 
 class BaseHTTPClient:
     """
@@ -131,10 +154,17 @@ class BaseHTTPClient:
             )
 
         # Try to parse error details from response
+        code = None
+        detail = None
+        module = None
         try:
             error_data = response.json()
-            message = error_data.get("message", response.text)
+            # Some refusals, such as billing gates, carry only `detail`.
+            message = error_data.get("message") or error_data.get("detail") or response.text
             details = error_data.get("details") or error_data.get("errors")
+            code = error_data.get("code")
+            detail = error_data.get("detail")
+            module = error_data.get("module")
         except Exception:
             message = response.text or f"HTTP {response.status_code}"
             details = None
@@ -144,6 +174,9 @@ class BaseHTTPClient:
             status_code=response.status_code,
             message=message,
             details=details,
+            code=code,
+            detail=detail,
+            module=module,
         )
 
         raise error

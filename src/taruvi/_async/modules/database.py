@@ -189,10 +189,10 @@ class _BaseQueryBuilder(BaseModule):
             for rel_type in self._relationship_types:
                 params.setdefault("relationship_type", []).append(rel_type)
 
+        # The platform ANDs a filter tree with flat filters, so send both.
+        params.update(self._filters)
         if self._raw_filters:
             params["filters"] = self._raw_filters
-        else:
-            params.update(self._filters)
 
         if self._allowed_actions:
             params["allowed_actions"] = ",".join(self._allowed_actions)
@@ -455,13 +455,19 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                 return await self._http.delete(path, params={"ids": ids_param})
             if self._body:
                 return await self._http.delete(path, json=self._body)
-            # delete_filtered: send filters as JSON in ?filter= param
+            if self._record_id:
+                return await self._http.delete(path)
+            # delete_filtered: the endpoint reads one JSON object from ?filter=.
+            # A filter tree travels under "filters", as it does on list requests.
+            import json
+            conditions: dict[str, Any] = dict(self._filters)
             if self._raw_filters:
-                return await self._http.delete(path, params={"filter": self._raw_filters})
-            if self._filters:
-                import json
-                return await self._http.delete(path, params={"filter": json.dumps(self._filters)})
-            return await self._http.delete(path)
+                conditions["filters"] = self._raw_filters
+            if conditions:
+                return await self._http.delete(path, params={"filter": json.dumps(conditions)})
+            raise ValueError(
+                "delete_filtered() requires at least one filter. Call .filter(...) first."
+            )
 
         # Default: GET
         response = await self._http.get(path, params=params)
@@ -483,6 +489,9 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         path = self._build_path()
         params = self.build_params()
         params["_count"] = "true"
+        # One row is enough: with a page size the platform also returns the full total.
+        params["page_size"] = 1
+        params.pop("page", None)
         response = await self._http.get(path, params=params)
         return response.get("total", 0)
 
