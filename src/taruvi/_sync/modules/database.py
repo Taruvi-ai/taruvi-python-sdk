@@ -463,11 +463,30 @@ class QueryBuilder(_BaseQueryBuilder):
             conditions: dict[str, Any] = dict(self._filters)
             if self._raw_filters:
                 conditions["filters"] = self._raw_filters
-            if conditions:
-                return self._http.delete(path, params={"filter": json.dumps(conditions)})
-            raise ValueError(
-                "delete_filtered() requires at least one filter. Call .filter(...) first."
-            )
+            if not conditions:
+                raise ValueError(
+                    "delete_filtered() requires at least one filter. Call .filter(...) first."
+                )
+            # Refuse what narrows a read but can't narrow a delete; dropping it would
+            # delete every row that matches the filters alone.
+            unsupported = [
+                name for name, is_set in (
+                    ("search", self._search is not None),
+                    ("vector_search", self._vector_value is not None),
+                    ("page", self._page != 1),
+                    ("page_size", self._page_size is not None),
+                    ("aggregate", bool(self._aggregates)),
+                    ("group_by", bool(self._group_by)),
+                    ("having", self._having is not None),
+                ) if is_set
+            ]
+            if unsupported:
+                raise ValueError(
+                    f"delete_filtered() can't narrow a delete by {', '.join(unsupported)}; it would "
+                    "delete every row matching the filters. Remove them, or read the rows and "
+                    "delete by ID."
+                )
+            return self._http.delete(path, params={"filter": json.dumps(conditions)})
 
         # Default: GET
         response = self._http.get(path, params=params)
@@ -477,8 +496,17 @@ class QueryBuilder(_BaseQueryBuilder):
         }
 
     def first(self) -> Optional[dict[str, Any]]:
-        """Get first result."""
-        result = self.page_size(1).execute()
+        """Get the first result, of the requested page when ``page()`` is set."""
+        if self._page != 1:
+            # Shrinking the page would move the offset, so read the requested page.
+            result = self.execute()
+        else:
+            previous_page_size = self._page_size
+            self._page_size = 1
+            try:
+                result = self.execute()
+            finally:
+                self._page_size = previous_page_size
         data = result.get("data", [])
         if isinstance(data, list):
             return data[0] if data else None

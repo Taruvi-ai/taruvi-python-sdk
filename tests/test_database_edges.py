@@ -180,6 +180,50 @@ class TestEdgeRequestBody:
         mock_async_client._http_client.delete.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_delete_filtered_refuses_search_instead_of_widening(self, mock_async_client):
+        mock_async_client._http_client.delete = AsyncMock(return_value={})
+        with pytest.raises(ValueError, match="can't narrow a delete by search"):
+            await (
+                AsyncQueryBuilder(mock_async_client, "employees")
+                .search("needle")
+                .filter("status", "eq", "archived")
+                .delete_filtered()
+                .execute()
+            )
+        mock_async_client._http_client.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_delete_filtered_refuses_pagination(self, mock_async_client):
+        mock_async_client._http_client.delete = AsyncMock(return_value={})
+        with pytest.raises(ValueError, match="page, page_size"):
+            await (
+                AsyncQueryBuilder(mock_async_client, "employees")
+                .filter("status", "eq", "archived")
+                .page(2)
+                .page_size(10)
+                .delete_filtered()
+                .execute()
+            )
+        mock_async_client._http_client.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_first_keeps_the_requested_page(self, mock_async_client):
+        mock_async_client._http_client.get = AsyncMock(return_value={"data": [{"id": 21}, {"id": 22}], "total": 40})
+        builder = AsyncQueryBuilder(mock_async_client, "employees").page(2).page_size(20)
+        row = await builder.first()
+        params = mock_async_client._http_client.get.call_args[1]["params"]
+        assert params["page"] == 2 and params["page_size"] == 20
+        assert row == {"id": 21}
+
+    @pytest.mark.asyncio
+    async def test_first_requests_one_row_without_changing_the_builder(self, mock_async_client):
+        mock_async_client._http_client.get = AsyncMock(return_value={"data": [{"id": 1}], "total": 5})
+        builder = AsyncQueryBuilder(mock_async_client, "employees").page_size(50)
+        await builder.first()
+        assert mock_async_client._http_client.get.call_args[1]["params"]["page_size"] == 1
+        assert builder._page_size == 50
+
+    @pytest.mark.asyncio
     async def test_delete_single_record(self, mock_async_client):
         mock_async_client._http_client.delete = AsyncMock(return_value={})
         await AsyncQueryBuilder(mock_async_client, "employees").edges().delete("9").execute()
