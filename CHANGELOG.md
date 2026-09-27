@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `delete_filtered()` with a filter tree sent a value the delete endpoint rejects; the tree is now sent under `filters`, matching list requests.
 - `delete_filtered()` with no filters now raises `ValueError` before sending a request.
 - Docstrings showed `client.database.query(...)`, `signInWithPassword(username=...)`, and a no-argument `Client()`; they now show `from_(...)`, `email=`, and the `sdk_client` passed to function code.
+- `delete_filtered()` raises `ValueError` when the query also uses `search()`, `vector_search()`, `page()`, `page_size()`, or aggregation, instead of dropping them and deleting every row that matches the other filters.
+- `first()` returned the wrong row when `page()` was set; it now reads the requested page, and no longer changes the builder's page size.
+- The `Secret` type hint now declares `value` and `tags`, which `secrets.get()` returns.
+- Docstring examples for `auth.get_current_user()`, `secrets.list()`, and `users.list()` read the fields the platform actually returns (`["data"]`), and no longer call a nonexistent `list_secrets()`.
 
 ### Deprecated
 - The `principal` argument of the policy methods. The platform rejects an explicit principal with a 400; checks always run as the authenticated caller.
