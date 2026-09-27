@@ -1264,7 +1264,7 @@ client = Client(
 )
 
 # Authentication is done separately via AuthManager
-auth_client = client.auth.signInWithPassword(username="...", password="...")
+auth_client = client.auth.signInWithPassword(email="...", password="...")
 ```
 
 ### Configuration Table
@@ -1323,7 +1323,7 @@ auth_client = client.auth.signInWithPassword(
 ```python
 # Sync client
 client = Client(api_url="...", app_slug="...")
-auth_client = client.auth.signInWithPassword(username="...", password="...")
+auth_client = client.auth.signInWithPassword(email="...", password="...")
 
 with auth_client as client:
     result = client.functions.execute("my-func", params={})
@@ -1331,7 +1331,7 @@ with auth_client as client:
 
 # Async client
 client = Client(mode='async', api_url="...", app_slug="...")
-auth_client = client.auth.signInWithPassword(username="...", password="...")
+auth_client = client.auth.signInWithPassword(email="...", password="...")
 
 async with auth_client as client:
     result = await client.functions.execute("my-func", params={})
@@ -1381,7 +1381,7 @@ from taruvi import (
 
 # Create and authenticate client
 client = Client(api_url="...", app_slug="...")
-auth_client = client.auth.signInWithPassword(username="...", password="...")
+auth_client = client.auth.signInWithPassword(email="...", password="...")
 
 try:
     user = auth_client.database.get("users", record_id=123)
@@ -1428,7 +1428,7 @@ client = Client(
     app_slug="...",
     max_retries=0  # No retries
 )
-auth_client = client.auth.signInWithPassword(username="...", password="...")
+auth_client = client.auth.signInWithPassword(email="...", password="...")
 
 # More aggressive retries
 client = Client(
@@ -1437,7 +1437,7 @@ client = Client(
     max_retries=5,   # Try 5 times
     timeout=60        # Wait longer
 )
-auth_client = client.auth.signInWithPassword(username="...", password="...")
+auth_client = client.auth.signInWithPassword(email="...", password="...")
 ```
 
 ---
@@ -1453,7 +1453,7 @@ client = Client(
     app_slug="...",
     timeout=60  # 60 seconds
 )
-auth_client = client.auth.signInWithPassword(username="...", password="...")
+auth_client = client.auth.signInWithPassword(email="...", password="...")
 
 # Per-request timeout (functions only)
 result = auth_client.functions.execute(
@@ -1517,7 +1517,7 @@ All SDK methods return `dict[str, Any]` - plain dictionaries:
 ```python
 # Create and authenticate
 client = Client(api_url="...", app_slug="...")
-auth_client = client.auth.signInWithPassword(username="...", password="...")
+auth_client = client.auth.signInWithPassword(email="...", password="...")
 
 # No complex model classes - just dicts
 result = auth_client.functions.execute("my-func", params={})
