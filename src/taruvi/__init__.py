@@ -112,7 +112,7 @@ from typing import Optional, Any
 import asyncio
 import os
 
-from taruvi._version import __version__
+from taruvi._version import __version__ as __version__
 from taruvi.config import RuntimeMode, TaruviConfig
 from taruvi.exceptions import (
     APIError,
