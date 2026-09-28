@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.2] - 2026-09-26
+## [0.2.2b1] - 2026-09-28
+
+Pre-release of 0.2.2 for beta testing. Install it with `pip install --pre taruvi` or `pip install taruvi==0.2.2b1`.
 
 ### Added
 - Every request identifies the SDK with `X-Taruvi-Client` and `User-Agent` headers, for example `taruvi-python/0.2.2 (python/3.12.4)`, so the platform can tell which SDK and version made a call.
