@@ -35,13 +35,17 @@ _INVOCATION_DETAIL = "/api/invocations/{invocation_id}/"
 
 def _build_execute_request(
     params: Optional[dict[str, Any]],
-    is_async: bool
+    is_async: Optional[bool]
 ) -> dict[str, Any]:
-    """Build function execution request body."""
-    return {
-        "params": params or {},
-        "async": is_async,
-    }
+    """Build function execution request body.
+
+    ``async`` is omitted when ``is_async`` is None so the function's own
+    default execution mode applies.
+    """
+    body: dict[str, Any] = {"params": params or {}}
+    if is_async is not None:
+        body["async"] = is_async
+    return body
 
 
 class AsyncFunctionsModule(BaseModule):
@@ -58,7 +62,7 @@ class AsyncFunctionsModule(BaseModule):
         params: Optional[dict[str, Any]] = None,
         *,
         app_slug: Optional[str] = None,
-        is_async: bool = False,
+        is_async: Optional[bool] = None,
         timeout: Optional[int] = None,
     ) -> FunctionInvocation:
         """
@@ -68,8 +72,9 @@ class AsyncFunctionsModule(BaseModule):
             function_slug: Function slug (e.g., "my-function")
             params: Function parameters
             app_slug: App slug (defaults to client's app_slug)
-            is_async: Whether to execute asynchronously (returns task_id)
-            timeout: Override default timeout
+            is_async: True to queue the run and return a task ID, False to wait
+                for the result. None (default) uses the function's own mode.
+            timeout: Seconds to wait for this call, overriding the client's timeout
 
         Returns:
             FunctionInvocation dict with execution result
@@ -92,7 +97,7 @@ class AsyncFunctionsModule(BaseModule):
         )
         body = _build_execute_request(params, is_async)
 
-        response = await self._http.post(path, json=body, headers={})
+        response = await self._http.post(path, json=body, headers={}, timeout=timeout)
         return response
 
     async def get_result(

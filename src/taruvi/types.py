@@ -137,14 +137,15 @@ class FunctionInvocation(TypedDict):
 
 
 class Secret(TypedDict):
-    """Secret metadata (type hint only)."""
+    """A secret (type hint only). ``get()`` returns ``value``; list responses omit it."""
     key: str
+    value: NotRequired[str | dict[str, Any]]
+    tags: NotRequired[list[str]]
     name: NotRequired[str]
     description: NotRequired[str]
     secret_type: NotRequired[str]
     created_at: str
     updated_at: str
-    # value is NOT included in list responses (security)
 
 
 class Bucket(TypedDict):

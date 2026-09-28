@@ -8,7 +8,16 @@ from typing import Any, Optional
 
 
 class TaruviError(Exception):
-    """Base exception for all Taruvi SDK errors."""
+    """Base exception for all Taruvi SDK errors.
+
+    API errors also carry the platform's error envelope: ``code`` is the
+    standard error code (for example ``"NOT_FOUND"``) and ``detail`` is the
+    optional human-readable context. Both are ``None`` when the response did
+    not include them.
+    """
+
+    code: Optional[str] = None
+    detail: Optional[str] = None
 
     def __init__(
         self,
@@ -32,6 +41,8 @@ class TaruviError(Exception):
             "error": self.__class__.__name__,
             "message": self.message,
             "status_code": self.status_code,
+            "code": self.code,
+            "detail": self.detail,
             "details": self.details,
         }
 
@@ -65,11 +76,15 @@ class AuthenticationError(APIError):
         super().__init__(message, status_code=401, details=details)
 
 
-class NotAuthenticatedError(APIError):
-    """Raised when attempting to access protected resource without authentication."""
+class NotAuthenticatedError(AuthenticationError):
+    """Raised when attempting to access protected resource without authentication.
+
+    A subclass of AuthenticationError, so ``except AuthenticationError`` also
+    catches a 401 from a client that has no credential.
+    """
 
     def __init__(self, message: str = "Authentication required for this resource", details: Optional[dict[str, Any]] = None) -> None:
-        super().__init__(message, status_code=401, details=details)
+        super().__init__(message, details=details)
 
 
 class AuthorizationError(APIError):
@@ -112,6 +127,38 @@ class ServiceUnavailableError(APIError):
 
     def __init__(self, message: str = "Service temporarily unavailable", details: Optional[dict[str, Any]] = None) -> None:
         super().__init__(message, status_code=503, details=details)
+
+
+class BillingError(APIError):
+    """The organization's billing blocked the request.
+
+    ``code`` is ``"account_suspended"`` (402, the account isn't active),
+    ``"product_suspended"`` (429, the plan's usage for ``module`` is used up for
+    this period), or ``"gate_unavailable"`` (503, billing status couldn't be
+    read; retry shortly).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int,
+        code: str,
+        module: Optional[str] = None,
+    ) -> None:
+        super().__init__(message, status_code=status_code)
+        self.code = code
+        self.module = module
+        self.retryable = code == "gate_unavailable"
+
+
+BILLING_ERROR_CODES = frozenset({"account_suspended", "product_suspended", "gate_unavailable"})
+
+
+class GatewayTimeoutError(APIError):
+    """Raised when the platform times out a query or upstream call (504 Gateway Timeout)."""
+
+    def __init__(self, message: str = "Gateway timeout", details: Optional[dict[str, Any]] = None) -> None:
+        super().__init__(message, status_code=504, details=details)
 
 
 # Network Errors
@@ -158,7 +205,14 @@ class ResponseError(TaruviError):
         super().__init__(message, status_code=None, details=details)
 
 
-def create_error_from_response(status_code: int, message: str, details: Optional[dict[str, Any]] = None) -> APIError:
+def create_error_from_response(
+    status_code: int,
+    message: str,
+    details: Optional[dict[str, Any]] = None,
+    code: Optional[str] = None,
+    detail: Optional[str] = None,
+    module: Optional[str] = None,
+) -> APIError:
     """
     Create appropriate exception from HTTP response.
 
@@ -166,10 +220,18 @@ def create_error_from_response(status_code: int, message: str, details: Optional
         status_code: HTTP status code
         message: Error message
         details: Additional error details
+        code: Standard error code from the response envelope
+        detail: Human-readable context from the response envelope
+        module: Product area blocked by a billing refusal
 
     Returns:
         Appropriate APIError subclass
     """
+    if code in BILLING_ERROR_CODES:
+        error = BillingError(message, status_code, code, module)
+        error.detail = detail
+        return error
+
     error_map: dict[int, type[APIError]] = {
         400: ValidationError,
         401: AuthenticationError,
@@ -179,7 +241,15 @@ def create_error_from_response(status_code: int, message: str, details: Optional
         429: RateLimitError,
         500: ServerError,
         503: ServiceUnavailableError,
+        504: GatewayTimeoutError,
     }
 
-    error_class = error_map.get(status_code, APIError)
-    return error_class(message, details)
+    error_class = error_map.get(status_code)
+    error = (
+        error_class(message, details)
+        if error_class is not None
+        else APIError(message, status_code=status_code, details=details)
+    )
+    error.code = code
+    error.detail = detail
+    return error

@@ -70,12 +70,12 @@ class AsyncSecretsModule(BaseModule):
         Example:
             ```python
             # List all secrets
-            result = await client.secrets.list_secrets()
+            result = await client.secrets.list()
             secrets = result["data"]
             total = result["total"]
 
             # List with filters
-            result = await client.secrets.list_secrets(
+            result = await client.secrets.list(
                 secret_type="api_key",
                 tags=["production"],
                 page_size=50

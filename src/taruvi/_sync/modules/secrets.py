@@ -70,12 +70,12 @@ class SecretsModule(BaseModule):
         Example:
             ```python
             # List all secrets
-            result = client.secrets.list_secrets()
+            result = client.secrets.list()
             secrets = result["data"]
             total = result["total"]
 
             # List with filters
-            result = client.secrets.list_secrets(
+            result = client.secrets.list(
                 secret_type="api_key",
                 tags=["production"],
                 page_size=50
