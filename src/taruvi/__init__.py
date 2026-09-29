@@ -203,11 +203,15 @@ def _is_async_context() -> bool:
     # asyncio in the package and importing it costs tens of ms (hundreds
     # under gVisor), which the sync-only path should not pay.
     import asyncio
+    import builtins
 
     try:
         asyncio.get_running_loop()
         return True
-    except RuntimeError:
+    except builtins.RuntimeError:
+        # Must be the builtin: `RuntimeError` in this module's namespace is
+        # taruvi.exceptions.RuntimeError (re-exported above), which does not
+        # catch the builtin raised by get_running_loop() when no loop runs.
         return False
 
 
