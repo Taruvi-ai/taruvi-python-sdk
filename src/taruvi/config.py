@@ -6,19 +6,14 @@ Supports both external application mode and function runtime mode.
 """
 
 import os
-from enum import Enum
 from typing import Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-class RuntimeMode(str, Enum):
-    """SDK runtime mode."""
-
-    EXTERNAL = "external"  # Running in external application
-    FUNCTION = "function"  # Running inside Taruvi function
-    LOCAL_DEV = "local_dev"  # Local development/testing
+# RuntimeMode is defined in the dependency-free taruvi._modes module and
+# re-exported here for backwards compatibility.
+from taruvi._modes import RuntimeMode
 
 
 class TaruviConfig(BaseSettings):

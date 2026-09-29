@@ -112,11 +112,10 @@ Function Runtime Example:
     ```
 """
 
-from typing import Optional, Any
-import asyncio
+from typing import TYPE_CHECKING, Optional, Any
 import os
 
-from taruvi.config import RuntimeMode, TaruviConfig
+from taruvi._modes import RuntimeMode
 from taruvi.exceptions import (
     APIError,
     AuthenticationError,
@@ -171,12 +170,39 @@ from taruvi.types import (
     UserFilters,
 )
 
+if TYPE_CHECKING:
+    from taruvi.config import TaruviConfig
+
+# Names resolved lazily by __getattr__ (PEP 562). TaruviConfig pulls in
+# pydantic_settings, which is expensive to import (entry-point scanning etc.)
+# and is only needed once a Client is constructed or the config is used
+# directly, so `import taruvi` does not pay for it.
+_LAZY_ATTRS = {
+    "TaruviConfig": "taruvi.config",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module_name = _LAZY_ATTRS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import importlib
+
+    value = getattr(importlib.import_module(module_name), name)
+    globals()[name] = value  # cache so __getattr__ is not hit again
+    return value
+
 
 def _is_async_context() -> bool:
     """Detect if we're in an async context."""
     # In test mode, default to sync (tests must explicitly specify mode='async')
     if os.getenv("TARUVI_TEST_MODE") == "true":
         return False
+
+    # Imported here rather than at module level: this is the only use of
+    # asyncio in the package and importing it costs tens of ms (hundreds
+    # under gVisor), which the sync-only path should not pay.
+    import asyncio
 
     try:
         asyncio.get_running_loop()
