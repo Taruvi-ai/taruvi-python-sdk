@@ -134,3 +134,35 @@ def test_import_taruvi_does_not_load_heavy_modules():
         [sys.executable, "-c", code], capture_output=True, text=True, check=True
     )
     assert result.stdout.split() == ["False", "False"], result.stdout
+
+
+def _run(code, env_extra=None, cwd=None):
+    import os
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith("TARUVI_")}
+    env.update(env_extra or {})
+    return subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True,
+        env=env, cwd=cwd,
+    ).stdout.strip()
+
+
+def test_dir_lists_lazy_taruvi_config_on_fresh_import():
+    out = _run("import taruvi; print('TaruviConfig' in dir(taruvi), 'pydantic_settings' in __import__('sys').modules)")
+    assert out == "True False"
+
+
+def test_test_mode_flag_read_at_instantiation_not_import(tmp_path):
+    (tmp_path / ".env").write_text("TARUVI_APP_SLUG=from-dotenv\n")
+    late = (
+        "import os, taruvi, taruvi.config; os.environ['TARUVI_TEST_MODE']='true'; "
+        "print(repr(taruvi.TaruviConfig().app_slug))"
+    )
+    early = (
+        "import os; os.environ['TARUVI_TEST_MODE']='true'; import taruvi; "
+        "print(repr(taruvi.TaruviConfig().app_slug))"
+    )
+    off = "import taruvi; print(repr(taruvi.TaruviConfig().app_slug))"
+    assert _run(late, cwd=tmp_path) == "''"
+    assert _run(early, cwd=tmp_path) == "''"
+    assert _run(off, cwd=tmp_path) == "'from-dotenv'"

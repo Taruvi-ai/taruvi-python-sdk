@@ -193,6 +193,10 @@ def __getattr__(name: str) -> Any:
     return value
 
 
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY_ATTRS))
+
+
 def _is_async_context() -> bool:
     """Detect if we're in an async context."""
     # In test mode, default to sync (tests must explicitly specify mode='async')

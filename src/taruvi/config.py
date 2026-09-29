@@ -29,7 +29,7 @@ class TaruviConfig(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="TARUVI_",
-        env_file=".env" if os.getenv("TARUVI_TEST_MODE") != "true" else None,
+        env_file=".env",  # disabled per-instance in __init__ when TARUVI_TEST_MODE=true
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -148,6 +148,9 @@ class TaruviConfig(BaseSettings):
         # In test mode, explicitly set auth fields to None if not provided
         # This prevents Pydantic from loading them from environment/.env file
         if os.getenv("TARUVI_TEST_MODE") == "true":
+            # Evaluated per instance (not at class-definition time) so the result
+            # does not depend on when taruvi.config was first imported.
+            kwargs.setdefault("_env_file", None)
             kwargs.setdefault('api_key', None)
             kwargs.setdefault('jwt', None)
             kwargs.setdefault('session_token', None)
