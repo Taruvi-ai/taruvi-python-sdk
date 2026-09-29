@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-29
+
 ### Changed
 - **Faster `import taruvi`** — `asyncio` and `pydantic_settings` (via `taruvi.config`) are
   no longer imported at package import time; they load lazily when a `Client` is
