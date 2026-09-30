@@ -151,11 +151,11 @@ class TaruviConfig(BaseSettings):
             # Evaluated per instance (not at class-definition time) so the result
             # does not depend on when taruvi.config was first imported.
             kwargs.setdefault("_env_file", None)
-            kwargs.setdefault('api_key', None)
-            kwargs.setdefault('jwt', None)
-            kwargs.setdefault('session_token', None)
-            kwargs.setdefault('username', None)
-            kwargs.setdefault('password', None)
+            kwargs.setdefault("api_key", None)
+            kwargs.setdefault("jwt", None)
+            kwargs.setdefault("session_token", None)
+            kwargs.setdefault("username", None)
+            kwargs.setdefault("password", None)
 
         super().__init__(**kwargs)
 
@@ -271,11 +271,11 @@ class TaruviConfig(BaseSettings):
         # This prevents Pydantic from loading them from environment/env file
         if os.getenv("TARUVI_TEST_MODE") == "true":
             test_defaults = {
-                'api_key': None,
-                'jwt': None,
-                'session_token': None,
-                'username': None,
-                'password': None,
+                "api_key": None,
+                "jwt": None,
+                "session_token": None,
+                "username": None,
+                "password": None,
             }
             # Apply test defaults first, then override with explicit params
             explicit_params = {**test_defaults, **explicit_params}

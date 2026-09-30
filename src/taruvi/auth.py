@@ -5,7 +5,7 @@ Provides user-level authentication methods that return new authenticated client 
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
@@ -27,7 +27,7 @@ class AuthManager:
         >>> # Original client unchanged, auth_client has authentication
     """
 
-    def __init__(self, client: Union["AsyncClient", "SyncClient"]) -> None:
+    def __init__(self, client: Union[AsyncClient, SyncClient]) -> None:
         """
         Initialize auth manager.
 
@@ -37,10 +37,8 @@ class AuthManager:
         self._client = client
 
     def signInWithToken(
-        self,
-        token: str,
-        token_type: str = 'jwt'
-    ) -> Union["AsyncClient", "SyncClient"]:
+        self, token: str, token_type: str = "jwt"
+    ) -> Union[AsyncClient, SyncClient]:
         """
         Sign in with an authentication token.
 
@@ -75,21 +73,16 @@ class AuthManager:
             ...     token_type='session_token'
             ... )
         """
-        valid_types = {'jwt', 'api_key', 'session_token'}
+        valid_types = {"jwt", "api_key", "session_token"}
         if token_type not in valid_types:
             raise ValueError(
-                f"Invalid token_type '{token_type}'. "
-                f"Must be one of: {', '.join(valid_types)}"
+                f"Invalid token_type '{token_type}'. " f"Must be one of: {', '.join(valid_types)}"
             )
 
         # Clone client with new auth credentials
         return self._clone_with_auth(**{token_type: token})
 
-    def signInWithPassword(
-        self,
-        username: str,
-        password: str
-    ) -> Union["AsyncClient", "SyncClient"]:
+    def signInWithPassword(self, username: str, password: str) -> Union[AsyncClient, SyncClient]:
         """
         Sign in with username/email and password (auto-login).
 
@@ -121,6 +114,7 @@ class AuthManager:
         """
         # Import here to avoid circular dependency
         import httpx
+
         from taruvi.exceptions import AuthenticationError
 
         # Perform synchronous login to get JWT
@@ -143,12 +137,12 @@ class AuthManager:
         except httpx.HTTPStatusError as e:
             raise AuthenticationError(f"Login failed: {e.response.status_code}") from e
         except Exception as e:
-            raise AuthenticationError(f"Login error: {str(e)}") from e
+            raise AuthenticationError(f"Login error: {e!s}") from e
 
         # Return new client with JWT
         return self._clone_with_auth(jwt=jwt_token)
 
-    def refreshToken(self, refresh_token: str) -> Union["AsyncClient", "SyncClient"]:
+    def refreshToken(self, refresh_token: str) -> Union[AsyncClient, SyncClient]:
         """
         Refresh JWT using refresh token.
 
@@ -168,6 +162,7 @@ class AuthManager:
         """
         # Import here to avoid circular dependency
         import httpx
+
         from taruvi.exceptions import AuthenticationError
 
         # Perform synchronous token refresh
@@ -189,12 +184,12 @@ class AuthManager:
         except httpx.HTTPStatusError as e:
             raise AuthenticationError(f"Token refresh failed: {e.response.status_code}") from e
         except Exception as e:
-            raise AuthenticationError(f"Refresh error: {str(e)}") from e
+            raise AuthenticationError(f"Refresh error: {e!s}") from e
 
         # Return new client with refreshed JWT
         return self._clone_with_auth(jwt=new_jwt)
 
-    def signOut(self) -> Union["AsyncClient", "SyncClient"]:
+    def signOut(self) -> Union[AsyncClient, SyncClient]:
         """
         Sign out (remove authentication).
 
@@ -210,7 +205,7 @@ class AuthManager:
         # Clone client with no auth credentials
         return self._clone_with_auth(api_key=None, jwt=None, session_token=None)
 
-    def _clone_with_auth(self, **auth_kwargs) -> Union["AsyncClient", "SyncClient"]:
+    def _clone_with_auth(self, **auth_kwargs) -> Union[AsyncClient, SyncClient]:
         """
         Clone parent client with updated auth credentials.
 
@@ -232,9 +227,9 @@ class AuthManager:
 
         # Clear all auth credentials first to prevent mixing auth methods
         # (e.g., don't keep JWT when switching to API key)
-        current_config['api_key'] = None
-        current_config['jwt'] = None
-        current_config['session_token'] = None
+        current_config["api_key"] = None
+        current_config["jwt"] = None
+        current_config["session_token"] = None
 
         # Update with new auth credentials
         current_config.update(auth_kwargs)
@@ -252,11 +247,13 @@ class AuthManager:
 
         # Recreate HTTP client with new config
         # Both Async and Sync clients use _http_client
-        if 'Async' in client_class.__name__:
+        if "Async" in client_class.__name__:
             from taruvi._async.http_client import AsyncHTTPClient
+
             new_client._http_client = AsyncHTTPClient(new_config)
         else:
             from taruvi._sync.http_client import HTTPClient
+
             new_client._http_client = HTTPClient(new_config)
 
         # Reset lazy-loaded modules (they'll reinitialize with new auth)

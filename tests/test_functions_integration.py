@@ -16,10 +16,12 @@ Setup:
 
 import pytest
 
+from taruvi.exceptions import TaruviError
 
 # ============================================================================
 # Execute Tests - Async (Real API Calls)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -32,9 +34,7 @@ async def test_execute_async_sync_mode_real_api(async_functions_module, test_fun
     """
     # Execute function synchronously on real backend
     result = await async_functions_module.execute(
-        test_function_name,
-        params={"order_id": 123},
-        is_async=False
+        test_function_name, params={"order_id": 123}, is_async=False
     )
 
     # Verify actual response structure from backend
@@ -51,8 +51,10 @@ async def test_execute_async_sync_mode_real_api(async_functions_module, test_fun
 
     # In sync mode, status should be "completed"
     # (If this fails, backend behavior changed!)
-    assert invocation["status"] in ["completed", "SUCCESS"], \
-        f"Unexpected status: {invocation['status']}"
+    assert invocation["status"] in [
+        "completed",
+        "SUCCESS",
+    ], f"Unexpected status: {invocation['status']}"
 
 
 @pytest.mark.integration
@@ -65,9 +67,7 @@ async def test_execute_async_async_mode_real_api(async_functions_module, test_fu
     """
     # Execute function asynchronously on real backend
     result = await async_functions_module.execute(
-        test_function_name,
-        params={"order_id": 456},
-        is_async=True
+        test_function_name, params={"order_id": 456}, is_async=True
     )
 
     # Verify response structure (SDK returns extracted data)
@@ -79,13 +79,18 @@ async def test_execute_async_async_mode_real_api(async_functions_module, test_fu
     assert invocation["celery_task_id"] is not None
 
     # In async mode, task should be pending/running
-    assert invocation["status"] in ["pending", "PENDING", "running", "STARTED"], \
-        f"Unexpected async task status: {invocation['status']}"
+    assert invocation["status"] in [
+        "pending",
+        "PENDING",
+        "running",
+        "STARTED",
+    ], f"Unexpected async task status: {invocation['status']}"
 
 
 # ============================================================================
 # Get Result Tests - Async (Real API Calls)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -97,9 +102,7 @@ async def test_get_result_async_real_api(async_functions_module, test_function_n
     """
     # Step 1: Execute function asynchronously
     execute_result = await async_functions_module.execute(
-        test_function_name,
-        params={"order_id": 789},
-        is_async=True
+        test_function_name, params={"order_id": 789}, is_async=True
     )
 
     task_id = execute_result["invocation"]["celery_task_id"]
@@ -122,6 +125,7 @@ async def test_get_result_async_real_api(async_functions_module, test_function_n
 # ============================================================================
 # List Functions Tests - Async (Real API Calls)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -152,13 +156,13 @@ async def test_list_async_real_api(async_functions_module):
     # If there are functions, verify their structure
     if len(functions_list) > 0:
         function = functions_list[0]
-        assert "id" in function or "slug" in function, \
-            "Function object structure changed!"
+        assert "id" in function or "slug" in function, "Function object structure changed!"
 
 
 # ============================================================================
 # Get Function Details Tests - Async (Real API Calls)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -183,6 +187,7 @@ async def test_get_async_real_api(async_functions_module, test_function_name):
 # Sync Client Tests - Real API Calls
 # ============================================================================
 
+
 @pytest.mark.integration
 def test_execute_sync_sync_mode_real_api(sync_functions_module, test_function_name):
     """
@@ -192,9 +197,7 @@ def test_execute_sync_sync_mode_real_api(sync_functions_module, test_function_na
     """
     # Execute function synchronously using sync client
     result = sync_functions_module.execute(
-        test_function_name,
-        params={"order_id": 321},
-        is_async=False
+        test_function_name, params={"order_id": 321}, is_async=False
     )
 
     # Verify actual response structure (SDK returns extracted data)
@@ -215,9 +218,7 @@ def test_get_result_sync_real_api(sync_functions_module, test_function_name):
     """
     # Step 1: Execute async
     execute_result = sync_functions_module.execute(
-        test_function_name,
-        params={"order_id": 999},
-        is_async=True
+        test_function_name, params={"order_id": 999}, is_async=True
     )
 
     task_id = execute_result["invocation"]["celery_task_id"]
@@ -234,6 +235,7 @@ def test_get_result_sync_real_api(sync_functions_module, test_function_name):
 # Error Handling Tests - Real API Errors
 # ============================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_execute_nonexistent_function_real_api(async_functions_module):
@@ -242,11 +244,9 @@ async def test_execute_nonexistent_function_real_api(async_functions_module):
 
     This verifies error handling with actual backend errors.
     """
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(TaruviError) as exc_info:
         await async_functions_module.execute(
-            "nonexistent-function-xyz-123",
-            params={},
-            is_async=False
+            "nonexistent-function-xyz-123", params={}, is_async=False
         )
 
     # Verify we got a real error from backend
@@ -260,7 +260,7 @@ async def test_get_result_invalid_task_id_real_api(async_functions_module):
     """
     Test getting result for invalid task ID returns real error.
     """
-    with pytest.raises(Exception) as exc_info:
+    with pytest.raises(TaruviError) as exc_info:
         await async_functions_module.get_result("invalid-task-id-xyz")
 
     # Verify we got a real error from backend

@@ -152,7 +152,9 @@ class AsyncHTTPClient(BaseHTTPClient):
         headers: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         """Make a POST request."""
-        return await self.request("POST", path, params=params, json=json, data=data, headers=headers)
+        return await self.request(
+            "POST", path, params=params, json=json, data=data, headers=headers
+        )
 
     async def put(
         self,

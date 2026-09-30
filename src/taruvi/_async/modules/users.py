@@ -12,8 +12,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
-from taruvi.utils import build_query_string, build_params
 from taruvi.types import User
+from taruvi.utils import build_params, build_query_string
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 # ============================================================================
 # Shared Implementation Logic
 # ============================================================================
+
 
 def _build_get_user_path(username: str) -> str:
     """Build get user request path."""
@@ -37,7 +38,7 @@ def _build_user_create_request(
     last_name: Optional[str],
     is_active: bool,
     is_staff: bool,
-    attributes: Optional[str]
+    attributes: Optional[str],
 ) -> tuple[str, dict[str, Any]]:
     """Build user creation request."""
     body: dict[str, Any] = {
@@ -67,7 +68,7 @@ def _build_user_update_request(
     last_name: Optional[str],
     is_active: Optional[bool],
     is_staff: Optional[bool],
-    attributes: Optional[str]
+    attributes: Optional[str],
 ) -> tuple[str, dict[str, Any]]:
     """Build user update request."""
     body: dict[str, Any] = {}
@@ -98,15 +99,10 @@ def _build_user_list_path(**kwargs: Any) -> str:
 
 
 def _build_assign_roles_request(
-    roles: list[str],
-    usernames: list[str],
-    expires_at: Optional[str]
+    roles: list[str], usernames: list[str], expires_at: Optional[str]
 ) -> tuple[str, dict[str, Any]]:
     """Build bulk assign roles request."""
-    body: dict[str, Any] = {
-        "roles": roles,
-        "usernames": usernames
-    }
+    body: dict[str, Any] = {"roles": roles, "usernames": usernames}
     if expires_at is not None:
         body["expires_at"] = expires_at
 
@@ -114,14 +110,10 @@ def _build_assign_roles_request(
 
 
 def _build_revoke_roles_request(
-    roles: list[str],
-    usernames: list[str]
+    roles: list[str], usernames: list[str]
 ) -> tuple[str, dict[str, Any]]:
     """Build bulk revoke roles request."""
-    body: dict[str, Any] = {
-        "roles": roles,
-        "usernames": usernames
-    }
+    body: dict[str, Any] = {"roles": roles, "usernames": usernames}
 
     return "/api/revoke/roles/", body
 
@@ -130,10 +122,11 @@ def _build_revoke_roles_request(
 # Async Implementation
 # ============================================================================
 
+
 class AsyncUsersModule(BaseModule):
     """User management API operations."""
 
-    def __init__(self, client: "AsyncClient") -> None:
+    def __init__(self, client: AsyncClient) -> None:
         """Initialize Users module."""
         self.client = client
         super().__init__(client._http_client, client._config)
@@ -287,10 +280,7 @@ class AsyncUsersModule(BaseModule):
         return self._extract_data_list(response)
 
     async def assign_roles(
-        self,
-        roles: list[str],
-        usernames: list[str],
-        expires_at: Optional[str] = None
+        self, roles: list[str], usernames: list[str], expires_at: Optional[str] = None
     ) -> dict[str, Any]:
         """
         Bulk assign roles to users.
@@ -366,11 +356,7 @@ class AsyncUsersModule(BaseModule):
         """
         return await self._http.put("/api/users/me/preferences/", json=data)
 
-    async def revoke_roles(
-        self,
-        roles: list[str],
-        usernames: list[str]
-    ) -> dict[str, Any]:
+    async def revoke_roles(self, roles: list[str], usernames: list[str]) -> dict[str, Any]:
         """
         Bulk revoke roles from users.
 
@@ -400,4 +386,3 @@ class AsyncUsersModule(BaseModule):
         # Use request() directly as delete() convenience method doesn't support JSON body
         response = await self._http.request("DELETE", path, json=body)
         return response
-

@@ -8,8 +8,8 @@ Handles all HTTP communication with Taruvi API using synchronous operations:
 - Error response parsing
 """
 
-import time
 import logging
+import time
 from typing import Any, Optional
 
 import httpx

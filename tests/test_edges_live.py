@@ -1,3 +1,5 @@
+import contextlib
+
 """
 Integration test for edge CRUD via DatabaseModule methods.
 
@@ -14,6 +16,7 @@ import os
 import sys
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from taruvi import Client
@@ -58,13 +61,21 @@ def main():
     # 2. Create edges
     print("2. Create edges...")
     try:
-        result = db.create_edges(table, [
-            {"from_id": id1, "to_id": id2, "type": "manager"},
-            {"from_id": id1, "to_id": id3, "type": "manager", "metadata": {"primary": True}},
-            {"from_id": id2, "to_id": id3, "type": "dotted_line", "metadata": {"project": "SDK Test"}},
-        ])
+        result = db.create_edges(
+            table,
+            [
+                {"from_id": id1, "to_id": id2, "type": "manager"},
+                {"from_id": id1, "to_id": id3, "type": "manager", "metadata": {"primary": True}},
+                {
+                    "from_id": id2,
+                    "to_id": id3,
+                    "type": "dotted_line",
+                    "metadata": {"project": "SDK Test"},
+                },
+            ],
+        )
         print(f"   Result: {result}\n")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
         print(f"   Create returned error (edges may still be created): {e}\n")
 
     # 3. List with filter
@@ -98,15 +109,13 @@ def main():
         try:
             result = db.delete_edges(table, edge_ids=edge_ids)
             print(f"   Result: {result}\n")
-        except Exception:
+        except Exception:  # noqa: BLE001 - fall back on any error
             # Fallback: delete via the edges datatable directly
             edges_table = f"{table}_edges"
             for eid in edge_ids:
-                try:
+                with contextlib.suppress(Exception):
                     db.delete(edges_table, record_id=eid)
-                except Exception:
-                    pass
-            print(f"   Deleted via edges datatable fallback\n")
+            print("   Deleted via edges datatable fallback\n")
     else:
         print("6. Skip delete\n")
 
@@ -121,12 +130,15 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
         import traceback
+
         traceback.print_exc()
         print(f"\n❌ Error: {e}")
-        print(f"\nMake sure:")
-        print(f"  - Backend is running")
-        print(f"  - Table '{os.getenv('TARUVI_TEST_TABLE_NAME', 'test_table')}' exists with edges enabled")
-        print(f"  - Credentials in .env are valid")
+        print("\nMake sure:")
+        print("  - Backend is running")
+        print(
+            f"  - Table '{os.getenv('TARUVI_TEST_TABLE_NAME', 'test_table')}' exists with edges enabled"
+        )
+        print("  - Credentials in .env are valid")
         sys.exit(1)

@@ -11,13 +11,16 @@ Setup:
     3. Run: RUN_INTEGRATION_TESTS=1 pytest tests/test_auth_integration.py -v
 """
 
-import pytest
 import os
 
+import pytest
+
+from taruvi.exceptions import TaruviError
 
 # ============================================================================
 # Login Tests - Async (Real Authentication)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -36,14 +39,13 @@ async def test_login_real_api(async_client):
 
     try:
         # Login using signInWithPassword - returns authenticated client
-        auth_client = await async_client.auth.signInWithPassword(
-            email=email,
-            password=password
-        )
+        auth_client = await async_client.auth.signInWithPassword(email=email, password=password)
 
         # Verify authenticated client is returned
         assert auth_client is not None
-        assert auth_client.is_authenticated, "Client should be authenticated after signInWithPassword"
+        assert (
+            auth_client.is_authenticated
+        ), "Client should be authenticated after signInWithPassword"
         assert auth_client._config.jwt is not None, "JWT should be set"
 
     except Exception as e:
@@ -61,15 +63,19 @@ async def test_login_invalid_credentials_real_api(async_client):
     Verifies proper error handling for authentication failures.
     """
     try:
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(TaruviError) as exc_info:
             await async_client.auth.signInWithPassword(
-                email="invalid_user_xyz_123@example.com",
-                password="wrong_password_xyz"
+                email="invalid_user_xyz_123@example.com", password="wrong_password_xyz"
             )
 
         # Verify we got authentication error
         error_msg = str(exc_info.value).lower()
-        assert "auth" in error_msg or "credential" in error_msg or "401" in error_msg or "invalid" in error_msg
+        assert (
+            "auth" in error_msg
+            or "credential" in error_msg
+            or "401" in error_msg
+            or "invalid" in error_msg
+        )
 
     except Exception as e:
         if "auth" in str(e).lower() and "not found" in str(e).lower():
@@ -80,6 +86,7 @@ async def test_login_invalid_credentials_real_api(async_client):
 # ============================================================================
 # User Info Tests - Async
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -97,10 +104,11 @@ async def test_get_current_user_real_api(async_client):
         assert result is not None
 
         # Response may be wrapped in 'data' key
-        user_data = result.get('data', result)
+        user_data = result.get("data", result)
 
-        assert "id" in user_data or "user_id" in user_data or "username" in user_data, \
-            "Response missing user identifier - API contract changed!"
+        assert (
+            "id" in user_data or "user_id" in user_data or "username" in user_data
+        ), "Response missing user identifier - API contract changed!"
 
         # Verify user data fields
         assert "username" in user_data or "email" in user_data
@@ -114,6 +122,7 @@ async def test_get_current_user_real_api(async_client):
 # ============================================================================
 # Session Management Tests - Async
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -157,6 +166,7 @@ async def test_multiple_sessions_real_api(async_client):
 # Sync Client Tests - Real Authentication
 # ============================================================================
 
+
 @pytest.mark.integration
 def test_login_sync_real_api(sync_client):
     """
@@ -174,7 +184,9 @@ def test_login_sync_real_api(sync_client):
 
         # Verify authenticated client is returned
         assert auth_client is not None
-        assert auth_client.is_authenticated, "Client should be authenticated after signInWithPassword"
+        assert (
+            auth_client.is_authenticated
+        ), "Client should be authenticated after signInWithPassword"
         assert auth_client._config.jwt is not None, "JWT should be set"
 
     except Exception as e:
@@ -193,7 +205,7 @@ def test_get_current_user_sync_real_api(sync_client):
 
         # Verify user info (response may be wrapped in 'data' key)
         assert result is not None
-        user_data = result.get('data', result)
+        user_data = result.get("data", result)
         assert "id" in user_data or "username" in user_data or "email" in user_data
 
     except Exception as e:

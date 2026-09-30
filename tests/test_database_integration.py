@@ -1,3 +1,5 @@
+import contextlib
+
 """
 Integration tests for Database API module.
 
@@ -18,13 +20,15 @@ NOTE: These tests are currently skipped pending test_table setup.
 """
 
 import os
+
 import pytest
-from uuid import uuid4
+
+from taruvi.exceptions import TaruviError
 
 # Skip unless RUN_INTEGRATION_TESTS=1 is set
 pytestmark = pytest.mark.skipif(
     not os.getenv("RUN_INTEGRATION_TESTS"),
-    reason="Set RUN_INTEGRATION_TESTS=1 to run database integration tests"
+    reason="Set RUN_INTEGRATION_TESTS=1 to run database integration tests",
 )
 
 
@@ -50,6 +54,7 @@ def safe_delete_sync(module, table_name, record_id):
 # CRUD Tests - Async (Real Database Operations)
 # ============================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_create_record_real_api(async_database_module, generate_unique_id):
@@ -58,14 +63,16 @@ async def test_create_record_real_api(async_database_module, generate_unique_id)
 
     Creates actual record in backend database and verifies it exists.
     """
-    table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")  # Update with your actual test table
+    table_name = os.getenv(
+        "TARUVI_TEST_TABLE_NAME", "test_table"
+    )  # Update with your actual test table
     unique_id = generate_unique_id()
 
     # Create real record
     record_data = {
         "name": f"Test Record {unique_id}",
         "email": f"test_{unique_id}@example.com",
-        "description": "Integration test record"
+        "description": "Integration test record",
     }
 
     try:
@@ -82,9 +89,9 @@ async def test_create_record_real_api(async_database_module, generate_unique_id)
         assert result.get("name") == record_data["name"]
         assert result.get("email") == record_data["email"]
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
         # If table doesn't exist or other error, that's expected in test env
-        pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
+        pytest.skip(f"Skipping: {table_name} table not accessible - {e!s}")
 
 
 @pytest.mark.integration
@@ -98,10 +105,7 @@ async def test_get_record_real_api(async_database_module, generate_unique_id):
     table_name = os.getenv("TARUVI_TEST_TABLE_NAME", "test_table")
     unique_id = generate_unique_id()
 
-    record_data = {
-        "name": f"Get Test {unique_id}",
-        "email": f"get_{unique_id}@example.com"
-    }
+    record_data = {"name": f"Get Test {unique_id}", "email": f"get_{unique_id}@example.com"}
 
     try:
         # Create record
@@ -119,8 +123,8 @@ async def test_get_record_real_api(async_database_module, generate_unique_id):
         # Cleanup
         await safe_delete(async_database_module, table_name, record_id)
 
-    except Exception as e:
-        pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
+        pytest.skip(f"Skipping: {table_name} table not accessible - {e!s}")
 
 
 @pytest.mark.integration
@@ -136,17 +140,14 @@ async def test_update_record_real_api(async_database_module, generate_unique_id)
 
     try:
         # Create record
-        created = await async_database_module.create(table_name, {
-            "name": f"Original {unique_id}",
-            "email": f"original_{unique_id}@example.com"
-        })
+        created = await async_database_module.create(
+            table_name,
+            {"name": f"Original {unique_id}", "email": f"original_{unique_id}@example.com"},
+        )
         record_id = created[0]["id"] if isinstance(created, list) else created["id"]
 
         # Update record
-        updated_data = {
-            "name": f"Updated {unique_id}",
-            "email": f"updated_{unique_id}@example.com"
-        }
+        updated_data = {"name": f"Updated {unique_id}", "email": f"updated_{unique_id}@example.com"}
         updated = await async_database_module.update(table_name, record_id, updated_data)
 
         # Verify update
@@ -160,8 +161,8 @@ async def test_update_record_real_api(async_database_module, generate_unique_id)
         # Cleanup
         await safe_delete(async_database_module, table_name, record_id)
 
-    except Exception as e:
-        pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
+        pytest.skip(f"Skipping: {table_name} table not accessible - {e!s}")
 
 
 @pytest.mark.integration
@@ -177,22 +178,22 @@ async def test_delete_record_real_api(async_database_module, generate_unique_id)
 
     try:
         # Create record
-        created = await async_database_module.create(table_name, {
-            "name": f"Delete Test {unique_id}",
-            "email": f"delete_{unique_id}@example.com"
-        })
+        created = await async_database_module.create(
+            table_name,
+            {"name": f"Delete Test {unique_id}", "email": f"delete_{unique_id}@example.com"},
+        )
         record_id = created[0]["id"] if isinstance(created, list) else created["id"]
 
         # Delete record
         await safe_delete(async_database_module, table_name, record_id)
 
         # Verify deletion - should raise 404 or return None
-        with pytest.raises(Exception):
+        with pytest.raises(TaruviError):
             await async_database_module.get(table_name, record_id)
 
     except Exception as e:
         if "not accessible" in str(e):
-            pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
+            pytest.skip(f"Skipping: {table_name} table not accessible - {e!s}")
         # Re-raise if it's not the expected skip
         raise
 
@@ -212,18 +213,17 @@ async def test_list_records_real_api(async_database_module, generate_unique_id):
     try:
         # Create multiple records
         for i in range(3):
-            created = await async_database_module.create(table_name, {
-                "name": f"List Test {unique_id} #{i}",
-                "email": f"list_{unique_id}_{i}@example.com"
-            })
+            created = await async_database_module.create(
+                table_name,
+                {
+                    "name": f"List Test {unique_id} #{i}",
+                    "email": f"list_{unique_id}_{i}@example.com",
+                },
+            )
             created_ids.append(created[0]["id"] if isinstance(created, list) else created["id"])
 
         # List records using query builder
-        result = await (
-            async_database_module.from_(table_name)
-            .page_size(10)
-            .execute()
-        )
+        result = await async_database_module.from_(table_name).page_size(10).execute()
 
         # Verify structure
         assert result is not None
@@ -232,21 +232,20 @@ async def test_list_records_real_api(async_database_module, generate_unique_id):
         records = result if isinstance(result, list) else result.get("data", [])
         assert len(records) > 0
 
-    except Exception as e:
-        pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
+        pytest.skip(f"Skipping: {table_name} table not accessible - {e!s}")
 
     finally:
         # Cleanup all created records
         for record_id in created_ids:
-            try:
+            with contextlib.suppress(Exception):
                 await safe_delete(async_database_module, table_name, record_id)
-            except:
-                pass  # Ignore cleanup errors
 
 
 # ============================================================================
 # Query Tests - Async (Real Query Operations)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -263,18 +262,19 @@ async def test_query_with_filters_real_api(async_database_module, generate_uniqu
     try:
         # Create records with specific data for filtering
         for status in ["active", "inactive", "active"]:
-            created = await async_database_module.create(table_name, {
-                "name": f"Filter Test {unique_id}",
-                "email": f"filter_{unique_id}_{status}@example.com",
-                "status": status
-            })
+            created = await async_database_module.create(
+                table_name,
+                {
+                    "name": f"Filter Test {unique_id}",
+                    "email": f"filter_{unique_id}_{status}@example.com",
+                    "status": status,
+                },
+            )
             created_ids.append(created[0]["id"] if isinstance(created, list) else created["id"])
 
         # Query with filter using query builder
         result = await (
-            async_database_module.from_(table_name)
-            .filter("status", "eq", "active")
-            .execute()
+            async_database_module.from_(table_name).filter("status", "eq", "active").execute()
         )
 
         # Verify filtering worked
@@ -288,16 +288,14 @@ async def test_query_with_filters_real_api(async_database_module, generate_uniqu
 
     except Exception as e:
         if "not accessible" in str(e) or "not supported" in str(e):
-            pytest.skip(f"Skipping: Filter query not supported - {str(e)}")
+            pytest.skip(f"Skipping: Filter query not supported - {e!s}")
         raise
 
     finally:
         # Cleanup
         for record_id in created_ids:
-            try:
+            with contextlib.suppress(Exception):
                 await safe_delete(async_database_module, table_name, record_id)
-            except:
-                pass
 
 
 @pytest.mark.integration
@@ -315,52 +313,47 @@ async def test_pagination_real_api(async_database_module, generate_unique_id):
     try:
         # Create 5 records
         for i in range(5):
-            created = await async_database_module.create(table_name, {
-                "name": f"Pagination Test {unique_id} #{i}",
-                "email": f"page_{unique_id}_{i}@example.com"
-            })
+            created = await async_database_module.create(
+                table_name,
+                {
+                    "name": f"Pagination Test {unique_id} #{i}",
+                    "email": f"page_{unique_id}_{i}@example.com",
+                },
+            )
             created_ids.append(created[0]["id"] if isinstance(created, list) else created["id"])
 
         # Test limit using query builder
-        result = await (
-            async_database_module.from_(table_name)
-            .page_size(2)
-            .execute()
-        )
+        result = await async_database_module.from_(table_name).page_size(2).execute()
         records = result if isinstance(result, list) else result.get("data", [])
 
         # Should have at most 2 records
         assert len(records) <= 2
 
         # Test page 2
-        result_offset = await (
-            async_database_module.from_(table_name)
-            .page_size(2)
-            .page(2)
-            .execute()
+        result_offset = await async_database_module.from_(table_name).page_size(2).page(2).execute()
+        records_offset = (
+            result_offset if isinstance(result_offset, list) else result_offset.get("data", [])
         )
-        records_offset = result_offset if isinstance(result_offset, list) else result_offset.get("data", [])
 
         # Should get different records
         assert len(records_offset) >= 0  # May have fewer if less data
 
     except Exception as e:
         if "not accessible" in str(e):
-            pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
+            pytest.skip(f"Skipping: {table_name} table not accessible - {e!s}")
         raise
 
     finally:
         # Cleanup
         for record_id in created_ids:
-            try:
+            with contextlib.suppress(Exception):
                 await safe_delete(async_database_module, table_name, record_id)
-            except:
-                pass
 
 
 # ============================================================================
 # Sync Client Tests - Real Database Operations
 # ============================================================================
+
 
 @pytest.mark.integration
 def test_create_record_sync_real_api(sync_database_module, generate_unique_id):
@@ -372,10 +365,9 @@ def test_create_record_sync_real_api(sync_database_module, generate_unique_id):
 
     try:
         # Create record with sync client
-        result = sync_database_module.create(table_name, {
-            "name": f"Sync Test {unique_id}",
-            "email": f"sync_{unique_id}@example.com"
-        })
+        result = sync_database_module.create(
+            table_name, {"name": f"Sync Test {unique_id}", "email": f"sync_{unique_id}@example.com"}
+        )
         if isinstance(result, list):
             result = result[0]
 
@@ -386,8 +378,8 @@ def test_create_record_sync_real_api(sync_database_module, generate_unique_id):
         # Cleanup
         safe_delete_sync(sync_database_module, table_name, result["id"])
 
-    except Exception as e:
-        pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
+        pytest.skip(f"Skipping: {table_name} table not accessible - {e!s}")
 
 
 @pytest.mark.integration
@@ -400,28 +392,35 @@ def test_update_record_sync_real_api(sync_database_module, generate_unique_id):
 
     try:
         # Create
-        created = sync_database_module.create(table_name, {
-            "name": f"Sync Update {unique_id}",
-            "email": f"sync_update_{unique_id}@example.com"
-        })
+        created = sync_database_module.create(
+            table_name,
+            {"name": f"Sync Update {unique_id}", "email": f"sync_update_{unique_id}@example.com"},
+        )
 
         # Update
-        updated = sync_database_module.update(table_name, created[0]["id"] if isinstance(created, list) else created["id"], {
-            "name": f"Sync Updated {unique_id}"
-        })
+        updated = sync_database_module.update(
+            table_name,
+            created[0]["id"] if isinstance(created, list) else created["id"],
+            {"name": f"Sync Updated {unique_id}"},
+        )
 
         assert updated["name"] == f"Sync Updated {unique_id}"
 
         # Cleanup
-        safe_delete_sync(sync_database_module, table_name, created[0]["id"] if isinstance(created, list) else created["id"])
+        safe_delete_sync(
+            sync_database_module,
+            table_name,
+            created[0]["id"] if isinstance(created, list) else created["id"],
+        )
 
-    except Exception as e:
-        pytest.skip(f"Skipping: {table_name} table not accessible - {str(e)}")
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
+        pytest.skip(f"Skipping: {table_name} table not accessible - {e!s}")
 
 
 # ============================================================================
 # Error Handling Tests - Real API Errors
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -433,7 +432,7 @@ async def test_get_nonexistent_record_real_api(async_database_module):
     fake_id = 99999999
 
     try:
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(TaruviError) as exc_info:
             await async_database_module.get(table_name, fake_id)
 
         # Verify we got a real error from backend
@@ -455,7 +454,7 @@ async def test_delete_nonexistent_record_real_api(async_database_module):
     fake_id = 99999999
 
     try:
-        with pytest.raises(Exception):
+        with pytest.raises(TaruviError):
             await async_database_module.delete(table_name, fake_id)
 
     except Exception as e:

@@ -7,8 +7,8 @@ Supports both external application mode and function runtime mode.
 
 from typing import Any
 
-from taruvi.config import TaruviConfig
 from taruvi._sync.http_client import HTTPClient
+from taruvi.config import TaruviConfig
 
 
 class SyncClient:
@@ -75,11 +75,7 @@ class SyncClient:
         """
         # Use factory method - handles runtime detection and merging
         self._config = TaruviConfig.from_runtime_and_params(
-            api_url=api_url,
-            app_slug=app_slug,
-            timeout=timeout,
-            max_retries=max_retries,
-            **kwargs
+            api_url=api_url, app_slug=app_slug, timeout=timeout, max_retries=max_retries, **kwargs
         )
 
         # Validate configuration
@@ -150,6 +146,7 @@ class SyncClient:
         """
         if self._auth is None:
             from taruvi._sync.modules.auth import AuthModule
+
             self._auth = AuthModule(self)
         return self._auth
 
@@ -169,11 +166,13 @@ class SyncClient:
             >>> auth_client.is_authenticated
             True
         """
-        return any([
-            self._config.jwt is not None,
-            self._config.api_key is not None,
-            self._config.session_token is not None,
-        ])
+        return any(
+            [
+                self._config.jwt is not None,
+                self._config.api_key is not None,
+                self._config.session_token is not None,
+            ]
+        )
 
     @property
     def storage(self):

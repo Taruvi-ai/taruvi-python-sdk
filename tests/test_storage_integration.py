@@ -1,3 +1,5 @@
+import contextlib
+
 """
 Integration tests for Storage API module.
 
@@ -13,14 +15,16 @@ Setup:
     3. Run: RUN_INTEGRATION_TESTS=1 pytest tests/test_storage_integration.py -v
 """
 
-import pytest
 import io
-from pathlib import Path
 
+import pytest
+
+from taruvi.exceptions import TaruviError
 
 # ============================================================================
 # File Upload Tests - Async (Real Storage Operations)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -41,8 +45,7 @@ async def test_upload_file_real_api(async_storage_module, generate_unique_id):
     try:
         # Upload file to real storage using query builder pattern
         result = await async_storage_module.from_(bucket_name).upload(
-            files=[("test.txt", file_obj)],
-            paths=[file_path]
+            files=[("test.txt", file_obj)], paths=[file_path]
         )
 
         # Verify response structure
@@ -52,15 +55,13 @@ async def test_upload_file_real_api(async_storage_module, generate_unique_id):
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {bucket_name} bucket not accessible - {str(e)}")
+            pytest.skip(f"Skipping: {bucket_name} bucket not accessible - {e!s}")
         raise
 
     finally:
         # Cleanup: Delete uploaded file
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete([file_path])
-        except:
-            pass  # Ignore cleanup errors
 
 
 @pytest.mark.integration
@@ -82,8 +83,7 @@ async def test_upload_and_download_file_real_api(async_storage_module, generate_
     try:
         # Upload
         upload_result = await async_storage_module.from_(bucket_name).upload(
-            files=[("roundtrip.txt", file_obj)],
-            paths=[file_path]
+            files=[("roundtrip.txt", file_obj)], paths=[file_path]
         )
 
         assert upload_result is not None
@@ -98,15 +98,13 @@ async def test_upload_and_download_file_real_api(async_storage_module, generate_
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
     finally:
         # Cleanup
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete([file_path])
-        except:
-            pass
 
 
 @pytest.mark.integration
@@ -128,14 +126,13 @@ async def test_upload_multiple_files_real_api(async_storage_module, generate_uni
             file_path = f"test_files/multi_{unique_id}_{i}.txt"
             file_content = f"Multi file test #{i} - {unique_id}".encode()
             file_obj = io.BytesIO(file_content)
-            
+
             files.append((f"multi_{i}.txt", file_obj))
             uploaded_paths.append(file_path)
 
         # Upload all files at once
         result = await async_storage_module.from_(bucket_name).upload(
-            files=files,
-            paths=uploaded_paths
+            files=files, paths=uploaded_paths
         )
 
         assert result is not None
@@ -143,20 +140,19 @@ async def test_upload_multiple_files_real_api(async_storage_module, generate_uni
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
     finally:
         # Cleanup all uploaded files
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-        except:
-            pass
 
 
 # ============================================================================
 # File List Tests - Async (Real Storage Operations)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -181,10 +177,7 @@ async def test_list_files_real_api(async_storage_module, generate_unique_id):
             uploaded_paths.append(file_path)
 
         # Upload files
-        await async_storage_module.from_(bucket_name).upload(
-            files=files,
-            paths=uploaded_paths
-        )
+        await async_storage_module.from_(bucket_name).upload(files=files, paths=uploaded_paths)
 
         # List files
         result = await async_storage_module.from_(bucket_name).list()
@@ -194,20 +187,19 @@ async def test_list_files_real_api(async_storage_module, generate_unique_id):
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
     finally:
         # Cleanup
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-        except:
-            pass
 
 
 # ============================================================================
 # File Delete Tests - Async (Real Storage Operations)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -225,20 +217,19 @@ async def test_delete_file_real_api(async_storage_module, generate_unique_id):
         # Upload file
         file_obj = io.BytesIO(f"Delete test {unique_id}".encode())
         await async_storage_module.from_(bucket_name).upload(
-            files=[("delete.txt", file_obj)],
-            paths=[file_path]
+            files=[("delete.txt", file_obj)], paths=[file_path]
         )
 
         # Delete file
         await async_storage_module.from_(bucket_name).delete([file_path])
 
         # Verify file is gone - should raise error
-        with pytest.raises(Exception):
+        with pytest.raises(TaruviError):
             await async_storage_module.from_(bucket_name).download(file_path)
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
 
@@ -264,30 +255,26 @@ async def test_delete_multiple_files_real_api(async_storage_module, generate_uni
             file_paths.append(file_path)
 
         # Upload all files
-        await async_storage_module.from_(bucket_name).upload(
-            files=files,
-            paths=file_paths
-        )
+        await async_storage_module.from_(bucket_name).upload(files=files, paths=file_paths)
 
         # Delete all files at once
         await async_storage_module.from_(bucket_name).delete(file_paths)
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
     finally:
         # Ensure cleanup
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete(file_paths)
-        except:
-            pass
 
 
 # ============================================================================
 # File Metadata Tests - Async (Real Storage Operations)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -307,8 +294,7 @@ async def test_file_metadata_real_api(async_storage_module, generate_unique_id):
         file_obj = io.BytesIO(file_content)
 
         result = await async_storage_module.from_(bucket_name).upload(
-            files=[("metadata.txt", file_obj)],
-            paths=[file_path]
+            files=[("metadata.txt", file_obj)], paths=[file_path]
         )
 
         # Verify upload result contains metadata
@@ -318,20 +304,19 @@ async def test_file_metadata_real_api(async_storage_module, generate_unique_id):
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
     finally:
         # Cleanup
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete([file_path])
-        except:
-            pass
 
 
 # ============================================================================
 # Sync Client Tests - Real Storage Operations
 # ============================================================================
+
 
 @pytest.mark.integration
 def test_upload_file_sync_real_api(sync_storage_module, generate_unique_id):
@@ -347,8 +332,7 @@ def test_upload_file_sync_real_api(sync_storage_module, generate_unique_id):
         file_obj = io.BytesIO(f"Sync upload test {unique_id}".encode())
 
         result = sync_storage_module.from_(bucket_name).upload(
-            files=[("sync.txt", file_obj)],
-            paths=[file_path]
+            files=[("sync.txt", file_obj)], paths=[file_path]
         )
 
         # Verify
@@ -360,7 +344,7 @@ def test_upload_file_sync_real_api(sync_storage_module, generate_unique_id):
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
 
@@ -379,8 +363,7 @@ def test_download_file_sync_real_api(sync_storage_module, generate_unique_id):
         file_obj = io.BytesIO(original_content)
 
         sync_storage_module.from_(bucket_name).upload(
-            files=[("sync_download.txt", file_obj)],
-            paths=[file_path]
+            files=[("sync_download.txt", file_obj)], paths=[file_path]
         )
 
         # Download
@@ -395,13 +378,14 @@ def test_download_file_sync_real_api(sync_storage_module, generate_unique_id):
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
 
 # ============================================================================
 # Error Handling Tests - Real API Errors
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -413,7 +397,7 @@ async def test_download_nonexistent_file_real_api(async_storage_module):
     fake_path = "nonexistent/file/path.txt"
 
     try:
-        with pytest.raises(Exception):
+        with pytest.raises(TaruviError) as exc_info:
             await async_storage_module.from_(bucket_name).download(fake_path)
 
         # Verify we got real error from backend
@@ -441,7 +425,7 @@ async def test_delete_nonexistent_file_real_api(async_storage_module):
         # Either succeeds silently or raises error
         assert result is not None or result is True
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
         # Expected - file doesn't exist
         assert e is not None
 
@@ -449,6 +433,7 @@ async def test_delete_nonexistent_file_real_api(async_storage_module):
 # ============================================================================
 # Browse Tests — Async (folder navigation)
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -502,14 +487,12 @@ async def test_browse_root_real_api(async_storage_module, generate_unique_id):
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {bucket_name} bucket not accessible - {str(e)}")
+            pytest.skip(f"Skipping: {bucket_name} bucket not accessible - {e!s}")
         raise
 
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-        except Exception:
-            pass
 
 
 @pytest.mark.integration
@@ -547,14 +530,12 @@ async def test_browse_subfolder_real_api(async_storage_module, generate_unique_i
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-        except Exception:
-            pass
 
 
 @pytest.mark.integration
@@ -596,14 +577,12 @@ async def test_browse_pagination_real_api(async_storage_module, generate_unique_
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-        except Exception:
-            pass
 
 
 @pytest.mark.integration
@@ -630,8 +609,8 @@ async def test_browse_sorting_real_api(async_storage_module, generate_unique_id)
             prefix=prefix, sort="name", order="desc"
         )
 
-        assert asc["status"] if "status" in asc else True
-        assert desc["status"] if "status" in desc else True
+        assert asc.get("status", True)
+        assert desc.get("status", True)
 
         asc_names = [o["name"] for o in asc["objects"]]
         desc_names = [o["name"] for o in desc["objects"]]
@@ -640,14 +619,12 @@ async def test_browse_sorting_real_api(async_storage_module, generate_unique_id)
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-        except Exception:
-            pass
 
 
 @pytest.mark.integration
@@ -668,13 +645,14 @@ async def test_browse_empty_prefix_real_api(async_storage_module):
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
 
 # ============================================================================
 # Browse Tests — Sync client
 # ============================================================================
+
 
 @pytest.mark.integration
 def test_browse_sync_real_api(sync_storage_module, generate_unique_id):
@@ -705,7 +683,7 @@ def test_browse_sync_real_api(sync_storage_module, generate_unique_id):
 
     except Exception as e:
         if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
         raise
 
 
