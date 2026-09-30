@@ -2,8 +2,13 @@
 Integration tests for Secrets API module.
 """
 
+import contextlib
 import os
+import uuid
+
 import pytest
+
+from taruvi.exceptions import TaruviError
 
 
 @pytest.mark.integration
@@ -11,30 +16,38 @@ import pytest
 async def test_get_secret_real_api(async_secrets_module):
     """Test getting a secret from real backend."""
     import httpx
-    
+
     secret_key = "TEST_SECRET_ASYNC"
-    secret_value = {"host": "localhost", "port": 3306, "database": "testdb", "username": "testuser", "password": "testpass123"}
-    
-    api_url = os.getenv("TARUVI_API_URL", "http://localhost:8000").rstrip('/')
+    secret_value = {
+        "host": "localhost",
+        "port": 3306,
+        "database": "testdb",
+        "username": "testuser",
+        "password": "testpass123",
+    }
+
+    api_url = os.getenv("TARUVI_API_URL", "http://localhost:8000").rstrip("/")
     email = os.getenv("TARUVI_TEST_EMAIL", "admin@example.com")
     password = os.getenv("TARUVI_TEST_PASSWORD", "admin123")
-    
-    login_resp = httpx.post(f"{api_url}/_allauth/app/v1/auth/login", json={"email": email, "password": password})
+
+    login_resp = httpx.post(  # noqa: ASYNC210 - test setup; blocking is fine here
+        f"{api_url}/_allauth/app/v1/auth/login", json={"email": email, "password": password}
+    )
     if login_resp.status_code != 200:
         pytest.skip(f"Login failed: {login_resp.status_code}")
-    
-    token = login_resp.json()['meta']['access_token']
-    
+
+    token = login_resp.json()["meta"]["access_token"]
+
     try:
-        create_resp = httpx.post(
+        create_resp = httpx.post(  # noqa: ASYNC210 - test setup; blocking is fine here
             f"{api_url}/api/secrets/",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"key": secret_key, "value": secret_value, "secret_type": "analytics-mysql"}
+            json={"key": secret_key, "value": secret_value, "secret_type": "analytics-mysql"},
         )
-        
+
         if create_resp.status_code not in [200, 201]:
             pytest.skip(f"Cannot create secret: {create_resp.status_code}")
-        
+
         result = await async_secrets_module.get(secret_key)
         assert result is not None
         assert "value" in result
@@ -42,13 +55,13 @@ async def test_get_secret_real_api(async_secrets_module):
 
     except Exception as e:
         if "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {str(e)}")
+            pytest.skip(f"Skipping: {e!s}")
         raise
     finally:
-        try:
-            httpx.delete(f"{api_url}/api/secrets/{secret_key}/", headers={"Authorization": f"Bearer {token}"})
-        except:
-            pass
+        with contextlib.suppress(Exception):
+            httpx.delete(  # noqa: ASYNC210 - test cleanup; blocking is fine here
+                f"{api_url}/api/secrets/{secret_key}/", headers={"Authorization": f"Bearer {token}"}
+            )
 
 
 @pytest.mark.integration
@@ -57,12 +70,11 @@ async def test_list_secrets_real_api(async_secrets_module):
     """Test listing secrets."""
     try:
         # Create multiple secrets
+        unique_id = uuid.uuid4().hex[:8]
+        secret_keys: list[str] = []
         for i in range(3):
             secret_key = f"LIST_TEST_{unique_id}_{i}"
-            await async_secrets_module.create(
-                key=secret_key,
-                value=f"list_value_{i}"
-            )
+            await async_secrets_module.create(key=secret_key, value=f"list_value_{i}")
             secret_keys.append(secret_key)
 
         # List secrets
@@ -81,12 +93,13 @@ async def test_list_secrets_real_api(async_secrets_module):
         # Verify our created secrets are in the list
         secret_keys_in_list = [s.get("key") or s.get("name") for s in secrets_list]
         for secret_key in secret_keys:
-            assert secret_key in secret_keys_in_list, \
-                f"Created secret {secret_key} not found in list!"
+            assert (
+                secret_key in secret_keys_in_list
+            ), f"Created secret {secret_key} not found in list!"
 
     except Exception as e:
         if "permission" in str(e).lower():
-            pytest.skip(f"Skipping: {str(e)}")
+            pytest.skip(f"Skipping: {e!s}")
         raise
 
 
@@ -99,7 +112,7 @@ async def test_list_with_filters_real_api(async_secrets_module):
         assert result is not None
     except Exception as e:
         if "permission" in str(e).lower():
-            pytest.skip(f"Skipping: {str(e)}")
+            pytest.skip(f"Skipping: {e!s}")
         raise
 
 
@@ -112,7 +125,7 @@ async def test_batch_get_secrets_real_api(async_secrets_module):
         assert result is not None
     except Exception as e:
         if "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {str(e)}")
+            pytest.skip(f"Skipping: {e!s}")
         raise
 
 
@@ -120,30 +133,38 @@ async def test_batch_get_secrets_real_api(async_secrets_module):
 def test_get_secret_sync_real_api(sync_secrets_module):
     """Test getting secret with sync client."""
     import httpx
-    
+
     secret_key = "TEST_SECRET_SYNC"
-    secret_value = {"host": "localhost", "port": 3306, "database": "testdb_sync", "username": "testuser", "password": "testpass456"}
-    
-    api_url = os.getenv("TARUVI_API_URL", "http://localhost:8000").rstrip('/')
+    secret_value = {
+        "host": "localhost",
+        "port": 3306,
+        "database": "testdb_sync",
+        "username": "testuser",
+        "password": "testpass456",
+    }
+
+    api_url = os.getenv("TARUVI_API_URL", "http://localhost:8000").rstrip("/")
     email = os.getenv("TARUVI_TEST_EMAIL", "admin@example.com")
     password = os.getenv("TARUVI_TEST_PASSWORD", "admin123")
-    
-    login_resp = httpx.post(f"{api_url}/_allauth/app/v1/auth/login", json={"email": email, "password": password})
+
+    login_resp = httpx.post(
+        f"{api_url}/_allauth/app/v1/auth/login", json={"email": email, "password": password}
+    )
     if login_resp.status_code != 200:
-        pytest.skip(f"Login failed")
-    
-    token = login_resp.json()['meta']['access_token']
+        pytest.skip("Login failed")
+
+    token = login_resp.json()["meta"]["access_token"]
 
     try:
         create_resp = httpx.post(
             f"{api_url}/api/secrets/",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"key": secret_key, "value": secret_value, "secret_type": "analytics-mysql"}
+            json={"key": secret_key, "value": secret_value, "secret_type": "analytics-mysql"},
         )
-        
+
         if create_resp.status_code not in [200, 201]:
-            pytest.skip(f"Cannot create secret")
-        
+            pytest.skip("Cannot create secret")
+
         result = sync_secrets_module.get(secret_key)
         assert result is not None
         assert "value" in result
@@ -151,13 +172,13 @@ def test_get_secret_sync_real_api(sync_secrets_module):
 
     except Exception as e:
         if "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {str(e)}")
+            pytest.skip(f"Skipping: {e!s}")
         raise
     finally:
-        try:
-            httpx.delete(f"{api_url}/api/secrets/{secret_key}/", headers={"Authorization": f"Bearer {token}"})
-        except:
-            pass
+        with contextlib.suppress(Exception):
+            httpx.delete(
+                f"{api_url}/api/secrets/{secret_key}/", headers={"Authorization": f"Bearer {token}"}
+            )
 
 
 @pytest.mark.integration
@@ -168,7 +189,7 @@ def test_list_secrets_sync_real_api(sync_secrets_module):
         assert result is not None
     except Exception as e:
         if "permission" in str(e).lower():
-            pytest.skip(f"Skipping: {str(e)}")
+            pytest.skip(f"Skipping: {e!s}")
         raise
 
 
@@ -177,9 +198,9 @@ def test_list_secrets_sync_real_api(sync_secrets_module):
 async def test_get_nonexistent_secret_real_api(async_secrets_module):
     """Test getting non-existent secret."""
     try:
-        with pytest.raises(Exception):
+        with pytest.raises(TaruviError):
             await async_secrets_module.get("NONEXISTENT_SECRET_KEY_12345")
     except Exception as e:
         if "permission" in str(e).lower():
-            pytest.skip(f"Skipping: {str(e)}")
+            pytest.skip(f"Skipping: {e!s}")
         raise

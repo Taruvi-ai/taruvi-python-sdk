@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
 
-
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
 
@@ -25,7 +24,7 @@ _APP_SETTINGS = "/api/apps/{app_slug}/settings/"
 class AsyncAppModule(BaseModule):
     """App API operations."""
 
-    def __init__(self, client: "AsyncClient") -> None:
+    def __init__(self, client: AsyncClient) -> None:
         """Initialize AppModule."""
         self.client = client
         super().__init__(client._http_client, client._config)

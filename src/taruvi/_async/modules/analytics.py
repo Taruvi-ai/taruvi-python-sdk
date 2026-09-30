@@ -22,7 +22,7 @@ _ANALYTICS_EXECUTE = "/api/apps/{app_slug}/analytics/queries/{query_slug}/execut
 class AsyncAnalyticsModule(BaseModule):
     """Analytics API operations."""
 
-    def __init__(self, client: "AsyncClient") -> None:
+    def __init__(self, client: AsyncClient) -> None:
         """Initialize AsyncAnalyticsModule."""
         self.client = client
         super().__init__(client._http_client, client._config)
@@ -32,7 +32,7 @@ class AsyncAnalyticsModule(BaseModule):
         query_slug: str,
         params: Optional[dict[str, Any]] = None,
         *,
-        app_slug: Optional[str] = None
+        app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Execute an analytics query.
@@ -81,14 +81,9 @@ class AsyncAnalyticsModule(BaseModule):
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = _ANALYTICS_EXECUTE.format(
-            app_slug=app_slug,
-            query_slug=query_slug
-        )
+        path = _ANALYTICS_EXECUTE.format(app_slug=app_slug, query_slug=query_slug)
 
-        body = {
-            "params": params or {}
-        }
+        body = {"params": params or {}}
 
         response = await self._http.post(path, json=body)
         return response

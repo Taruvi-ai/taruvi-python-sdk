@@ -48,8 +48,6 @@ class ConfigurationError(TaruviError):
 class APIError(TaruviError):
     """Base class for API-related errors."""
 
-    pass
-
 
 class ValidationError(APIError):
     """Raised when request validation fails (400 Bad Request)."""
@@ -61,56 +59,76 @@ class ValidationError(APIError):
 class AuthenticationError(APIError):
     """Raised when authentication fails (401 Unauthorized)."""
 
-    def __init__(self, message: str = "Authentication failed", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Authentication failed", details: Optional[dict[str, Any]] = None
+    ) -> None:
         super().__init__(message, status_code=401, details=details)
 
 
 class NotAuthenticatedError(APIError):
     """Raised when attempting to access protected resource without authentication."""
 
-    def __init__(self, message: str = "Authentication required for this resource", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        message: str = "Authentication required for this resource",
+        details: Optional[dict[str, Any]] = None,
+    ) -> None:
         super().__init__(message, status_code=401, details=details)
 
 
 class AuthorizationError(APIError):
     """Raised when user lacks permission (403 Forbidden)."""
 
-    def __init__(self, message: str = "Permission denied", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Permission denied", details: Optional[dict[str, Any]] = None
+    ) -> None:
         super().__init__(message, status_code=403, details=details)
 
 
 class NotFoundError(APIError):
     """Raised when resource is not found (404 Not Found)."""
 
-    def __init__(self, message: str = "Resource not found", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Resource not found", details: Optional[dict[str, Any]] = None
+    ) -> None:
         super().__init__(message, status_code=404, details=details)
 
 
 class ConflictError(APIError):
     """Raised when there's a conflict (409 Conflict)."""
 
-    def __init__(self, message: str = "Resource conflict", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Resource conflict", details: Optional[dict[str, Any]] = None
+    ) -> None:
         super().__init__(message, status_code=409, details=details)
 
 
 class RateLimitError(APIError):
     """Raised when rate limit is exceeded (429 Too Many Requests)."""
 
-    def __init__(self, message: str = "Rate limit exceeded", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Rate limit exceeded", details: Optional[dict[str, Any]] = None
+    ) -> None:
         super().__init__(message, status_code=429, details=details)
 
 
 class ServerError(APIError):
     """Raised when server encounters an error (500 Internal Server Error)."""
 
-    def __init__(self, message: str = "Internal server error", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Internal server error", details: Optional[dict[str, Any]] = None
+    ) -> None:
         super().__init__(message, status_code=500, details=details)
 
 
 class ServiceUnavailableError(APIError):
     """Raised when service is unavailable (503 Service Unavailable)."""
 
-    def __init__(self, message: str = "Service temporarily unavailable", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        message: str = "Service temporarily unavailable",
+        details: Optional[dict[str, Any]] = None,
+    ) -> None:
         super().__init__(message, status_code=503, details=details)
 
 
@@ -125,22 +143,24 @@ class NetworkError(TaruviError):
 class TimeoutError(NetworkError):
     """Raised when request times out."""
 
-    def __init__(self, message: str = "Request timed out", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Request timed out", details: Optional[dict[str, Any]] = None
+    ) -> None:
         super().__init__(message, details=details)
 
 
 class ConnectionError(NetworkError):
     """Raised when connection to server fails."""
 
-    def __init__(self, message: str = "Connection failed", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Connection failed", details: Optional[dict[str, Any]] = None
+    ) -> None:
         super().__init__(message, details=details)
 
 
 # Runtime Errors
 class RuntimeError(TaruviError):
     """Raised when there's an error during SDK runtime."""
-
-    pass
 
 
 class FunctionExecutionError(RuntimeError):
@@ -158,7 +178,9 @@ class ResponseError(TaruviError):
         super().__init__(message, status_code=None, details=details)
 
 
-def create_error_from_response(status_code: int, message: str, details: Optional[dict[str, Any]] = None) -> APIError:
+def create_error_from_response(
+    status_code: int, message: str, details: Optional[dict[str, Any]] = None
+) -> APIError:
     """
     Create appropriate exception from HTTP response.
 

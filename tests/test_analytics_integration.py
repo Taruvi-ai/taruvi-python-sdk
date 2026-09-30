@@ -19,10 +19,10 @@ Note:
 
 import pytest
 
-
 # ============================================================================
 # Analytics Query Execution Tests - Async
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -34,10 +34,7 @@ async def test_execute_analytics_query_async(async_analytics_module):
     """
     try:
         # Execute analytics query
-        result = await async_analytics_module.execute(
-            "test-query",
-            params={}
-        )
+        result = await async_analytics_module.execute("test-query", params={})
 
         # Verify response structure (SDK returns extracted data)
         assert result is not None
@@ -46,9 +43,9 @@ async def test_execute_analytics_query_async(async_analytics_module):
     except Exception as e:
         error_msg = str(e).lower()
         if "not found" in error_msg or "does not exist" in error_msg:
-            pytest.skip(f"Skipping: Analytics query 'test-query' not configured - {str(e)}")
+            pytest.skip(f"Skipping: Analytics query 'test-query' not configured - {e!s}")
         elif "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise
 
 
@@ -63,11 +60,7 @@ async def test_execute_with_params_async(async_analytics_module):
     try:
         # Execute query with parameters
         result = await async_analytics_module.execute(
-            "test-query",
-            params={
-                "start_date": "2024-01-01",
-                "end_date": "2024-12-31"
-            }
+            "test-query", params={"start_date": "2024-01-01", "end_date": "2024-12-31"}
         )
 
         # Verify response structure (SDK returns extracted data)
@@ -77,9 +70,9 @@ async def test_execute_with_params_async(async_analytics_module):
     except Exception as e:
         error_msg = str(e).lower()
         if "not found" in error_msg or "does not exist" in error_msg:
-            pytest.skip(f"Skipping: Analytics query not configured - {str(e)}")
+            pytest.skip(f"Skipping: Analytics query not configured - {e!s}")
         elif "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise
 
 
@@ -95,11 +88,7 @@ async def test_execute_with_grouping_async(async_analytics_module):
         # Execute query with grouping
         result = await async_analytics_module.execute(
             "test-query",
-            params={
-                "start_date": "2024-01-01",
-                "end_date": "2024-12-31",
-                "group_by": "month"
-            }
+            params={"start_date": "2024-01-01", "end_date": "2024-12-31", "group_by": "month"},
         )
 
         # Verify response structure
@@ -109,9 +98,9 @@ async def test_execute_with_grouping_async(async_analytics_module):
     except Exception as e:
         error_msg = str(e).lower()
         if "not found" in error_msg or "does not exist" in error_msg:
-            pytest.skip(f"Skipping: Analytics query not configured - {str(e)}")
+            pytest.skip(f"Skipping: Analytics query not configured - {e!s}")
         elif "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise
 
 
@@ -126,11 +115,7 @@ async def test_execute_with_filters_async(async_analytics_module):
     try:
         # Execute query with filters
         result = await async_analytics_module.execute(
-            "test-query",
-            params={
-                "status": "active",
-                "category": "test"
-            }
+            "test-query", params={"status": "active", "category": "test"}
         )
 
         # Verify response structure
@@ -140,15 +125,16 @@ async def test_execute_with_filters_async(async_analytics_module):
     except Exception as e:
         error_msg = str(e).lower()
         if "not found" in error_msg or "does not exist" in error_msg:
-            pytest.skip(f"Skipping: Analytics query not configured - {str(e)}")
+            pytest.skip(f"Skipping: Analytics query not configured - {e!s}")
         elif "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise
 
 
 # ============================================================================
 # Analytics Query Execution Tests - Sync
 # ============================================================================
+
 
 @pytest.mark.integration
 def test_execute_analytics_query_sync(sync_analytics_module):
@@ -159,10 +145,7 @@ def test_execute_analytics_query_sync(sync_analytics_module):
     """
     try:
         # Execute analytics query
-        result = sync_analytics_module.execute(
-            "test-query",
-            params={}
-        )
+        result = sync_analytics_module.execute("test-query", params={})
 
         # Verify response structure
         assert result is not None
@@ -171,9 +154,9 @@ def test_execute_analytics_query_sync(sync_analytics_module):
     except Exception as e:
         error_msg = str(e).lower()
         if "not found" in error_msg or "does not exist" in error_msg:
-            pytest.skip(f"Skipping: Analytics query 'test-query' not configured - {str(e)}")
+            pytest.skip(f"Skipping: Analytics query 'test-query' not configured - {e!s}")
         elif "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise
 
 
@@ -187,11 +170,7 @@ def test_execute_with_params_sync(sync_analytics_module):
     try:
         # Execute query with parameters
         result = sync_analytics_module.execute(
-            "test-query",
-            params={
-                "start_date": "2024-01-01",
-                "end_date": "2024-12-31"
-            }
+            "test-query", params={"start_date": "2024-01-01", "end_date": "2024-12-31"}
         )
 
         # Verify response structure
@@ -201,9 +180,9 @@ def test_execute_with_params_sync(sync_analytics_module):
     except Exception as e:
         error_msg = str(e).lower()
         if "not found" in error_msg or "does not exist" in error_msg:
-            pytest.skip(f"Skipping: Analytics query not configured - {str(e)}")
+            pytest.skip(f"Skipping: Analytics query not configured - {e!s}")
         elif "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise
 
 
@@ -218,11 +197,7 @@ def test_execute_with_grouping_sync(sync_analytics_module):
         # Execute query with grouping
         result = sync_analytics_module.execute(
             "test-query",
-            params={
-                "start_date": "2024-01-01",
-                "end_date": "2024-12-31",
-                "group_by": "month"
-            }
+            params={"start_date": "2024-01-01", "end_date": "2024-12-31", "group_by": "month"},
         )
 
         # Verify response structure
@@ -232,9 +207,9 @@ def test_execute_with_grouping_sync(sync_analytics_module):
     except Exception as e:
         error_msg = str(e).lower()
         if "not found" in error_msg or "does not exist" in error_msg:
-            pytest.skip(f"Skipping: Analytics query not configured - {str(e)}")
+            pytest.skip(f"Skipping: Analytics query not configured - {e!s}")
         elif "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise
 
 
@@ -248,11 +223,7 @@ def test_execute_with_filters_sync(sync_analytics_module):
     try:
         # Execute query with filters
         result = sync_analytics_module.execute(
-            "test-query",
-            params={
-                "status": "active",
-                "category": "test"
-            }
+            "test-query", params={"status": "active", "category": "test"}
         )
 
         # Verify response structure
@@ -262,15 +233,16 @@ def test_execute_with_filters_sync(sync_analytics_module):
     except Exception as e:
         error_msg = str(e).lower()
         if "not found" in error_msg or "does not exist" in error_msg:
-            pytest.skip(f"Skipping: Analytics query not configured - {str(e)}")
+            pytest.skip(f"Skipping: Analytics query not configured - {e!s}")
         elif "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise
 
 
 # ============================================================================
 # Error Handling Tests
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -280,13 +252,10 @@ async def test_execute_nonexistent_query_async(async_analytics_module):
 
     Should raise appropriate error when query doesn't exist.
     """
-    from taruvi.exceptions import NotFoundError, APIError
+    from taruvi.exceptions import APIError, NotFoundError
 
     try:
-        await async_analytics_module.execute(
-            "nonexistent-query-12345",
-            params={}
-        )
+        await async_analytics_module.execute("nonexistent-query-12345", params={})
         # If no error, the query somehow exists - skip test
         pytest.skip("Query unexpectedly exists")
 
@@ -298,7 +267,7 @@ async def test_execute_nonexistent_query_async(async_analytics_module):
         # Other errors might indicate permission issues
         error_msg = str(e).lower()
         if "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise
 
 
@@ -309,13 +278,10 @@ def test_execute_nonexistent_query_sync(sync_analytics_module):
 
     Should raise appropriate error when query doesn't exist.
     """
-    from taruvi.exceptions import NotFoundError, APIError
+    from taruvi.exceptions import APIError, NotFoundError
 
     try:
-        sync_analytics_module.execute(
-            "nonexistent-query-12345",
-            params={}
-        )
+        sync_analytics_module.execute("nonexistent-query-12345", params={})
         # If no error, the query somehow exists - skip test
         pytest.skip("Query unexpectedly exists")
 
@@ -327,5 +293,5 @@ def test_execute_nonexistent_query_sync(sync_analytics_module):
         # Other errors might indicate permission issues
         error_msg = str(e).lower()
         if "permission" in error_msg or "not enabled" in error_msg:
-            pytest.skip(f"Skipping: Analytics not accessible - {str(e)}")
+            pytest.skip(f"Skipping: Analytics not accessible - {e!s}")
         raise

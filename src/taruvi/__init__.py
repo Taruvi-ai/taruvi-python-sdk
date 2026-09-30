@@ -112,8 +112,8 @@ Function Runtime Example:
     ```
 """
 
-from typing import TYPE_CHECKING, Optional, Any
 import os
+from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi._modes import RuntimeMode
 from taruvi.exceptions import (
@@ -143,30 +143,30 @@ from taruvi.runtime import (
     is_inside_function,
 )
 from taruvi.types import (
-    # Response types
-    User,
-    DatabaseRecord,
-    PgRangeValue,
-    StorageFile,
-    StorageAccessLinkResult,
-    StorageBrowseFolder,
-    StorageBrowseFile,
-    StorageBrowseData,
-    Function,
-    FunctionInvocation,
-    Secret,
-    Bucket,
-    App,
-    Setting,
-    PolicyCheckResult,
-    PolicyCheckBatchResult,
     AnalyticsQueryResult,
-    PaginatedResponse,
+    App,
+    Bucket,
     # Filter types
     DatabaseFilters,
-    StorageFilters,
+    DatabaseRecord,
+    Function,
     FunctionFilters,
+    FunctionInvocation,
+    PaginatedResponse,
+    PgRangeValue,
+    PolicyCheckBatchResult,
+    PolicyCheckResult,
+    Secret,
     SecretFilters,
+    Setting,
+    StorageAccessLinkResult,
+    StorageBrowseData,
+    StorageBrowseFile,
+    StorageBrowseFolder,
+    StorageFile,
+    StorageFilters,
+    # Response types
+    User,
     UserFilters,
 )
 
@@ -226,7 +226,7 @@ def Client(
     mode: Optional[str] = None,
     timeout: int = 120,
     max_retries: int = 3,
-    **kwargs: Any
+    **kwargs: Any,
 ):
     """
     Create a Taruvi client (unified factory).
@@ -271,9 +271,11 @@ def Client(
     # Return appropriate client
     if mode == "async":
         from taruvi._async.client import AsyncClient
+
         return AsyncClient(api_url, app_slug, timeout=timeout, max_retries=max_retries, **kwargs)
     elif mode == "sync":
         from taruvi._sync.client import SyncClient
+
         return SyncClient(api_url, app_slug, timeout=timeout, max_retries=max_retries, **kwargs)
     else:
         raise ValueError(
@@ -284,7 +286,7 @@ def Client(
 
 __version__ = "0.2.2"
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by kind on purpose
     # Main client
     "Client",
     # Configuration
@@ -332,6 +334,7 @@ __all__ = [
     "PolicyCheckBatchResult",
     "AnalyticsQueryResult",
     "PaginatedResponse",
+    "PgRangeValue",
     # Filter types
     "DatabaseFilters",
     "StorageFilters",

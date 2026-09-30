@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 class AuthModule(BaseModule):
     """Authentication module for user-level auth operations."""
 
-    def __init__(self, client: "SyncClient") -> None:
+    def __init__(self, client: SyncClient) -> None:
         """Initialize Auth module."""
         self.client = client
         super().__init__(client._http_client, client._config)
@@ -48,11 +48,7 @@ class AuthModule(BaseModule):
     # Client Authentication Methods (return new authenticated clients)
     # ============================================================================
 
-    def signInWithPassword(
-        self,
-        email: str,
-        password: str
-    ) -> "SyncClient":
+    def signInWithPassword(self, email: str, password: str) -> SyncClient:
         """
         Sign in with email and password (auto-login).
 
@@ -81,8 +77,7 @@ class AuthModule(BaseModule):
         try:
             # Call allauth headless login API
             response = self._http.post(
-                "/_allauth/app/v1/auth/login",
-                json={"email": email, "password": password}
+                "/_allauth/app/v1/auth/login", json={"email": email, "password": password}
             )
             # Response structure: {"meta": {"access_token": "..."}}
             jwt_token = safe_get_nested(response, "meta", "access_token")
@@ -91,17 +86,13 @@ class AuthModule(BaseModule):
                 raise AuthenticationError("No access token in login response")
         except Exception as e:
             if "AuthenticationError" not in str(type(e)):
-                raise AuthenticationError(f"Login error: {str(e)}") from e
+                raise AuthenticationError(f"Login error: {e!s}") from e
             raise
 
         # Return new client with JWT
         return self._clone_with_auth(jwt=jwt_token)
 
-    def signInWithToken(
-        self,
-        token: str,
-        token_type: str = 'jwt'
-    ) -> "SyncClient":
+    def signInWithToken(self, token: str, token_type: str = "jwt") -> SyncClient:
         """
         Sign in with an authentication token.
 
@@ -136,17 +127,16 @@ class AuthModule(BaseModule):
             ...     token_type='session_token'
             ... )
         """
-        valid_types = {'jwt', 'api_key', 'session_token'}
+        valid_types = {"jwt", "api_key", "session_token"}
         if token_type not in valid_types:
             raise ValueError(
-                f"Invalid token_type '{token_type}'. "
-                f"Must be one of: {', '.join(valid_types)}"
+                f"Invalid token_type '{token_type}'. " f"Must be one of: {', '.join(valid_types)}"
             )
 
         # Clone client with new auth credentials
         return self._clone_with_auth(**{token_type: token})
 
-    def signOut(self) -> "SyncClient":
+    def signOut(self) -> SyncClient:
         """
         Sign out (remove authentication).
 
@@ -162,7 +152,7 @@ class AuthModule(BaseModule):
         # Clone client with no auth credentials
         return self._clone_with_auth(api_key=None, jwt=None, session_token=None)
 
-    def _clone_with_auth(self, **auth_kwargs) -> "SyncClient":
+    def _clone_with_auth(self, **auth_kwargs) -> SyncClient:
         """
         Clone parent client with updated auth credentials.
 
@@ -177,17 +167,17 @@ class AuthModule(BaseModule):
         Returns:
             New client instance with updated auth
         """
-        from taruvi.config import TaruviConfig
         from taruvi._sync.http_client import HTTPClient
+        from taruvi.config import TaruviConfig
 
         # Get current config as dict
         current_config = self.client._config.model_dump()
 
         # Clear all auth credentials first to prevent mixing auth methods
         # (e.g., don't keep JWT when switching to API key)
-        current_config['api_key'] = None
-        current_config['jwt'] = None
-        current_config['session_token'] = None
+        current_config["api_key"] = None
+        current_config["jwt"] = None
+        current_config["session_token"] = None
 
         # Update with new auth credentials
         current_config.update(auth_kwargs)

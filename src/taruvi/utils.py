@@ -13,10 +13,7 @@ from urllib.parse import urlencode
 
 
 def build_query_string(
-    params: Optional[dict[str, Any]],
-    *,
-    skip_none: bool = True,
-    skip_empty: bool = True
+    params: Optional[dict[str, Any]], *, skip_none: bool = True, skip_empty: bool = True
 ) -> str:
     """
     Build URL query string from parameters.
@@ -75,13 +72,13 @@ def build_path(*segments: str) -> str:
         '/api/users/alice'
     """
     # Strip leading/trailing slashes from each segment
-    cleaned = [seg.strip('/') for seg in segments if seg]
+    cleaned = [seg.strip("/") for seg in segments if seg]
 
     if not cleaned:
-        return '/'
+        return "/"
 
     # Join with single slash and ensure leading slash
-    return '/' + '/'.join(cleaned)
+    return "/" + "/".join(cleaned)
 
 
 def safe_get_nested(data: dict, *keys: str, default: Any = None) -> Any:
@@ -114,10 +111,7 @@ def safe_get_nested(data: dict, *keys: str, default: Any = None) -> Any:
 
 
 def build_params(
-    *,
-    skip_none: bool = True,
-    skip_empty: bool = True,
-    **kwargs: Any
+    *, skip_none: bool = True, skip_empty: bool = True, **kwargs: Any
 ) -> dict[str, Any]:
     """
     Build parameter dictionary with optional filtering.
@@ -150,8 +144,8 @@ def build_params(
 
 
 __all__ = [
-    "build_query_string",
-    "build_path",
-    "safe_get_nested",
     "build_params",
+    "build_path",
+    "build_query_string",
+    "safe_get_nested",
 ]
