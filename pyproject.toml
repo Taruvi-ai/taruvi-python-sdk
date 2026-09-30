@@ -5,12 +5,12 @@ build-backend = "hatchling.build"
 [project]
 name = "taruvi"
 version = "0.2.2"
-description = "Official Python SDK for Taruvi Cloud Platform"
+description = "Official Python SDK for TaruviBase."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "Taruvi Team", email = "support@taruvi.cloud"},
+    {name = "Taruvi Team", email = "support@taruvibase.com"},
 ]
 keywords = ["taruvi", "sdk", "api", "cloud", "platform", "serverless"]
 classifiers = [
@@ -50,10 +50,10 @@ beta = [
 ]
 
 [project.urls]
-Homepage = "https://taruvi.cloud"
-Documentation = "https://docs.taruvi.cloud"
-Repository = "https://github.com/taruvi/taruvi-python-sdk"
-Issues = "https://github.com/taruvi/taruvi-python-sdk/issues"
+Homepage = "https://taruvibase.com"
+Documentation = "https://docs.taruvibase.com/docs/build/python"
+Repository = "https://github.com/Taruvi-ai/taruvi-python-sdk"
+Issues = "https://github.com/Taruvi-ai/taruvi-python-sdk/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/taruvi"]

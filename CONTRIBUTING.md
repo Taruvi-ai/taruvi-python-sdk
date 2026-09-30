@@ -217,9 +217,9 @@ When requesting features, please include:
 
 If you have questions:
 
-- Check the [documentation](https://docs.taruvi.cloud)
+- Check the [documentation](https://docs.taruvibase.com/docs/build/python)
 - Open a [GitHub Discussion](https://github.com/taruvi-ai/taruvi-python-sdk/discussions)
-- Contact us at support@taruvi.cloud
+- Contact us at support@taruvibase.com
 
 ## License
 
