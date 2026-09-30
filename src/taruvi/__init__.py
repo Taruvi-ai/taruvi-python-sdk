@@ -1,7 +1,7 @@
 """
 Taruvi Python SDK
 
-Official SDK for interacting with the Taruvi Cloud Platform.
+Official SDK for interacting with TaruviBase.
 
 Unified Client API:
 - **Client(mode='async')**: Async client for async frameworks (uses httpx.AsyncClient)
@@ -246,20 +246,20 @@ def Client(
     Examples:
         # Auto-detect mode (sync in normal context, async in event loop)
         client = Client(
-            api_url="https://api.taruvi.cloud",
+            api_url="https://<tenant>.taruvi.cloud",
             app_slug="my-app"
         )
 
         # Force sync mode
         client = Client(
-            api_url="https://api.taruvi.cloud",
+            api_url="https://<tenant>.taruvi.cloud",
             app_slug="my-app",
             mode='sync'
         )
 
         # Force async mode
         client = Client(
-            api_url="https://api.taruvi.cloud",
+            api_url="https://<tenant>.taruvi.cloud",
             app_slug="my-app",
             mode='async'
         )
