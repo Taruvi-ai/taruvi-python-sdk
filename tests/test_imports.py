@@ -1,5 +1,8 @@
 """Test that all SDK modules and classes can be imported."""
 
+import subprocess
+import sys
+
 import pytest
 
 
@@ -96,3 +99,70 @@ def test_no_import_errors():
         assert True
     except ImportError as e:
         pytest.fail(f"Import error: {e}")
+
+
+def test_config_names_importable_from_package_and_config_module():
+    """TaruviConfig/RuntimeMode resolve lazily but stay importable from both paths."""
+    import taruvi
+    from taruvi import RuntimeMode, TaruviConfig
+    from taruvi.config import RuntimeMode as ConfigRuntimeMode
+    from taruvi.config import TaruviConfig as ConfigTaruviConfig
+    from taruvi.runtime import RuntimeMode as RuntimeRuntimeMode
+
+    assert TaruviConfig is ConfigTaruviConfig
+    assert taruvi.TaruviConfig is ConfigTaruviConfig
+    assert RuntimeMode is ConfigRuntimeMode is RuntimeRuntimeMode
+    assert RuntimeMode.FUNCTION.value == "function"
+    assert all(hasattr(taruvi, name) for name in taruvi.__all__)
+
+    with pytest.raises(AttributeError):
+        taruvi.does_not_exist  # noqa: B018
+
+
+def test_import_taruvi_does_not_load_heavy_modules():
+    """`import taruvi` must not pull in asyncio or pydantic_settings.
+
+    Runs in a subprocess because pytest itself already has asyncio loaded.
+    The function runner preloads the SDK per pod, so these imports (which only
+    matter once a Client is built) must stay deferred.
+    """
+    code = (
+        "import sys, taruvi; "
+        "print('asyncio' in sys.modules, 'pydantic_settings' in sys.modules)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.split() == ["False", "False"], result.stdout
+
+
+def _run(code, env_extra=None, cwd=None):
+    import os
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith("TARUVI_")}
+    env.update(env_extra or {})
+    return subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True,
+        env=env, cwd=cwd,
+    ).stdout.strip()
+
+
+def test_dir_lists_lazy_taruvi_config_on_fresh_import():
+    out = _run("import taruvi; print('TaruviConfig' in dir(taruvi), 'pydantic_settings' in __import__('sys').modules)")
+    assert out == "True False"
+
+
+def test_test_mode_flag_read_at_instantiation_not_import(tmp_path):
+    (tmp_path / ".env").write_text("TARUVI_APP_SLUG=from-dotenv\n")
+    late = (
+        "import os, taruvi, taruvi.config; os.environ['TARUVI_TEST_MODE']='true'; "
+        "print(repr(taruvi.TaruviConfig().app_slug))"
+    )
+    early = (
+        "import os; os.environ['TARUVI_TEST_MODE']='true'; import taruvi; "
+        "print(repr(taruvi.TaruviConfig().app_slug))"
+    )
+    off = "import taruvi; print(repr(taruvi.TaruviConfig().app_slug))"
+    assert _run(late, cwd=tmp_path) == "''"
+    assert _run(early, cwd=tmp_path) == "''"
+    assert _run(off, cwd=tmp_path) == "'from-dotenv'"

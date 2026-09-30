@@ -8,7 +8,7 @@ Provides access to function execution context when available.
 import os
 from typing import Any, Optional
 
-from taruvi.config import RuntimeMode
+from taruvi._modes import RuntimeMode
 
 
 def detect_runtime() -> RuntimeMode:
