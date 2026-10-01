@@ -1,11 +1,10 @@
 """Unit tests for shared utilities."""
 
-import pytest
 from taruvi.utils import (
-    build_query_string,
-    build_path,
-    safe_get_nested,
     build_params,
+    build_path,
+    build_query_string,
+    safe_get_nested,
 )
 
 
@@ -43,12 +42,7 @@ class TestBuildQueryString:
         assert "name=" in result
 
     def test_complex_params(self):
-        result = build_query_string({
-            "search": "test query",
-            "page": 2,
-            "active": True,
-            "count": 0
-        })
+        result = build_query_string({"search": "test query", "page": 2, "active": True, "count": 0})
         assert result.startswith("?")
         assert "search=test+query" in result or "search=test%20query" in result
         assert "page=2" in result
@@ -113,15 +107,7 @@ class TestSafeGetNested:
         assert result == "unknown"
 
     def test_deep_nesting(self):
-        data = {
-            "level1": {
-                "level2": {
-                    "level3": {
-                        "level4": "deep_value"
-                    }
-                }
-            }
-        }
+        data = {"level1": {"level2": {"level3": {"level4": "deep_value"}}}}
         result = safe_get_nested(data, "level1", "level2", "level3", "level4")
         assert result == "deep_value"
 
@@ -171,18 +157,8 @@ class TestBuildParams:
         assert result == {}
 
     def test_mixed_types(self):
-        result = build_params(
-            string="test",
-            number=42,
-            boolean=True,
-            none_val=None,
-            empty=""
-        )
-        assert result == {
-            "string": "test",
-            "number": 42,
-            "boolean": True
-        }
+        result = build_params(string="test", number=42, boolean=True, none_val=None, empty="")
+        assert result == {"string": "test", "number": 42, "boolean": True}
 
     def test_no_params(self):
         result = build_params()

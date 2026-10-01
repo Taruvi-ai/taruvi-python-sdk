@@ -14,8 +14,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
-from taruvi.utils import build_params
 from taruvi.types import Function, FunctionInvocation
+from taruvi.utils import build_params
 
 if TYPE_CHECKING:
     from taruvi._sync.client import SyncClient
@@ -51,7 +51,7 @@ def _build_execute_request(
 class FunctionsModule(BaseModule):
     """Functions API operations."""
 
-    def __init__(self, client: "SyncClient") -> None:
+    def __init__(self, client: SyncClient) -> None:
         """Initialize FunctionsModule."""
         self.client = client
         super().__init__(client._http_client, client._config)
@@ -91,10 +91,7 @@ class FunctionsModule(BaseModule):
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = _FUNCTION_EXECUTE.format(
-            app_slug=app_slug,
-            function_slug=function_slug
-        )
+        path = _FUNCTION_EXECUTE.format(app_slug=app_slug, function_slug=function_slug)
         body = _build_execute_request(params, is_async)
 
         response = self._http.post(path, json=body, headers={}, timeout=timeout)

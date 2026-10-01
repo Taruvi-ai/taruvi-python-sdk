@@ -14,8 +14,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
-from taruvi.utils import build_params as build_params_util
 from taruvi.types import DatabaseRecord
+from taruvi.utils import build_params as build_params_util
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
@@ -28,24 +28,41 @@ _DATATABLE_UPSERT = "/api/apps/{app_slug}/datatables/{table_name}/data/upsert/"
 # Operators whose values must be comma-joined when passed as list/tuple.
 # httpx serializes Python lists as repeated keys, but Django QueryDict.dict()
 # keeps only the last value — so we must send comma-separated strings.
-_LIST_OPERATORS = frozenset({
-    "in", "nin", "ina", "nina",
-    "between", "nbetween",
-    "acontains", "nacontains", "acontainedby", "nacontainedby",
-    "aoverlap", "naoverlap",
-    "rcontains", "rcontainedby", "roverlaps",
-    "radjacent", "rstrictleft", "rstrictright",
-})
+_LIST_OPERATORS = frozenset(
+    {
+        "in",
+        "nin",
+        "ina",
+        "nina",
+        "between",
+        "nbetween",
+        "acontains",
+        "nacontains",
+        "acontainedby",
+        "nacontainedby",
+        "aoverlap",
+        "naoverlap",
+        "rcontains",
+        "rcontainedby",
+        "roverlaps",
+        "radjacent",
+        "rstrictleft",
+        "rstrictright",
+    }
+)
 
 
 # ============================================================================
 # Shared Query Builder Logic
 # ============================================================================
 
+
 class _BaseQueryBuilder(BaseModule):
     """Base query builder with shared logic."""
 
-    def __init__(self, http_client, config, table_name: str, app_slug: Optional[str] = None) -> None:
+    def __init__(
+        self, http_client, config, table_name: str, app_slug: Optional[str] = None
+    ) -> None:
         super().__init__(http_client, config)
         self.app_slug = self._ensure_app_slug(app_slug)
         self.table_name = table_name
@@ -140,6 +157,7 @@ class _BaseQueryBuilder(BaseModule):
 
     def _set_raw_filters(self, filters: dict | list) -> None:
         import json
+
         self._raw_filters = json.dumps(filters)
 
     def _set_vector_search(
@@ -200,6 +218,7 @@ class _BaseQueryBuilder(BaseModule):
         # Vector search params
         if self._vector_value is not None:
             import json
+
             params[f"{self._vector_field}__vector_near"] = json.dumps(self._vector_value)
             params["_topk"] = self._topk
             if self._vector_threshold is not None:
@@ -218,37 +237,39 @@ class _BaseQueryBuilder(BaseModule):
 class AsyncQueryBuilder(_BaseQueryBuilder):
     """Query builder for database operations."""
 
-    def __init__(self, client: "AsyncClient", table_name: str, app_slug: Optional[str] = None) -> None:
+    def __init__(
+        self, client: AsyncClient, table_name: str, app_slug: Optional[str] = None
+    ) -> None:
         self.client = client
         super().__init__(client._http_client, client._config, table_name, app_slug)
 
     # -- Edge toggle --
 
-    def edges(self) -> "AsyncQueryBuilder":
+    def edges(self) -> AsyncQueryBuilder:
         """Target the edges table (e.g., employees → employees_edges)."""
         self._is_edges = True
         return self
 
     # -- CRUD setters (lazy — actual request happens in execute()) --
 
-    def get(self, record_id: str | int) -> "AsyncQueryBuilder":
+    def get(self, record_id: str | int) -> AsyncQueryBuilder:
         """Set record ID for GET or as target for update/delete."""
         self._record_id = str(record_id)
         return self
 
-    def create(self, body: dict[str, Any] | list[dict[str, Any]]) -> "AsyncQueryBuilder":
+    def create(self, body: dict[str, Any] | list[dict[str, Any]]) -> AsyncQueryBuilder:
         """Stage a POST (create) operation."""
         self._operation = "POST"
         self._body = body
         return self
 
-    def update(self, body: dict[str, Any] | list[dict[str, Any]]) -> "AsyncQueryBuilder":
+    def update(self, body: dict[str, Any] | list[dict[str, Any]]) -> AsyncQueryBuilder:
         """Stage a PATCH (update) operation. Call .get(id) first for single record."""
         self._operation = "PATCH"
         self._body = body
         return self
 
-    def delete(self, record_id_or_ids: str | int | list[int] | None = None) -> "AsyncQueryBuilder":
+    def delete(self, record_id_or_ids: str | int | list[int] | None = None) -> AsyncQueryBuilder:
         """Stage a DELETE operation. Pass int[] for bulk edge delete, str/int for single record."""
         self._operation = "DELETE"
         if isinstance(record_id_or_ids, list):
@@ -257,18 +278,20 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             self._record_id = str(record_id_or_ids)
         return self
 
-    def bulk_delete(self, ids: list[str | int]) -> "AsyncQueryBuilder":
+    def bulk_delete(self, ids: list[str | int]) -> AsyncQueryBuilder:
         """Stage a bulk DELETE by IDs (?ids=1,2,3)."""
         self._operation = "DELETE"
         self._delete_ids = ids
         return self
 
-    def delete_filtered(self) -> "AsyncQueryBuilder":
+    def delete_filtered(self) -> AsyncQueryBuilder:
         """Stage a DELETE using current filters. Deletes all matching records."""
         self._operation = "DELETE"
         return self
 
-    def upsert(self, body: dict[str, Any] | list[dict[str, Any]], *, unique_fields: list[str] | None = None) -> "AsyncQueryBuilder":
+    def upsert(
+        self, body: dict[str, Any] | list[dict[str, Any]], *, unique_fields: list[str] | None = None
+    ) -> AsyncQueryBuilder:
         """Stage an upsert (insert or update) operation."""
         self._operation = "POST"
         self._body = body
@@ -279,7 +302,9 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
 
     # -- Filter & query methods --
 
-    def filter(self, field_or_logic: str | dict | list, operator: str | None = None, value: Any = None) -> "AsyncQueryBuilder":
+    def filter(
+        self, field_or_logic: str | dict | list, operator: str | None = None, value: Any = None
+    ) -> AsyncQueryBuilder:
         """Filter records. Supports simple and complex filters.
 
         Simple: .filter("age", "gte", 30)
@@ -291,7 +316,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             self._add_filter(field_or_logic, operator, value)
         return self
 
-    def search(self, query: str) -> "AsyncQueryBuilder":
+    def search(self, query: str) -> AsyncQueryBuilder:
         self._set_search(query)
         return self
 
@@ -304,7 +329,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         threshold: Optional[float] = None,
         ef_search: Optional[int] = None,
         metric: Optional[str] = None,
-    ) -> "AsyncQueryBuilder":
+    ) -> AsyncQueryBuilder:
         """Semantic similarity search on a vector field.
 
         Args:
@@ -315,7 +340,9 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             ef_search: HNSW probe depth (higher = more accurate, slower)
             metric: Distance metric validation ("cosine", "l2", "ip")
         """
-        self._set_vector_search(field, query_vector, topk=topk, threshold=threshold, ef_search=ef_search, metric=metric)
+        self._set_vector_search(
+            field, query_vector, topk=topk, threshold=threshold, ef_search=ef_search, metric=metric
+        )
         return self
 
     def hybrid(
@@ -323,7 +350,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         *,
         strategy: str = "rrf",
         alpha: float = 0.5,
-    ) -> "AsyncQueryBuilder":
+    ) -> AsyncQueryBuilder:
         """Enable hybrid search (vector + full-text with RRF fusion).
 
         Must be combined with .vector_search() and .search().
@@ -335,7 +362,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         self._set_hybrid(strategy=strategy, alpha=alpha)
         return self
 
-    def sort(self, field: str, order: str = "asc") -> "AsyncQueryBuilder":
+    def sort(self, field: str, order: str = "asc") -> AsyncQueryBuilder:
         if "," in field:
             # Raw string support: sort("-salary,hire_date")
             for part in field.split(","):
@@ -348,7 +375,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             self._add_sort(field, order)
         return self
 
-    def order_by(self, *fields: tuple[str, str] | str) -> "AsyncQueryBuilder":
+    def order_by(self, *fields: tuple[str, str] | str) -> AsyncQueryBuilder:
         """Multi-sort: order_by(("salary", "desc"), ("name", "asc")) or order_by("-salary", "name")."""
         self._ordering_parts = []
         for f in fields:
@@ -361,63 +388,63 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                     self._add_sort(f, "asc")
         return self
 
-    def page_size(self, page_size: int) -> "AsyncQueryBuilder":
+    def page_size(self, page_size: int) -> AsyncQueryBuilder:
         self._set_page_size(page_size)
         return self
 
-    def page(self, page: int) -> "AsyncQueryBuilder":
+    def page(self, page: int) -> AsyncQueryBuilder:
         self._set_page(page)
         return self
 
-    def populate(self, *fields: str) -> "AsyncQueryBuilder":
+    def populate(self, *fields: str) -> AsyncQueryBuilder:
         self._add_populate(*fields)
         return self
 
-    def populate_all(self) -> "AsyncQueryBuilder":
+    def populate_all(self) -> AsyncQueryBuilder:
         """Populate all first-level relations (?populate=*)."""
         self._populate_fields = ["*"]
         return self
 
-    def allowed_actions(self, actions: list[str]) -> "AsyncQueryBuilder":
+    def allowed_actions(self, actions: list[str]) -> AsyncQueryBuilder:
         """Request per-row allowed actions annotation (?allowed_actions=update,delete)."""
         self._allowed_actions = actions
         return self
 
     # -- Graph traversal methods --
 
-    def format(self, format_type: str) -> "AsyncQueryBuilder":
+    def format(self, format_type: str) -> AsyncQueryBuilder:
         """Set response format: 'tree' or 'graph'."""
         self._set_format(format_type)
         return self
 
-    def include(self, direction: str) -> "AsyncQueryBuilder":
+    def include(self, direction: str) -> AsyncQueryBuilder:
         """Set traversal direction: 'descendants', 'ancestors', or 'both'."""
         self._set_include(direction)
         return self
 
-    def depth(self, depth: int) -> "AsyncQueryBuilder":
+    def depth(self, depth: int) -> AsyncQueryBuilder:
         """Set maximum traversal depth."""
         self._set_depth(depth)
         return self
 
-    def types(self, relationship_types: list[str]) -> "AsyncQueryBuilder":
+    def types(self, relationship_types: list[str]) -> AsyncQueryBuilder:
         """Filter by relationship types (e.g., ['manager', 'dotted_line'])."""
         self._set_relationship_types(relationship_types)
         return self
 
     # -- Aggregation methods --
 
-    def aggregate(self, *expressions: str) -> "AsyncQueryBuilder":
+    def aggregate(self, *expressions: str) -> AsyncQueryBuilder:
         """Add aggregate functions (e.g., 'count(*)', 'sum(price)')."""
         self._add_aggregate(*expressions)
         return self
 
-    def group_by(self, *fields: str) -> "AsyncQueryBuilder":
+    def group_by(self, *fields: str) -> AsyncQueryBuilder:
         """Add GROUP BY clause for aggregations."""
         self._set_group_by(*fields)
         return self
 
-    def having(self, condition: str) -> "AsyncQueryBuilder":
+    def having(self, condition: str) -> AsyncQueryBuilder:
         """Add HAVING clause to filter aggregated results."""
         self._set_having(condition)
         return self
@@ -490,10 +517,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
 
         # Default: GET
         response = await self._http.get(path, params=params)
-        return {
-            "data": self._extract_data_list(response),
-            "total": response.get("total", 0)
-        }
+        return {"data": self._extract_data_list(response), "total": response.get("total", 0)}
 
     async def first(self) -> Optional[dict[str, Any]]:
         """Get the first result, of the requested page when ``page()`` is set."""
@@ -527,7 +551,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
 class AsyncDatabaseModule(BaseModule):
     """Database API operations."""
 
-    def __init__(self, client: "AsyncClient") -> None:
+    def __init__(self, client: AsyncClient) -> None:
         self.client = client
         super().__init__(client._http_client, client._config)
 
@@ -601,11 +625,7 @@ class AsyncDatabaseModule(BaseModule):
         """Delete single record by ID, multiple by IDs, or by filter."""
         app_slug = self._ensure_app_slug(app_slug)
 
-        methods_provided = sum([
-            record_id is not None,
-            ids is not None,
-            filter is not None
-        ])
+        methods_provided = sum([record_id is not None, ids is not None, filter is not None])
         if methods_provided == 0:
             raise ValueError("Provide either record_id, ids, or filter parameter")
         if methods_provided > 1:
@@ -621,9 +641,10 @@ class AsyncDatabaseModule(BaseModule):
         path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
 
         if ids is not None:
-            ids_str = ','.join(str(id) for id in ids)
+            ids_str = ",".join(str(id) for id in ids)
             return await self._http.delete(path, params={"ids": ids_str})
 
         if filter is not None:
             import json
+
             return await self._http.delete(path, params={"filter": json.dumps(filter)})

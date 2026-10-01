@@ -13,9 +13,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
-from taruvi.utils import build_params
 from taruvi.types import Secret
-
+from taruvi.utils import build_params
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
@@ -28,7 +27,7 @@ _SECRET_DETAIL = "/api/secrets/{key}/"
 class AsyncSecretsModule(BaseModule):
     """Secrets API operations."""
 
-    def __init__(self, client: "AsyncClient") -> None:
+    def __init__(self, client: AsyncClient) -> None:
         """Initialize SecretsModule."""
         self.client = client
         super().__init__(client._http_client, client._config)
@@ -43,7 +42,7 @@ class AsyncSecretsModule(BaseModule):
         secret_type: Optional[str] = None,
         include_metadata: bool = False,
         page: Optional[int] = None,
-        page_size: Optional[int] = None
+        page_size: Optional[int] = None,
     ) -> dict[str, Any]:
         """
         List secrets with optional filters or batch-get by keys.
@@ -98,7 +97,7 @@ class AsyncSecretsModule(BaseModule):
         # Auto-use client's app_slug if no app specified
         if app is None and self._config.app_slug:
             app = self._config.app_slug
-        
+
         params = build_params(
             keys=",".join(keys) if keys else None,
             search=search,
@@ -113,11 +112,7 @@ class AsyncSecretsModule(BaseModule):
         return response
 
     async def get(
-        self,
-        key: str,
-        *,
-        app: Optional[str] = None,
-        tags: Optional[list[str]] = None
+        self, key: str, *, app: Optional[str] = None, tags: Optional[list[str]] = None
     ) -> Secret:
         """
         Get a specific secret by key.
@@ -155,7 +150,7 @@ class AsyncSecretsModule(BaseModule):
         # Auto-use client's app_slug if no app specified
         if app is None and self._config.app_slug:
             app = self._config.app_slug
-        
+
         path = _SECRET_DETAIL.format(key=key)
 
         params = build_params(

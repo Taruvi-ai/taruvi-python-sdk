@@ -8,7 +8,7 @@ Provides common functionality for all Taruvi modules:
 - Common patterns
 """
 
-from typing import Any, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 if TYPE_CHECKING:
     from taruvi.config import TaruviConfig

@@ -64,8 +64,8 @@ jobs:
         if: steps.version_check.outputs.changed == 'true'
         run: python -m build
 
-      - name: Publish (master - stable)
-        if: steps.version_check.outputs.changed == 'true' && github.ref == 'refs/heads/master'
+      - name: Publish (main - stable)
+        if: steps.version_check.outputs.changed == 'true' && github.ref == 'refs/heads/main'
         run: twine upload dist/*
         env:
           TWINE_USERNAME: __token__

@@ -2,16 +2,17 @@
 
 import json
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
-from taruvi.config import TaruviConfig
 from taruvi._async.modules.database import AsyncDatabaseModule, AsyncQueryBuilder
-from taruvi._sync.modules.database import DatabaseModule, QueryBuilder
-
+from taruvi._sync.modules.database import QueryBuilder
+from taruvi.config import TaruviConfig
 
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def mock_config():
@@ -41,8 +42,8 @@ def mock_sync_client(mock_config):
 # Edge URL Tests — .edges() appends _edges to table name
 # ============================================================================
 
-class TestEdgeURLs:
 
+class TestEdgeURLs:
     @pytest.mark.asyncio
     async def test_edges_list_url(self, mock_async_client):
         mock_async_client._http_client.get = AsyncMock(return_value={"data": [], "total": 0})
@@ -53,9 +54,9 @@ class TestEdgeURLs:
     @pytest.mark.asyncio
     async def test_edges_create_url(self, mock_async_client):
         mock_async_client._http_client.post = AsyncMock(return_value={"data": [], "total": 0})
-        await AsyncQueryBuilder(mock_async_client, "employees").edges().create([
-            {"from_id": 1, "to_id": 2, "type": "manager"}
-        ]).execute()
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().create(
+            [{"from_id": 1, "to_id": 2, "type": "manager"}]
+        ).execute()
         url = mock_async_client._http_client.post.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/employees_edges/data/"
 
@@ -83,9 +84,9 @@ class TestEdgeURLs:
 
     def test_sync_edges_create_url(self, mock_sync_client):
         mock_sync_client._http_client.post = MagicMock(return_value={"data": [], "total": 0})
-        QueryBuilder(mock_sync_client, "employees").edges().create([
-            {"from_id": 1, "to_id": 2, "type": "manager"}
-        ]).execute()
+        QueryBuilder(mock_sync_client, "employees").edges().create(
+            [{"from_id": 1, "to_id": 2, "type": "manager"}]
+        ).execute()
         url = mock_sync_client._http_client.post.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/employees_edges/data/"
 
@@ -105,8 +106,8 @@ class TestEdgeURLs:
 # Edge Request Body Tests
 # ============================================================================
 
-class TestEdgeRequestBody:
 
+class TestEdgeRequestBody:
     @pytest.mark.asyncio
     async def test_create_passes_body_as_array(self, mock_async_client):
         mock_async_client._http_client.post = AsyncMock(return_value={"data": [], "total": 0})
@@ -123,9 +124,9 @@ class TestEdgeRequestBody:
     @pytest.mark.asyncio
     async def test_create_preserves_extra_fields(self, mock_async_client):
         mock_async_client._http_client.post = AsyncMock(return_value={"data": [], "total": 0})
-        await AsyncQueryBuilder(mock_async_client, "employees").edges().create([
-            {"from_id": 1, "to_id": 2, "type": "manager", "weight": 0.8}
-        ]).execute()
+        await AsyncQueryBuilder(mock_async_client, "employees").edges().create(
+            [{"from_id": 1, "to_id": 2, "type": "manager", "weight": 0.8}]
+        ).execute()
         body = mock_async_client._http_client.post.call_args[1]["json"]
         assert body[0]["weight"] == 0.8
 
@@ -240,8 +241,8 @@ class TestEdgeRequestBody:
 # Graph Query Builder Tests
 # ============================================================================
 
-class TestGraphQueryBuilder:
 
+class TestGraphQueryBuilder:
     def test_format_sets_param(self, mock_sync_client):
         params = QueryBuilder(mock_sync_client, "employees").format("tree").build_params()
         assert params["format"] == "tree"
@@ -255,7 +256,11 @@ class TestGraphQueryBuilder:
         assert params["depth"] == 3
 
     def test_types_sets_relationship_type(self, mock_sync_client):
-        params = QueryBuilder(mock_sync_client, "employees").types(["manager", "dotted_line"]).build_params()
+        params = (
+            QueryBuilder(mock_sync_client, "employees")
+            .types(["manager", "dotted_line"])
+            .build_params()
+        )
         assert params["relationship_type"] == ["manager", "dotted_line"]
 
     def test_chaining_graph_params(self, mock_sync_client):
@@ -276,7 +281,9 @@ class TestGraphQueryBuilder:
 
     def test_graph_query_url(self, mock_sync_client):
         mock_sync_client._http_client.get = MagicMock(return_value={"data": [], "total": 0})
-        QueryBuilder(mock_sync_client, "employees").format("tree").include("descendants").depth(3).execute()
+        QueryBuilder(mock_sync_client, "employees").format("tree").include("descendants").depth(
+            3
+        ).execute()
         url = mock_sync_client._http_client.get.call_args[0][0]
         assert "/datatables/employees/data/" in url
 
@@ -285,8 +292,8 @@ class TestGraphQueryBuilder:
 # QueryBuilder CRUD on regular tables
 # ============================================================================
 
-class TestQueryBuilderCRUD:
 
+class TestQueryBuilderCRUD:
     @pytest.mark.asyncio
     async def test_create_on_regular_table(self, mock_async_client):
         mock_async_client._http_client.post = AsyncMock(return_value={"data": {"id": 1}})
@@ -304,7 +311,9 @@ class TestQueryBuilderCRUD:
     @pytest.mark.asyncio
     async def test_update_single_record(self, mock_async_client):
         mock_async_client._http_client.patch = AsyncMock(return_value={"data": {}})
-        await AsyncQueryBuilder(mock_async_client, "users").get("123").update({"name": "Bob"}).execute()
+        await AsyncQueryBuilder(mock_async_client, "users").get("123").update(
+            {"name": "Bob"}
+        ).execute()
         url = mock_async_client._http_client.patch.call_args[0][0]
         assert url == "/api/apps/test-app/datatables/users/data/123/"
 

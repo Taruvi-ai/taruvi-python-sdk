@@ -22,7 +22,7 @@ _ANALYTICS_EXECUTE = "/api/apps/{app_slug}/analytics/queries/{query_slug}/execut
 class AnalyticsModule(BaseModule):
     """Analytics API operations."""
 
-    def __init__(self, client: "SyncClient") -> None:
+    def __init__(self, client: SyncClient) -> None:
         """Initialize AnalyticsModule."""
         self.client = client
         super().__init__(client._http_client, client._config)
@@ -32,7 +32,7 @@ class AnalyticsModule(BaseModule):
         query_slug: str,
         params: Optional[dict[str, Any]] = None,
         *,
-        app_slug: Optional[str] = None
+        app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Execute an analytics query.
@@ -81,14 +81,9 @@ class AnalyticsModule(BaseModule):
         if not app_slug:
             raise ValueError("app_slug is required")
 
-        path = _ANALYTICS_EXECUTE.format(
-            app_slug=app_slug,
-            query_slug=query_slug
-        )
+        path = _ANALYTICS_EXECUTE.format(app_slug=app_slug, query_slug=query_slug)
 
-        body = {
-            "params": params or {}
-        }
+        body = {"params": params or {}}
 
         response = self._http.post(path, json=body)
         return response

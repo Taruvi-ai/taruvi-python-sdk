@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any, Optional
 from taruvi.modules.base import BaseModule
 from taruvi.types import PolicyCheckBatchResult
 
-
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
 
@@ -25,10 +24,11 @@ _POLICY_CHECK_RESOURCES = "/api/apps/{app_slug}/check/resources/"
 # Shared Implementation Logic
 # ============================================================================
 
+
 def _build_check_resources_request(
     resources: list[dict[str, Any]],
     principal: Optional[dict[str, Any]],
-    aux_data: Optional[dict[str, Any]]
+    aux_data: Optional[dict[str, Any]],
 ) -> dict[str, Any]:
     """Build check resources request body."""
     body: dict[str, Any] = {"resources": resources}
@@ -42,7 +42,7 @@ def _build_check_resources_request(
 class AsyncPolicyModule(BaseModule):
     """Policy API operations for authorization checks."""
 
-    def __init__(self, client: "AsyncClient") -> None:
+    def __init__(self, client: AsyncClient) -> None:
         """Initialize PolicyModule."""
         self.client = client
         super().__init__(client._http_client, client._config)
@@ -52,7 +52,7 @@ class AsyncPolicyModule(BaseModule):
         resources: list[dict[str, Any]],
         principal: Optional[dict[str, Any]] = None,
         aux_data: Optional[dict[str, Any]] = None,
-        app_slug: Optional[str] = None
+        app_slug: Optional[str] = None,
     ) -> PolicyCheckBatchResult:
         """
         Check permissions for multiple resources.
@@ -103,7 +103,7 @@ class AsyncPolicyModule(BaseModule):
         actions: list[str],
         principal: Optional[dict[str, Any]] = None,
         aux_data: Optional[dict[str, Any]] = None,
-        app_slug: Optional[str] = None
+        app_slug: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         """
         Filter a list of resources to only those where ALL requested actions are allowed.
@@ -131,10 +131,7 @@ class AsyncPolicyModule(BaseModule):
             ```
         """
         # Build check requests
-        check_requests = [
-            {"resource": resource, "actions": actions}
-            for resource in resources
-        ]
+        check_requests = [{"resource": resource, "actions": actions} for resource in resources]
 
         # Check all resources
         result = await self.check_resources(check_requests, principal, aux_data, app_slug)
@@ -155,7 +152,7 @@ class AsyncPolicyModule(BaseModule):
         actions: Optional[list[str]] = None,
         principal: Optional[dict[str, Any]] = None,
         aux_data: Optional[dict[str, Any]] = None,
-        app_slug: Optional[str] = None
+        app_slug: Optional[str] = None,
     ) -> list[str]:
         """
         Get list of allowed actions for a specific resource.
@@ -181,22 +178,16 @@ class AsyncPolicyModule(BaseModule):
         """
         # Default to common CRUD actions if not specified
         if actions is None:
-            actions = ['read', 'write', 'create', 'update', 'delete']
+            actions = ["read", "write", "create", "update", "delete"]
 
         # Check the resource
         result = await self.check_resources(
-            [{"resource": resource, "actions": actions}],
-            principal,
-            aux_data,
-            app_slug
+            [{"resource": resource, "actions": actions}], principal, aux_data, app_slug
         )
 
         # Extract allowed actions
         if result.get("results"):
             action_results = result["results"][0].get("actions", {})
-            return [
-                action for action, effect in action_results.items()
-                if effect == "EFFECT_ALLOW"
-            ]
+            return [action for action, effect in action_results.items() if effect == "EFFECT_ALLOW"]
 
         return []

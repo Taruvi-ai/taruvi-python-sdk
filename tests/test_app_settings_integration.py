@@ -13,10 +13,12 @@ Setup:
 
 import pytest
 
+from taruvi.exceptions import ConfigurationError
 
 # ============================================================================
 # App Settings Tests - Async
 # ============================================================================
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -29,10 +31,18 @@ async def test_get_app_settings_async(async_app_module):
         assert isinstance(result, dict)
         # Verify expected fields from AppSettingSerializer
         expected_fields = [
-            "display_name", "primary_color", "secondary_color",
-            "icon", "icon_url", "icon_background_color", "category",
-            "documentation_url", "support_email",
-            "default_frontend_worker_url", "created_at", "updated_at",
+            "display_name",
+            "primary_color",
+            "secondary_color",
+            "icon",
+            "icon_url",
+            "icon_background_color",
+            "category",
+            "documentation_url",
+            "support_email",
+            "default_frontend_worker_url",
+            "created_at",
+            "updated_at",
         ]
         data = result.get("data", result)
         for field in expected_fields:
@@ -66,7 +76,7 @@ async def test_get_app_settings_with_slug_override_async(async_app_module):
 @pytest.mark.asyncio
 async def test_get_app_settings_nonexistent_app_async(async_app_module):
     """Test retrieving settings for non-existent app raises error (async)."""
-    from taruvi.exceptions import NotFoundError, APIError
+    from taruvi.exceptions import APIError, NotFoundError
 
     try:
         await async_app_module.settings(app_slug="nonexistent-app-99999")
@@ -79,6 +89,7 @@ async def test_get_app_settings_nonexistent_app_async(async_app_module):
 # App Settings Tests - Sync
 # ============================================================================
 
+
 @pytest.mark.integration
 def test_get_app_settings_sync(sync_app_module):
     """Test retrieving app settings (sync)."""
@@ -88,10 +99,18 @@ def test_get_app_settings_sync(sync_app_module):
         assert result is not None
         assert isinstance(result, dict)
         expected_fields = [
-            "display_name", "primary_color", "secondary_color",
-            "icon", "icon_url", "icon_background_color", "category",
-            "documentation_url", "support_email",
-            "default_frontend_worker_url", "created_at", "updated_at",
+            "display_name",
+            "primary_color",
+            "secondary_color",
+            "icon",
+            "icon_url",
+            "icon_background_color",
+            "category",
+            "documentation_url",
+            "support_email",
+            "default_frontend_worker_url",
+            "created_at",
+            "updated_at",
         ]
         data = result.get("data", result)
         for field in expected_fields:
@@ -123,7 +142,7 @@ def test_get_app_settings_with_slug_override_sync(sync_app_module):
 @pytest.mark.integration
 def test_get_app_settings_nonexistent_app_sync(sync_app_module):
     """Test retrieving settings for non-existent app raises error (sync)."""
-    from taruvi.exceptions import NotFoundError, APIError
+    from taruvi.exceptions import APIError, NotFoundError
 
     try:
         sync_app_module.settings(app_slug="nonexistent-app-99999")
@@ -135,6 +154,7 @@ def test_get_app_settings_nonexistent_app_sync(sync_app_module):
 # ============================================================================
 # Validation Tests (no backend needed)
 # ============================================================================
+
 
 def test_settings_requires_app_slug(monkeypatch):
     """A client without an app_slug is refused when it's created, before settings() can run."""

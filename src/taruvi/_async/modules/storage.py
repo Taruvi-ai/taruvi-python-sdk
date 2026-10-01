@@ -22,6 +22,9 @@ import mimetypes
 import httpx
 from urllib.parse import quote
 
+from taruvi.modules.base import BaseModule
+from taruvi.types import Bucket, StorageAccessLinkResult, StorageBrowseData, StorageFile
+from taruvi.utils import build_params, build_query_string
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
@@ -60,7 +63,7 @@ def _guess_content_type(filename: str) -> str:
 
 class _BaseStorageQueryBuilder:
     """Base storage query builder with shared logic."""
-    
+
     def __init__(self, bucket: str, app_slug: str) -> None:
         self.bucket = bucket
         self.app_slug = app_slug
@@ -79,7 +82,7 @@ class _BaseStorageQueryBuilder:
         mimetype_category: Optional[str],
         visibility: Optional[str],
         ordering: Optional[str],
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         """Add filters to the query (shared logic)."""
         if page is not None:
@@ -106,8 +109,7 @@ class _BaseStorageQueryBuilder:
 
 
 def _build_update_body(
-    metadata: Optional[dict[str, Any]],
-    visibility: Optional[str]
+    metadata: Optional[dict[str, Any]], visibility: Optional[str]
 ) -> dict[str, Any]:
     """Build update request body."""
     body: dict[str, Any] = {}
@@ -122,15 +124,11 @@ def _build_update_body(
 # Async Implementation
 # ============================================================================
 
+
 class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
     """Query builder for storage operations."""
 
-    def __init__(
-        self,
-        client: "AsyncClient",
-        bucket: str,
-        app_slug: Optional[str] = None
-    ) -> None:
+    def __init__(self, client: AsyncClient, bucket: str, app_slug: Optional[str] = None) -> None:
         self.client = client
         self._http = client._http_client
         self._config = client._config
@@ -148,21 +146,17 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         mimetype_category: Optional[str] = None,
         visibility: Optional[str] = None,
         ordering: Optional[str] = None,
-        **kwargs: Any
-    ) -> "AsyncStorageQueryBuilder":
+        **kwargs: Any,
+    ) -> AsyncStorageQueryBuilder:
         """Add filters to the query."""
         self._add_filters(
-            page, page_size, search, mimetype,
-            mimetype_category, visibility, ordering, **kwargs
+            page, page_size, search, mimetype, mimetype_category, visibility, ordering, **kwargs
         )
         return self
 
     async def list(self) -> dict[str, Any]:
         """List files in the bucket with current filters."""
-        path = _STORAGE_BASE.format(
-            app_slug=self.app_slug,
-            bucket=self.bucket
-        )
+        path = _STORAGE_BASE.format(app_slug=self.app_slug, bucket=self.bucket)
         path += self.build_query_string()
 
         response = await self._http.get(path)
@@ -242,7 +236,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         self,
         file_path: str,
         metadata: Optional[dict[str, Any]] = None,
-        visibility: Optional[str] = None
+        visibility: Optional[str] = None,
     ) -> StorageFile:
         """Update file metadata or visibility."""
         path = _STORAGE_OBJECT.format(
@@ -314,10 +308,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         return self._extract_data(response)
 
     async def copy_object(
-        self,
-        source_path: str,
-        destination_path: str,
-        destination_bucket: Optional[str] = None
+        self, source_path: str, destination_path: str, destination_bucket: Optional[str] = None
     ) -> StorageFile:
         """
         Copy an object to a new location.
@@ -344,15 +335,9 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
                 destination_bucket="archives"
             )
         """
-        path = _STORAGE_COPY.format(
-            app_slug=self.app_slug,
-            bucket=self.bucket
-        )
+        path = _STORAGE_COPY.format(app_slug=self.app_slug, bucket=self.bucket)
 
-        body: dict[str, Any] = {
-            "source_path": source_path,
-            "destination_path": destination_path
-        }
+        body: dict[str, Any] = {"source_path": source_path, "destination_path": destination_path}
 
         if destination_bucket:
             body["destination_bucket"] = destination_bucket
@@ -360,11 +345,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         response = await self._http.post(path, json=body)
         return self._extract_data(response)
 
-    async def move_object(
-        self,
-        source_path: str,
-        destination_path: str
-    ) -> StorageFile:
+    async def move_object(self, source_path: str, destination_path: str) -> StorageFile:
         """
         Move or rename an object within the bucket.
 
@@ -384,15 +365,9 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
                 "archive/2024/document.pdf"
             )
         """
-        path = _STORAGE_MOVE.format(
-            app_slug=self.app_slug,
-            bucket=self.bucket
-        )
+        path = _STORAGE_MOVE.format(app_slug=self.app_slug, bucket=self.bucket)
 
-        body = {
-            "source_path": source_path,
-            "destination_path": destination_path
-        }
+        body = {"source_path": source_path, "destination_path": destination_path}
 
         response = await self._http.post(path, json=body)
         return self._extract_data(response)
@@ -401,7 +376,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
 class AsyncStorageModule(BaseModule):
     """Storage API operations."""
 
-    def __init__(self, client: "AsyncClient") -> None:
+    def __init__(self, client: AsyncClient) -> None:
         """Initialize StorageModule."""
         self.client = client
         super().__init__(client._http_client, client._config)
@@ -419,7 +394,7 @@ class AsyncStorageModule(BaseModule):
         ordering: Optional[str] = None,
         page: Optional[int] = None,
         page_size: Optional[int] = None,
-        app_slug: Optional[str] = None
+        app_slug: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         List all buckets in the app with optional filters.
@@ -484,7 +459,7 @@ class AsyncStorageModule(BaseModule):
         app_category: Optional[str] = None,
         max_size_bytes: Optional[int] = None,
         max_objects: Optional[int] = None,
-        app_slug: Optional[str] = None
+        app_slug: Optional[str] = None,
     ) -> Bucket:
         """
         Create a new storage bucket.
@@ -526,7 +501,8 @@ class AsyncStorageModule(BaseModule):
         path = _STORAGE_BUCKETS.format(app_slug=app_slug)
         body: dict[str, Any] = {
             "name": name,
-            "app_category": app_category or "attachments"  # Default to 'attachments' if not provided
+            "app_category": app_category
+            or "attachments",  # Default to 'attachments' if not provided
         }
 
         if slug:
@@ -545,12 +521,7 @@ class AsyncStorageModule(BaseModule):
         response = await self._http.post(path, json=body)
         return self._extract_data(response)
 
-    async def get_bucket(
-        self,
-        slug: str,
-        *,
-        app_slug: Optional[str] = None
-    ) -> Bucket:
+    async def get_bucket(self, slug: str, *, app_slug: Optional[str] = None) -> Bucket:
         """
         Get a specific bucket by slug.
 
@@ -583,7 +554,7 @@ class AsyncStorageModule(BaseModule):
         app_category: Optional[str] = None,
         max_size_bytes: Optional[int] = None,
         max_objects: Optional[int] = None,
-        app_slug: Optional[str] = None
+        app_slug: Optional[str] = None,
     ) -> Bucket:
         """
         Update bucket settings.
@@ -636,12 +607,7 @@ class AsyncStorageModule(BaseModule):
         response = await self._http.patch(path, json=body)
         return self._extract_data(response)
 
-    async def delete_bucket(
-        self,
-        slug: str,
-        *,
-        app_slug: Optional[str] = None
-    ) -> None:
+    async def delete_bucket(self, slug: str, *, app_slug: Optional[str] = None) -> None:
         """
         Delete a bucket and all its objects.
 
@@ -660,5 +626,3 @@ class AsyncStorageModule(BaseModule):
 
         path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
         await self._http.delete(path)
-
-

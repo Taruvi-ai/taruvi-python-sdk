@@ -108,9 +108,8 @@ Function Runtime Example:
     ```
 """
 
-from typing import Optional, Any
-import asyncio
 import os
+from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi._version import __version__ as __version__
 from taruvi.config import RuntimeMode, TaruviConfig
@@ -143,32 +142,58 @@ from taruvi.runtime import (
     is_inside_function,
 )
 from taruvi.types import (
-    # Response types
-    User,
-    DatabaseRecord,
-    PgRangeValue,
-    StorageFile,
-    StorageAccessLinkResult,
-    StorageBrowseFolder,
-    StorageBrowseFile,
-    StorageBrowseData,
-    Function,
-    FunctionInvocation,
-    Secret,
-    Bucket,
-    App,
-    Setting,
-    PolicyCheckResult,
-    PolicyCheckBatchResult,
     AnalyticsQueryResult,
-    PaginatedResponse,
+    App,
+    Bucket,
     # Filter types
     DatabaseFilters,
-    StorageFilters,
+    DatabaseRecord,
+    Function,
     FunctionFilters,
+    FunctionInvocation,
+    PaginatedResponse,
+    PgRangeValue,
+    PolicyCheckBatchResult,
+    PolicyCheckResult,
+    Secret,
     SecretFilters,
+    Setting,
+    StorageAccessLinkResult,
+    StorageBrowseData,
+    StorageBrowseFile,
+    StorageBrowseFolder,
+    StorageFile,
+    StorageFilters,
+    # Response types
+    User,
     UserFilters,
 )
+
+if TYPE_CHECKING:
+    from taruvi.config import TaruviConfig
+
+# Names resolved lazily by __getattr__ (PEP 562). TaruviConfig pulls in
+# pydantic_settings, which is expensive to import (entry-point scanning etc.)
+# and is only needed once a Client is constructed or the config is used
+# directly, so `import taruvi` does not pay for it.
+_LAZY_ATTRS = {
+    "TaruviConfig": "taruvi.config",
+}
+
+
+def __getattr__(name: str) -> Any:
+    module_name = _LAZY_ATTRS.get(name)
+    if module_name is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    import importlib
+
+    value = getattr(importlib.import_module(module_name), name)
+    globals()[name] = value  # cache so __getattr__ is not hit again
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY_ATTRS))
 
 
 def _is_async_context() -> bool:
@@ -177,10 +202,19 @@ def _is_async_context() -> bool:
     if os.getenv("TARUVI_TEST_MODE") == "true":
         return False
 
+    # Imported here rather than at module level: this is the only use of
+    # asyncio in the package and importing it costs tens of ms (hundreds
+    # under gVisor), which the sync-only path should not pay.
+    import asyncio
+    import builtins
+
     try:
         asyncio.get_running_loop()
         return True
-    except RuntimeError:
+    except builtins.RuntimeError:
+        # Must be the builtin: `RuntimeError` in this module's namespace is
+        # taruvi.exceptions.RuntimeError (re-exported above), which does not
+        # catch the builtin raised by get_running_loop() when no loop runs.
         return False
 
 
@@ -191,7 +225,7 @@ def Client(
     mode: Optional[str] = None,
     timeout: int = 120,
     max_retries: int = 3,
-    **kwargs: Any
+    **kwargs: Any,
 ):
     """
     Create a Taruvi client (unified factory).
@@ -236,9 +270,11 @@ def Client(
     # Return appropriate client
     if mode == "async":
         from taruvi._async.client import AsyncClient
+
         return AsyncClient(api_url, app_slug, timeout=timeout, max_retries=max_retries, **kwargs)
     elif mode == "sync":
         from taruvi._sync.client import SyncClient
+
         return SyncClient(api_url, app_slug, timeout=timeout, max_retries=max_retries, **kwargs)
     else:
         raise ValueError(
@@ -249,7 +285,7 @@ def Client(
 
 
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by kind on purpose
     # Main client
     "Client",
     # Configuration
@@ -299,6 +335,7 @@ __all__ = [
     "PolicyCheckBatchResult",
     "AnalyticsQueryResult",
     "PaginatedResponse",
+    "PgRangeValue",
     # Filter types
     "DatabaseFilters",
     "StorageFilters",

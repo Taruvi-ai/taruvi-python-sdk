@@ -1,6 +1,7 @@
 """Pytest configuration and shared fixtures for integration tests."""
 
 import os
+
 import pytest
 from dotenv import load_dotenv
 
@@ -8,12 +9,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configure pytest-asyncio
-pytest_plugins = ('pytest_asyncio',)
+pytest_plugins = ("pytest_asyncio",)
 
 
 # ============================================================================
 # Environment Configuration
 # ============================================================================
+
 
 @pytest.fixture(scope="session")
 def test_config():
@@ -34,20 +36,20 @@ def fresh_jwt_token(test_config):
     This ensures tests always use a valid, non-expired token.
     """
     import httpx
-    
+
     username = test_config.get("username")
     password = test_config.get("password")
-    
+
     if not username or not password:
         pytest.skip("Username/password not configured - cannot generate JWT token")
-    
+
     # Login to get fresh token using allauth endpoint
     try:
-        api_url = test_config['api_url'].rstrip('/')
+        api_url = test_config["api_url"].rstrip("/")
         response = httpx.post(
             f"{api_url}/_allauth/app/v1/auth/login",
             json={"email": username, "password": password},
-            timeout=10
+            timeout=10,
         )
         response.raise_for_status()
         data = response.json()
@@ -56,8 +58,8 @@ def fresh_jwt_token(test_config):
         if not token:
             pytest.skip("No access token in login response")
         return token
-    except Exception as e:
-        pytest.skip(f"Cannot generate JWT token: {str(e)}")
+    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
+        pytest.skip(f"Cannot generate JWT token: {e!s}")
 
 
 @pytest.fixture
@@ -69,14 +71,14 @@ def unauth_test_config(monkeypatch):
     Use this fixture for tests that need unauthenticated clients.
     """
     # Enable test mode to disable .env file loading in TaruviConfig
-    monkeypatch.setenv('TARUVI_TEST_MODE', 'true')
+    monkeypatch.setenv("TARUVI_TEST_MODE", "true")
 
     # Clear auth environment variables
-    monkeypatch.delenv('TARUVI_JWT', raising=False)
-    monkeypatch.delenv('TARUVI_API_KEY', raising=False)
-    monkeypatch.delenv('TARUVI_SESSION_TOKEN', raising=False)
-    monkeypatch.delenv('TARUVI_USERNAME', raising=False)
-    monkeypatch.delenv('TARUVI_PASSWORD', raising=False)
+    monkeypatch.delenv("TARUVI_JWT", raising=False)
+    monkeypatch.delenv("TARUVI_API_KEY", raising=False)
+    monkeypatch.delenv("TARUVI_SESSION_TOKEN", raising=False)
+    monkeypatch.delenv("TARUVI_USERNAME", raising=False)
+    monkeypatch.delenv("TARUVI_PASSWORD", raising=False)
 
     return {
         "api_url": os.getenv("TARUVI_API_URL", "http://localhost:8000"),
@@ -92,6 +94,7 @@ def unauth_test_config(monkeypatch):
 # Real Client Fixtures (NO MOCKS)
 # ============================================================================
 
+
 @pytest.fixture
 async def async_client(test_config, fresh_jwt_token):
     """
@@ -104,16 +107,11 @@ async def async_client(test_config, fresh_jwt_token):
 
     # Create base client
     base_client = Client(
-        api_url=test_config["api_url"],
-        app_slug=test_config["app_slug"],
-        mode="async"
+        api_url=test_config["api_url"], app_slug=test_config["app_slug"], mode="async"
     )
 
     # Authenticate with fresh JWT token
-    client = base_client.auth.signInWithToken(
-        token=fresh_jwt_token,
-        token_type='jwt'
-    )
+    client = base_client.auth.signInWithToken(token=fresh_jwt_token, token_type="jwt")
 
     yield client
 
@@ -133,16 +131,11 @@ def sync_client(test_config, fresh_jwt_token):
 
     # Create base client
     base_client = Client(
-        api_url=test_config["api_url"],
-        app_slug=test_config["app_slug"],
-        mode="sync"
+        api_url=test_config["api_url"], app_slug=test_config["app_slug"], mode="sync"
     )
 
     # Authenticate with fresh JWT token
-    client = base_client.auth.signInWithToken(
-        token=fresh_jwt_token,
-        token_type='jwt'
-    )
+    client = base_client.auth.signInWithToken(token=fresh_jwt_token, token_type="jwt")
 
     yield client
 
@@ -153,6 +146,7 @@ def sync_client(test_config, fresh_jwt_token):
 # ============================================================================
 # Module-Specific Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 async def async_functions_module(async_client):
@@ -263,10 +257,12 @@ def sync_app_module(sync_client):
 # Test Data Helpers
 # ============================================================================
 
+
 @pytest.fixture
 def generate_unique_id():
     """Generate unique identifiers for test data to avoid conflicts."""
     from uuid import uuid4
+
     return lambda: uuid4().hex[:8]
 
 
@@ -282,6 +278,7 @@ def test_function_name():
 # ============================================================================
 # Skip Integration Tests if Not Configured
 # ============================================================================
+
 
 def pytest_configure(config):
     """Register custom markers."""

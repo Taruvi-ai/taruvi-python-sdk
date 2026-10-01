@@ -12,21 +12,22 @@ Usage:
         ...
 """
 
-from typing import TypedDict, Literal, Any, Optional
+from typing import Any, Literal, TypedDict
+
 try:
     from typing import NotRequired  # Python 3.11+
 except ImportError:
-    from typing_extensions import NotRequired  # Python 3.8-3.10
-
-from datetime import datetime
+    from typing_extensions import NotRequired  # noqa: UP035 - Python 3.10 backport
 
 
 # ============================================================================
 # Response Types - API Response Structures
 # ============================================================================
 
+
 class User(TypedDict):
     """User response structure (type hint only)."""
+
     id: str
     email: str
     username: str
@@ -43,6 +44,7 @@ class DatabaseRecord(TypedDict, total=False):
 
     Use total=False to allow any additional fields.
     """
+
     id: int | str
     created_at: str
     updated_at: str
@@ -51,6 +53,7 @@ class DatabaseRecord(TypedDict, total=False):
 
 class PgRangeValue(TypedDict):
     """PostgreSQL range column value as returned by the API."""
+
     lower: str | int | float | None
     upper: str | int | float | None
     bounds: Literal["()", "(]", "[)", "[]"]
@@ -59,6 +62,7 @@ class PgRangeValue(TypedDict):
 
 class StorageFile(TypedDict):
     """Storage file metadata (type hint only)."""
+
     id: str
     filename: str
     path: str
@@ -74,12 +78,14 @@ class StorageFile(TypedDict):
 
 class StorageAccessLinkResult(TypedDict):
     """Result of a SharePoint view or edit access grant."""
+
     url: str
     mode: Literal["view", "edit"]
 
 
 class StorageBrowseFolder(TypedDict):
     """Virtual folder entry from browse (type hint only)."""
+
     type: Literal["folder"]
     name: str
     path: str  # e.g. "reports/2024/" — pass back as prefix to browse deeper
@@ -87,6 +93,7 @@ class StorageBrowseFolder(TypedDict):
 
 class StorageBrowseFile(TypedDict):
     """File entry from browse (type hint only)."""
+
     type: Literal["file"]
     id: int
     uuid: str
@@ -103,6 +110,7 @@ class StorageBrowseFile(TypedDict):
 
 class StorageBrowseData(TypedDict):
     """Response payload from browse (type hint only)."""
+
     prefix: str
     folders: list["StorageBrowseFolder"]
     objects: list["StorageBrowseFile"]
@@ -113,6 +121,7 @@ class StorageBrowseData(TypedDict):
 
 class Function(TypedDict):
     """Function definition (type hint only)."""
+
     id: int
     name: str
     slug: str
@@ -129,6 +138,7 @@ class Function(TypedDict):
 
 class FunctionInvocation(TypedDict):
     """Function invocation result (type hint only)."""
+
     id: int
     celery_task_id: NotRequired[str]
     status: Literal["pending", "PENDING", "running", "STARTED", "completed", "SUCCESS", "FAILURE"]
@@ -150,6 +160,7 @@ class Secret(TypedDict):
 
 class Bucket(TypedDict):
     """Storage bucket metadata (type hint only)."""
+
     id: int
     name: str
     slug: str
@@ -164,6 +175,7 @@ class Bucket(TypedDict):
 
 class App(TypedDict):
     """App metadata (type hint only)."""
+
     id: int
     name: str
     slug: str
@@ -175,6 +187,7 @@ class App(TypedDict):
 
 class Setting(TypedDict):
     """App setting (type hint only)."""
+
     key: str
     value: Any
     description: NotRequired[str]
@@ -185,6 +198,7 @@ class Setting(TypedDict):
 
 class PolicyCheckResult(TypedDict):
     """Policy check result (type hint only)."""
+
     allowed: bool
     resource: str
     action: str
@@ -194,11 +208,13 @@ class PolicyCheckResult(TypedDict):
 
 class PolicyCheckBatchResult(TypedDict):
     """Batch policy check result (type hint only)."""
+
     results: list[PolicyCheckResult]
 
 
 class AnalyticsQueryResult(TypedDict):
     """Analytics query result (type hint only)."""
+
     data: Any  # Query-specific result structure (varies by query)
 
 
@@ -206,8 +222,10 @@ class AnalyticsQueryResult(TypedDict):
 # Filter Types - Query Parameters
 # ============================================================================
 
+
 class DatabaseFilters(TypedDict, total=False):
     """Database query filters (type hint only)."""
+
     page: int
     page_size: int
     ordering: str
@@ -217,6 +235,7 @@ class DatabaseFilters(TypedDict, total=False):
 
 class StorageFilters(TypedDict, total=False):
     """Storage query filters (type hint only)."""
+
     page: int
     page_size: int
     search: str
@@ -227,6 +246,7 @@ class StorageFilters(TypedDict, total=False):
 
 class FunctionFilters(TypedDict, total=False):
     """Function list filters (type hint only)."""
+
     limit: int
     offset: int
     is_active: bool
@@ -235,6 +255,7 @@ class FunctionFilters(TypedDict, total=False):
 
 class SecretFilters(TypedDict, total=False):
     """Secret list filters (type hint only)."""
+
     search: str
     app: str
     tags: str  # Comma-separated
@@ -245,6 +266,7 @@ class SecretFilters(TypedDict, total=False):
 
 class UserFilters(TypedDict, total=False):
     """User list filters (type hint only)."""
+
     search: str
     is_active: bool
     is_staff: bool
@@ -261,8 +283,10 @@ class UserFilters(TypedDict, total=False):
 # Paginated Response
 # ============================================================================
 
+
 class PaginatedResponse(TypedDict):
     """Paginated API response (type hint only)."""
+
     count: int
     next: NotRequired[str]
     previous: NotRequired[str]
@@ -273,7 +297,7 @@ class PaginatedResponse(TypedDict):
 # Exports
 # ============================================================================
 
-__all__ = [
+__all__ = [  # noqa: RUF022 - grouped by kind on purpose
     # Response types
     "User",
     "DatabaseRecord",
@@ -292,7 +316,6 @@ __all__ = [
     "PolicyCheckBatchResult",
     "AnalyticsQueryResult",
     "PaginatedResponse",
-
     # Filter types
     "DatabaseFilters",
     "StorageFilters",

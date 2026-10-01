@@ -105,11 +105,13 @@ class BaseHTTPClient:
         Returns:
             True if client has jwt, api_key, or session_token
         """
-        return any([
-            self.config.jwt is not None,
-            self.config.api_key is not None,
-            self.config.session_token is not None,
-        ])
+        return any(
+            [
+                self.config.jwt is not None,
+                self.config.api_key is not None,
+                self.config.session_token is not None,
+            ]
+        )
 
     def _parse_json_response(self, response: httpx.Response) -> dict[str, Any]:
         """

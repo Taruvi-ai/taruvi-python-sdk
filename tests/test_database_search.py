@@ -17,8 +17,8 @@ Note:
 """
 
 import os
-import pytest
 
+import pytest
 
 SEARCH_TABLE = os.getenv("TARUVI_TEST_SEARCH_TABLE", "test_table")
 
@@ -27,16 +27,13 @@ SEARCH_TABLE = os.getenv("TARUVI_TEST_SEARCH_TABLE", "test_table")
 # Search Tests - Async
 # ============================================================================
 
+
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_search_basic_async(async_database_module):
     """Test basic full-text search (async)."""
     try:
-        result = await (
-            async_database_module.from_(SEARCH_TABLE)
-            .search("test")
-            .execute()
-        )
+        result = await async_database_module.from_(SEARCH_TABLE).search("test").execute()
 
         assert result is not None
         assert isinstance(result, dict)
@@ -101,9 +98,7 @@ async def test_search_no_results_async(async_database_module):
     """Test search with query that returns no results (async)."""
     try:
         result = await (
-            async_database_module.from_(SEARCH_TABLE)
-            .search("zzzznonexistentterm99999")
-            .execute()
+            async_database_module.from_(SEARCH_TABLE).search("zzzznonexistentterm99999").execute()
         )
 
         assert result is not None
@@ -124,15 +119,12 @@ async def test_search_no_results_async(async_database_module):
 # Search Tests - Sync
 # ============================================================================
 
+
 @pytest.mark.integration
 def test_search_basic_sync(sync_database_module):
     """Test basic full-text search (sync)."""
     try:
-        result = (
-            sync_database_module.from_(SEARCH_TABLE)
-            .search("test")
-            .execute()
-        )
+        result = sync_database_module.from_(SEARCH_TABLE).search("test").execute()
 
         assert result is not None
         assert isinstance(result, dict)
@@ -194,9 +186,7 @@ def test_search_no_results_sync(sync_database_module):
     """Test search with query that returns no results (sync)."""
     try:
         result = (
-            sync_database_module.from_(SEARCH_TABLE)
-            .search("zzzznonexistentterm99999")
-            .execute()
+            sync_database_module.from_(SEARCH_TABLE).search("zzzznonexistentterm99999").execute()
         )
 
         assert result is not None
@@ -215,6 +205,7 @@ def test_search_no_results_sync(sync_database_module):
 # ============================================================================
 # QueryBuilder search() Unit Tests (no backend needed)
 # ============================================================================
+
 
 def test_search_sets_param():
     """Test that search() adds 'search' to built query params."""
