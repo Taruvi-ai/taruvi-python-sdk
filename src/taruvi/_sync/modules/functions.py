@@ -33,13 +33,19 @@ _INVOCATION_DETAIL = "/api/invocations/{invocation_id}/"
 # Shared Implementation Logic
 # ============================================================================
 
+def _build_execute_request(
+    params: Optional[dict[str, Any]],
+    is_async: Optional[bool]
+) -> dict[str, Any]:
+    """Build function execution request body.
 
-def _build_execute_request(params: Optional[dict[str, Any]], is_async: bool) -> dict[str, Any]:
-    """Build function execution request body."""
-    return {
-        "params": params or {},
-        "async": is_async,
-    }
+    ``async`` is omitted when ``is_async`` is None so the function's own
+    default execution mode applies.
+    """
+    body: dict[str, Any] = {"params": params or {}}
+    if is_async is not None:
+        body["async"] = is_async
+    return body
 
 
 class FunctionsModule(BaseModule):
@@ -56,7 +62,7 @@ class FunctionsModule(BaseModule):
         params: Optional[dict[str, Any]] = None,
         *,
         app_slug: Optional[str] = None,
-        is_async: bool = False,
+        is_async: Optional[bool] = None,
         timeout: Optional[int] = None,
     ) -> FunctionInvocation:
         """
@@ -66,8 +72,9 @@ class FunctionsModule(BaseModule):
             function_slug: Function slug (e.g., "my-function")
             params: Function parameters
             app_slug: App slug (defaults to client's app_slug)
-            is_async: Whether to execute asynchronously (returns task_id)
-            timeout: Override default timeout
+            is_async: True to queue the run and return a task ID, False to wait
+                for the result. None (default) uses the function's own mode.
+            timeout: Seconds to wait for this call, overriding the client's timeout
 
         Returns:
             FunctionInvocation dict with execution result
@@ -87,7 +94,7 @@ class FunctionsModule(BaseModule):
         path = _FUNCTION_EXECUTE.format(app_slug=app_slug, function_slug=function_slug)
         body = _build_execute_request(params, is_async)
 
-        response = self._http.post(path, json=body, headers={})
+        response = self._http.post(path, json=body, headers={}, timeout=timeout)
         return response
 
     def get_result(

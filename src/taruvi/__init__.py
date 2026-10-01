@@ -4,17 +4,17 @@ Taruvi Python SDK
 Official SDK for interacting with the Taruvi Cloud Platform.
 
 Unified Client API:
-- **Client(mode='async')**: Async client for async frameworks (uses httpx.AsyncClient)
-- **Client(mode='sync')**: Native blocking client for scripts, functions, and notebooks (uses httpx.Client)
-- **Client()**: Defaults to sync mode
+- **Client(api_url, app_slug, mode='async')**: Async client for async frameworks (uses httpx.AsyncClient)
+- **Client(api_url, app_slug, mode='sync')**: Native blocking client for scripts, functions, and notebooks (uses httpx.Client)
+- **Client(api_url, app_slug)**: Sync outside a running event loop, async inside one
 
 **Note**: Sync mode uses native httpx.Client (blocking) - NOT asyncio.run() wrapper.
-This makes it thread-safe, faster (10-50x), and compatible with all Python environments
-including Jupyter notebooks, FastAPI apps, and any async context.
+This makes it thread-safe and compatible with Jupyter notebooks and web workers.
 
-Authentication via AuthManager:
-All authentication is handled through the AuthManager after client creation.
-This provides a clean separation between client initialization and authentication.
+Authentication:
+Create a client, then call ``client.auth`` to get a new authenticated client.
+Credentials can also be passed as keyword arguments or ``TARUVI_*`` environment
+variables (for example ``api_key=`` or ``TARUVI_API_KEY``).
 
 Authentication Examples:
     ```python
@@ -22,11 +22,11 @@ Authentication Examples:
 
     # Step 1: Create unauthenticated client
     client = Client(
-        api_url="http://localhost:8000",
+        api_url="https://api.example.com",
         app_slug="my-app"
     )
 
-    # Step 2: Authenticate using AuthManager
+    # Step 2: Authenticate
 
     # Method 1: JWT Bearer Token
     auth_client = client.auth.signInWithToken(
@@ -34,9 +34,9 @@ Authentication Examples:
         token_type="jwt"
     )
 
-    # Method 2: Knox API-Key
+    # Method 2: API key
     auth_client = client.auth.signInWithToken(
-        token="knox_api_key_here",
+        token="api_key_here",
         token_type="api_key"
     )
 
@@ -46,9 +46,9 @@ Authentication Examples:
         token_type="session_token"
     )
 
-    # Method 4: Username+Password
+    # Method 4: Email and password
     auth_client = client.auth.signInWithPassword(
-        username="alice@example.com",
+        email="alice@example.com",
         password="secret123"
     )
 
@@ -62,10 +62,10 @@ Async Client Example:
 
     async def main():
         client = Client(
-            mode='async',
-            api_url="http://localhost:8000",
+            api_url="https://api.example.com",
             app_slug="my-app",
-            jwt="your_jwt_token"
+            mode="async",
+            api_key="your_api_key",
         )
 
         # Execute a function
@@ -82,48 +82,47 @@ Sync Client Example:
     ```python
     from taruvi import Client
 
-    # Native blocking - works everywhere! (mode='sync' is default)
     client = Client(
-        api_url="http://localhost:8000",
+        api_url="https://api.example.com",
         app_slug="my-app",
-        jwt="your_jwt_token"
+        mode="sync",
+        api_key="your_api_key",
     )
 
     # Direct blocking calls (no asyncio.run)
     result = client.functions.execute("process-data", params={"value": 42})
-    users = client.database.query("users").page_size(10).get()
+    users = client.database.from_("users").page_size(10).execute()
     ```
 
 Function Runtime Example:
     ```python
-    # Inside Taruvi function - auto-configured!
-    def main(params, user_data):
-        from taruvi import Client
-
-        client = Client()  # Auto-detects from environment
-
+    # Inside a Taruvi function, the platform passes an authenticated client.
+    def main(params, user_data, sdk_client):
         # Call another function
-        result = client.functions.execute("helper", {"test": True})
+        result = sdk_client.functions.execute("helper", params={"test": True})
 
         # Query database
-        users = client.database.query("users").page_size(10).get()
+        users = sdk_client.database.from_("users").page_size(10).execute()
 
-        return {"result": result, "user_count": len(users)}
+        return {"result": result, "user_count": len(users["data"])}
     ```
 """
 
 import os
 from typing import TYPE_CHECKING, Any, Optional
 
-from taruvi._modes import RuntimeMode
+from taruvi._version import __version__ as __version__
+from taruvi.config import RuntimeMode, TaruviConfig
 from taruvi.exceptions import (
     APIError,
     AuthenticationError,
     AuthorizationError,
+    BillingError,
     ConfigurationError,
     ConflictError,
     ConnectionError,
     FunctionExecutionError,
+    GatewayTimeoutError,
     NetworkError,
     NotAuthenticatedError,
     NotFoundError,
@@ -284,7 +283,7 @@ def Client(
         )
 
 
-__version__ = "0.2.2"
+
 
 __all__ = [  # noqa: RUF022 - grouped by kind on purpose
     # Main client
@@ -310,6 +309,8 @@ __all__ = [  # noqa: RUF022 - grouped by kind on purpose
     "RateLimitError",
     "ServerError",
     "ServiceUnavailableError",
+    "GatewayTimeoutError",
+    "BillingError",
     "NetworkError",
     "TimeoutError",
     "ConnectionError",

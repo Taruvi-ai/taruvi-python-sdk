@@ -157,10 +157,11 @@ def test_get_app_settings_nonexistent_app_sync(sync_app_module):
 
 
 def test_settings_requires_app_slug(monkeypatch):
-    """Test that settings() raises ConfigurationError when no app_slug is available."""
+    """A client without an app_slug is refused when it's created, before settings() can run."""
     monkeypatch.setenv("TARUVI_TEST_MODE", "true")
 
     from taruvi import Client
+    from taruvi.exceptions import ConfigurationError
 
     with pytest.raises(ConfigurationError, match="app_slug is required"):
-        Client(api_url="http://localhost:8000", app_slug="").app.settings()
+        Client(api_url="http://localhost:8000", app_slug="")
