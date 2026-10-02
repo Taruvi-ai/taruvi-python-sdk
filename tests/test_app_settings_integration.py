@@ -13,8 +13,6 @@ Setup:
 
 import pytest
 
-from taruvi.exceptions import ConfigurationError
-
 # ============================================================================
 # App Settings Tests - Async
 # ============================================================================
