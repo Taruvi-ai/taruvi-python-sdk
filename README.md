@@ -1751,3 +1751,7 @@ Need help? We're here for you:
   <a href="https://github.com/taruvi">GitHub</a> •
   <a href="https://twitter.com/taruvi">Twitter</a>
 </p>
+
+Record IDs in database get/update/delete requests are encoded as a URL path
+segment, so reserved characters cannot become query parameters or fragments.
+The backend still determines which primary-key values its routes support.

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Optional
+from urllib.parse import quote
 
 from taruvi.modules.base import BaseModule
 from taruvi.types import DatabaseRecord
@@ -524,7 +525,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             return _DATATABLE_UPSERT.format(app_slug=self.app_slug, table_name=table)
         if self._record_id:
             return _DATATABLE_RECORD.format(
-                app_slug=self.app_slug, table_name=table, record_id=self._record_id
+                app_slug=self.app_slug, table_name=table, record_id=quote(self._record_id, safe="")
             )
         return _DATATABLE_DATA.format(app_slug=self.app_slug, table_name=table)
 

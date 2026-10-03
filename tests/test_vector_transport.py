@@ -284,3 +284,31 @@ async def test_backend_without_query_route_returns_not_found_without_get_fallbac
     assert [(request.method, request.url.path) for request in transport_client.requests] == [
         ("POST", "/sites/vector-fixture/api/apps/search-app/datatables/documents/data/query/")
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("operation", ["get", "update", "delete"])
+async def test_record_identity_cannot_become_a_query_or_fragment(transport_client, operation):
+    from urllib.parse import quote
+
+    identity = "a?secret=b#fragment/percent%value"
+    query = transport_client.client.database.from_("documents")
+    if operation == "delete":
+        query = query.delete(identity)
+    else:
+        query = query.get(identity)
+        if operation == "update":
+            query = query.update({"title": "edited"})
+    await resolve(query.execute())
+    request = transport_client.requests[0]
+    assert request.method == {"get": "GET", "update": "PATCH", "delete": "DELETE"}[operation]
+    assert (
+        request.url.raw_path
+        == (
+            "/sites/vector-fixture/api/apps/search-app/datatables/documents/data/"
+            + quote(identity, safe="")
+            + "/"
+        ).encode()
+    )
+    assert not request.url.query
+    assert not request.url.fragment

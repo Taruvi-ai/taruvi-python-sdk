@@ -51,7 +51,7 @@ Use parametrization for equivalent sync/async or status/operator families and
 assert stable API contracts. Keep transport tests deterministic and use the
 live suite for integration behavior that mocks cannot prove.
 
-On October 3, 2026 the default gate passed **242 tests, with 74 live tests
+On October 3, 2026 the default gate passed **248 tests, with 74 live tests
 skipped**. The vector transport slice passed 30 tests. Nine harness regressions
 failed before the gate and error handling changes. These figures do not claim
 that the 74 live workflows ran. Several module-specific live tests still skip
@@ -89,3 +89,9 @@ ASTs; the full local gate remains **242 passed / 74 live skipped**, and Black
 and Ruff pass. Existing strict mypy findings remain advisory in CI; this does
 not claim that the type-check backlog is resolved. No workflow was dispatched
 or package published during this review.
+
+Six sync/async transport regressions failed before database record-ID encoding
+was corrected. They exercise actual HTTPX URLs for GET/PATCH/DELETE, including
+reserved query, fragment, slash and percent characters; these checks prove
+request identity preservation, not that every text ID is addressable by the
+backend. The complete default gate now passes **248 tests / 74 live skipped**.
