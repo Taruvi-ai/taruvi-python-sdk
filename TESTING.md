@@ -8,14 +8,22 @@ environment.
 ## Commands
 
 ```bash
-python -m pip install '.[dev]'
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
 python -m pytest -q                         # unit tests; integration tests skip
 python -m pytest tests/test_http_clients.py -q
 python -m pytest tests/test_database_edges.py -q
+python -m pytest tests/test_module_contracts.py tests/test_sync_async_parity.py -q
 python -m pytest -m integration -q           # live tests only, when enabled
 RUN_INTEGRATION_TESTS=1 python -m pytest -m integration -q
 python -m pytest --cov=taruvi --cov-report=term-missing
+python -m pytest --cov=taruvi --cov-report=html
 ```
+
+The terminal summary reports passes, failures, and skips separately. Open
+`htmlcov/index.html` after the HTML coverage command. A default run skips live
+tests; those skips are not evidence that the deployed API works.
 
 Set `TARUVI_API_URL`, `TARUVI_TEST_APP_SLUG`, and the credentials documented in
 `tests/README.md` before running live tests. Live tests are marked
@@ -30,6 +38,7 @@ the repository or in command output.
 | Import, factory, config, auth | `test_imports.py`, `test_client_factory.py`, `test_credentials.py`, `test_auth_manager.py` | lazy imports, sync/async selection, credential precedence, auth lifecycle |
 | Transport and errors | `test_http_clients.py`, `test_retry_safety.py`, `test_errors.py` | httpx response parsing, typed errors, headers, retry safety, sync/async parity |
 | Query and database | `test_utils.py`, `test_aggregations*.py`, `test_database_edges.py`, `test_database_search.py` | encoded query builders and high-risk query operations |
+| Modules and sync/async parity | `test_module_contracts.py`, `test_sync_async_parity.py` | module routes/payloads, public method parity, generated sync behavior |
 | Feature integrations | `test_*_integration.py` | live database, storage, functions, secrets, analytics, and app/settings contracts |
 
 Use parametrization for equivalent sync/async or status/operator families and

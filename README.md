@@ -1542,27 +1542,29 @@ users: list[dict[str, Any]] = auth_client.database.from_("users").execute()
 git clone https://github.com/taruvi/taruvi-python-sdk.git
 cd taruvi-python-sdk
 
-# Install in editable mode with dev dependencies
-pip install -e ".[dev]"
-
-# Or with Poetry
-poetry install --with dev
+# Isolate the development toolchain
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
 ```
 
 ### Running Tests
 
+See [TESTING.md](TESTING.md) for the module map, coverage reports, and live-test
+configuration. The default run skips tests requiring a configured live backend.
+
 ```bash
-# Run all tests
-pytest
+# Run deterministic tests
+python -m pytest -q
 
 # Run with coverage
-pytest --cov=src/taruvi --cov-report=html
+python -m pytest --cov=taruvi --cov-report=html
 
 # Run specific test file
-pytest tests/test_database_integration.py -v
+python -m pytest tests/test_database_edges.py -q
 
 # Run integration tests (requires backend)
-RUN_INTEGRATION_TESTS=1 pytest tests/ -v
+RUN_INTEGRATION_TESTS=1 python -m pytest -m integration -v
 ```
 
 ### Code Quality
