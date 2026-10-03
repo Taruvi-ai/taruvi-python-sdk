@@ -22,6 +22,13 @@ python -m pytest -m integration tests/test_storage_integration.py -q
 python -m pytest -m integration tests/test_functions_integration.py -q
 ```
 
-Tests skip automatically when `RUN_INTEGRATION_TESTS` is absent. Use a
-disposable tenant and clean up created objects after a run; never commit an
-`.env` file or include credentials in failure logs.
+Only `RUN_INTEGRATION_TESTS=1` enables live requests. Missing, empty, `0`,
+`false`, and `off` values leave them skipped. Once enabled, missing credentials,
+HTTP/connection failures during login, or a malformed login response fail setup
+with an actionable message; they are not accepted as skips. The fixture omits
+credentials, response bodies, and underlying exception messages from that error.
+
+Use a disposable tenant and clean up created objects after a run; never commit
+an `.env` file or include credentials in failure logs. Module-specific checks
+may still skip missing named resources; report those skips separately from
+passing live contracts.

@@ -49,7 +49,7 @@ Taruvi Cloud is a multi-tenant Backend-as-a-Service platform that provides:
 The Taruvi Python SDK provides a clean, pythonic interface to all platform capabilities with:
 - **Full Type Safety**: Complete type hints for IDE autocomplete
 - **Dual Runtime Modes**: Both async and native blocking sync support
-- **AuthManager Authentication**: Clean separation of client initialization and authentication
+- **Client Authentication**: Sign in through `client.auth`, or supply an existing credential at initialization
 - **Production Ready**: Automatic retries, connection pooling, timeout handling
 
 📚 **[Full Documentation](https://docs.taruvi.cloud)** | 🌐 **[Taruvi Cloud](https://taruvi.cloud)**
@@ -63,7 +63,7 @@ The Taruvi Python SDK provides a clean, pythonic interface to all platform capab
 - Lazy-loaded modules for optimal performance
 - Context manager support (`with` / `async with`)
 
-🔐 **AuthManager-Based Authentication**
+🔐 **Client Authentication**
 - Clean separation of client initialization and authentication
 - JWT Bearer tokens
 - Knox API Keys
@@ -151,9 +151,9 @@ client = Client(
     app_slug="my-app"
 )
 
-# Step 2: Authenticate using AuthManager
+# Step 2: Authenticate using client.auth
 auth_client = client.auth.signInWithPassword(
-    username="alice@example.com",
+    email="alice@example.com",
     password="secret123"
 )
 
@@ -180,9 +180,9 @@ async def main():
         app_slug="my-app"
     )
 
-    # Step 2: Authenticate using AuthManager (not async)
-    auth_client = client.auth.signInWithPassword(
-        username="alice@example.com",
+    # Step 2: Password sign-in performs HTTP and must be awaited in async mode.
+    auth_client = await client.auth.signInWithPassword(
+        email="alice@example.com",
         password="secret123"
     )
 
@@ -195,6 +195,7 @@ async def main():
     print(f"Found {result['total']} users")
 
     await auth_client.close()
+    await client.close()
 
 asyncio.run(main())
 ```
@@ -227,7 +228,9 @@ def main(params, user_data):
 
 ### Overview
 
-Taruvi SDK uses **AuthManager** for all authentication. You create an unauthenticated client first, then authenticate using one of the AuthManager methods.
+Use **`client.auth`** to sign in or clone a client with a different credential.
+You can also initialize `Client` with an existing `api_key`, `jwt`, or
+`session_token`.
 
 This approach provides:
 - ✅ Clean separation of client initialization and authentication
@@ -246,7 +249,7 @@ client = Client(
 )
 ```
 
-**Step 2**: Authenticate using AuthManager (choose one method)
+**Step 2**: Authenticate using `client.auth` (choose one method)
 
 ---
 
@@ -255,7 +258,7 @@ client = Client(
 ```python
 # Authenticate with username/password
 auth_client = client.auth.signInWithPassword(
-    username="alice@example.com",
+    email="alice@example.com",
     password="secret123"
 )
 
@@ -323,7 +326,7 @@ client = Client(
 
 # Authenticate with username/password
 auth_client = client.auth.signInWithPassword(
-    username="alice@example.com",
+    email="alice@example.com",
     password="secret123"
 )
 
@@ -348,13 +351,13 @@ client = Client(api_url="...", app_slug="...")
 
 # Authenticate as user 1
 user1_client = client.auth.signInWithPassword(
-    username="user1@example.com",
+    email="user1@example.com",
     password="pass1"
 )
 
 # Switch to user 2
 user2_client = user1_client.auth.signInWithPassword(
-    username="user2@example.com",
+    email="user2@example.com",
     password="pass2"
 )
 
@@ -390,7 +393,7 @@ client = Client(
 
 # Authenticate with credentials from environment
 auth_client = client.auth.signInWithPassword(
-    username=os.getenv("TARUVI_USERNAME"),
+    email=os.getenv("TARUVI_USERNAME"),
     password=os.getenv("TARUVI_PASSWORD")
 )
 
@@ -582,6 +585,37 @@ result = (
 ```
 
 **Note:** The table must have a `search_vector` field configured in its schema (via `x-search-fields`). The backend translates `?search=query` to a PostgreSQL full-text search using `tsvector`.
+
+#### Vector and hybrid search
+
+Supply an embedding with the table's configured dimensions and distance metric:
+
+```python
+result = (
+    client.database.from_("articles")
+    .vector_search("embedding", query_embedding, topk=20, metric="cosine")
+    .filter("is_published", "eq", True)
+    .page_size(5)
+    .execute()
+)
+
+# Combine vector and full-text ranks. Both search indexes must be configured.
+hybrid = (
+    client.database.from_("articles")
+    .vector_search("embedding", query_embedding, topk=20, metric="cosine")
+    .search("invoice")
+    .hybrid(strategy="rrf", alpha=0.5)
+    .execute()
+)
+```
+
+The same builders work with the async client; await `execute()`. `topk`
+sets the search window, while `page` and `page_size` choose a page within it.
+Optional vector controls are `threshold` and `ef_search`. Hybrid supports
+`rrf`; `alpha=0` uses only text ranks and `alpha=1` only vector ranks.
+See the [search guide](https://docs.taruvi.cloud/docs/products/database/advanced/search)
+for schema, score, metric and pagination contracts. These builders send the
+existing GET query parameters; they do not expose the platform's POST query API.
 
 #### Get Single Record
 
@@ -780,29 +814,33 @@ result = (
 
 ### User Authentication & Management
 
-#### Login and Token Management
+#### Sign in and manage the client credential
 
 ```python
-# Login to get JWT tokens
-tokens = client.auth.login(
-    username="alice@example.com",
-    password="secret123"
+import os
+
+# Returns a new client authenticated with the returned JWT.
+user_client = client.auth.signInWithPassword(
+    email=os.environ["TARUVI_USER_EMAIL"],
+    password=os.environ["TARUVI_USER_PASSWORD"],
 )
-access_token = tokens['access']
-refresh_token = tokens['refresh']
 
-# Refresh access token
-new_tokens = client.auth.refresh_token(refresh_token)
-
-# Verify token
-is_valid = client.auth.verify_token(access_token)
+# Returns another client with no credential; the original is unchanged.
+signed_out_client = user_client.auth.signOut()
 ```
+
+For an async client, await `signInWithPassword()` and `get_current_user()`;
+`signInWithToken()` and `signOut()` are synchronous in both modes. Close each
+client after use (`await client.close()` in async mode).
+`signOut()` only removes credentials from the returned client; it does not
+revoke a token or end a remote session. The public auth module has no JWT
+refresh or token-verification method. Sign in again when the credential expires.
 
 #### Get Current User
 
 ```python
 # Get authenticated user info
-user = client.auth.get_current_user()
+user = user_client.auth.get_current_user()["data"]
 print(user['username'], user['email'])
 ```
 
@@ -1263,7 +1301,7 @@ client = Client(
     max_retries=3,    # Max retry attempts (0-10, default: 3)
 )
 
-# Authentication is done separately via AuthManager
+# Alternatively, sign in through client.auth.
 auth_client = client.auth.signInWithPassword(email="...", password="...")
 ```
 
@@ -1277,7 +1315,8 @@ auth_client = client.auth.signInWithPassword(email="...", password="...")
 | `timeout` | `int` | `30` | Request timeout in seconds (1-300) |
 | `max_retries` | `int` | `3` | Maximum retry attempts (0-10) |
 
-**Note**: Authentication parameters are no longer passed to `Client()`. Use `AuthManager` methods instead.
+**Note**: Pass an existing `api_key`, `jwt`, or `session_token` to `Client()`,
+or use `client.auth` to sign in. Password sign-in returns a new client.
 
 ### Environment Variables
 
@@ -1292,7 +1331,7 @@ TARUVI_TIMEOUT=60
 TARUVI_MAX_RETRIES=5
 TARUVI_SITE_SLUG=my-site
 
-# Authentication credentials (use with AuthManager)
+# Authentication credentials (use with client.auth)
 TARUVI_JWT=your_jwt_token
 TARUVI_API_KEY=your_api_key
 TARUVI_SESSION_TOKEN=your_session_token
@@ -1313,7 +1352,7 @@ client = Client(
 
 # Authenticate
 auth_client = client.auth.signInWithPassword(
-    username=os.getenv("TARUVI_USERNAME"),
+    email=os.getenv("TARUVI_USERNAME"),
     password=os.getenv("TARUVI_PASSWORD")
 )
 ```

@@ -41,9 +41,14 @@ def fresh_jwt_token(test_config):
     password = test_config.get("password")
 
     if not username or not password:
-        pytest.skip("Username/password not configured - cannot generate JWT token")
+        pytest.fail(
+            "Live integration login requires TARUVI_TEST_EMAIL and TARUVI_TEST_PASSWORD. "
+            "Use credentials for a disposable test site.",
+            pytrace=False,
+        )
 
     # Login to get fresh token using allauth endpoint
+    failure = None
     try:
         api_url = test_config["api_url"].rstrip("/")
         response = httpx.post(
@@ -52,14 +57,32 @@ def fresh_jwt_token(test_config):
             timeout=10,
         )
         response.raise_for_status()
+    except httpx.HTTPStatusError as error:
+        failure = (
+            f"Live integration login returned HTTP {error.response.status_code}. "
+            "Check TARUVI_API_URL and the configured disposable test credentials."
+        )
+    except httpx.HTTPError as error:
+        failure = (
+            f"Live integration login could not complete ({type(error).__name__}). "
+            "Check TARUVI_API_URL and backend availability."
+        )
+    if failure:
+        # Raise outside the exception handler so pytest cannot print the HTTP
+        # exception chain, which may contain sensitive URLs or response bodies.
+        pytest.fail(failure, pytrace=False)
+    invalid_json = False
+    try:
         data = response.json()
-        # Response structure: {"meta": {"access_token": "..."}}
-        token = data.get("meta", {}).get("access_token")
-        if not token:
-            pytest.skip("No access token in login response")
-        return token
-    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
-        pytest.skip(f"Cannot generate JWT token: {e!s}")
+    except ValueError:
+        invalid_json = True
+    if invalid_json:
+        pytest.fail("Live integration login returned invalid JSON.", pytrace=False)
+    meta = data.get("meta") if isinstance(data, dict) else None
+    token = meta.get("access_token") if isinstance(meta, dict) else None
+    if not isinstance(token, str) or not token:
+        pytest.fail("Live integration login response is missing meta.access_token.", pytrace=False)
+    return token
 
 
 @pytest.fixture
@@ -288,8 +311,8 @@ def pytest_configure(config):
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip integration tests if RUN_INTEGRATION_TESTS is not set."""
-    if not os.getenv("RUN_INTEGRATION_TESTS"):
+    """Enable live requests only with the documented explicit opt-in value."""
+    if os.getenv("RUN_INTEGRATION_TESTS") != "1":
         skip_integration = pytest.mark.skip(
             reason="Integration tests disabled. Set RUN_INTEGRATION_TESTS=1 to enable."
         )
