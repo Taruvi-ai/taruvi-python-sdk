@@ -125,25 +125,90 @@ class Function(TypedDict):
     id: int
     name: str
     slug: str
-    environment: Literal["python", "node"]
-    execution_mode: Literal["app", "system"]
-    app: NotRequired[int]
-    app_name: NotRequired[str]
-    app_slug: NotRequired[str]
+    environment: Literal["python", "javascript"]
+    execution_mode: Literal["app", "proxy", "system"]
+    app: NotRequired[int | None]
+    app_name: NotRequired[str | None]
+    app_slug: NotRequired[str | None]
     is_active: bool
     async_mode: bool
-    created_at: str
-    updated_at: str
+    created_at: str | None
+    updated_at: str | None
+
+
+class FunctionTaskResult(TypedDict):
+    """Celery result data; global lookup omits fields present on invocation metadata."""
+
+    task_id: str
+    status: str
+    result: Any
+    date_created: str | None
+    date_done: str | None
+    traceback: NotRequired[str | None]
+    task_args: NotRequired[Any]
+    task_kwargs: NotRequired[Any]
+    task_name: NotRequired[str | None]
+    worker: NotRequired[str | None]
+    meta: NotRequired[Any]
 
 
 class FunctionInvocation(TypedDict):
-    """Function invocation result (type hint only)."""
+    """Invocation serializer record. Task state lives in nullable task_result."""
 
     id: int
-    celery_task_id: NotRequired[str]
-    status: Literal["pending", "PENDING", "running", "STARTED", "completed", "SUCCESS", "FAILURE"]
-    result: NotRequired[Any]
-    error: NotRequired[str]
+    function: int
+    function_name: str
+    function_slug: str
+    celery_task_id: str
+    trigger_type: str
+    user_id: str | None
+    user_username: str | None
+    user_email: str | None
+    task_result: FunctionTaskResult | None
+    history_id: int | None
+    logs: NotRequired[list[dict[str, Any]] | None]
+    log_count: int
+    has_error: bool
+    created_at: str | None
+    updated_at: str | None
+    executed_code: NotRequired[str | None]
+
+
+class FunctionExecutionResponse(TypedDict):
+    """Full execute envelope, with queued optional for older platform releases."""
+
+    status: Literal["success", "error"]
+    message: str
+    data: Any
+    invocation: FunctionInvocation
+    queued: NotRequired[bool]
+    success: NotRequired[bool]
+
+
+class FunctionInvocationListResponse(TypedDict):
+    """Page-number invocation listing; list records omit heavy logs."""
+
+    status: Literal["success", "error"]
+    message: str
+    data: list[FunctionInvocation]
+    total: int
+
+
+class FunctionListResponse(TypedDict):
+    """Limit/offset function listing."""
+
+    status: Literal["success", "error"]
+    message: str
+    data: list[Function]
+    total: int
+
+
+class FunctionTaskResultResponse(TypedDict):
+    """Global task lookup envelope; result remains the executor's stored output."""
+
+    status: Literal["success", "error"]
+    message: str
+    data: FunctionTaskResult
 
 
 class Secret(TypedDict):
@@ -251,7 +316,7 @@ class FunctionFilters(TypedDict, total=False):
     limit: int
     offset: int
     is_active: bool
-    environment: Literal["python", "node"]
+    environment: Literal["python", "javascript"]
 
 
 class SecretFilters(TypedDict, total=False):
@@ -309,6 +374,11 @@ __all__ = [  # noqa: RUF022 - grouped by kind on purpose
     "StorageBrowseData",
     "Function",
     "FunctionInvocation",
+    "FunctionExecutionResponse",
+    "FunctionInvocationListResponse",
+    "FunctionListResponse",
+    "FunctionTaskResult",
+    "FunctionTaskResultResponse",
     "Secret",
     "Bucket",
     "App",

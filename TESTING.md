@@ -45,6 +45,7 @@ the repository or in command output.
 | Vector/hybrid transport | `test_vector_transport.py` | public sync/async builders through actual HTTPX request handling: JSON-body POST for vector/hybrid, scalar GET fallback, site prefix, filters, controls, scores, validation errors, and delete refusal |
 | Live-test gating | `test_live_test_harness.py` | isolated pytest subprocesses exercise the actual collection hook and login fixture; a controlled transport makes external requests impossible |
 | Modules and sync/async parity | `test_module_contracts.py`, `test_sync_async_parity.py` | module routes/payloads, public method parity, generated sync behavior |
+| Functions wire and declarations | `test_functions_transport.py`, `typing/functions_contract.py` | Actual sync/async HTTPX request loop, backend-generated invocation/envelope fixtures, canonical invocation pages, supported filters and static return typing |
 | Feature integrations | `test_*_integration.py` | live database, storage, functions, secrets, analytics, and app/settings contracts |
 
 Use parametrization for equivalent sync/async or status/operator families and
@@ -95,3 +96,44 @@ was corrected. They exercise actual HTTPX URLs for GET/PATCH/DELETE, including
 reserved query, fragment, slash and percent characters; these checks prove
 request identity preservation, not that every text ID is addressable by the
 backend. The complete default gate now passes **248 tests / 74 live skipped**.
+
+
+## Function response review
+
+The Functions transport fixture `tests/fixtures/function-wire.json` was generated
+on October 3 from the platform's `FunctionInvocationRecordSerializer`,
+`TaskResultSerializer`, and `AppDataResponse`, using unsaved synthetic models and
+explicit task-result context. It contains numeric function/invocation IDs,
+nullable anonymous callers, a missing retained task result, synchronous `False`,
+synchronous `None` normalization, queued-but-already-completed metadata, and a
+list record without heavy logs. The transport checks retain actual module,
+HTTP client and request-loop code and substitute only HTTPX's transport.
+
+Both public execute annotations now describe `FunctionExecutionResponse`, not
+an invocation record. Invocation state is nested under nullable `task_result`;
+there is no top-level invocation status/result. The global result lookup keeps
+its own `data` envelope. Function lists retain limit/offset; global invocation
+lists use page/page_size. Their legacy aliases translate aligned offsets and
+reject ambiguous offsets or unsupported status filters before transport.
+
+Run the focused source and static gates:
+
+```bash
+.venv/bin/pytest tests/test_functions_transport.py tests/test_module_contracts.py tests/test_sync_async_parity.py
+.venv/bin/python scripts/check_function_types.py
+```
+
+The static probe checks the owned module declarations; `--follow-imports=silent`
+keeps pre-existing imported-module diagnostics out of this targeted gate. The
+script supplies the source import path and uses the invoking Python environment.
+PR CI and publication require this check; the whole-SDK mypy job remains advisory. It is
+not a clean whole-SDK mypy result or a claim that the currently unannotated
+unified client factory/property provides complete inference. The live Functions
+suite was rewritten around the actual wire contract and remains opt-in. No live
+function or provider job was invoked during the SDK contract review.
+
+The final default gate passes **255 tests / 73 live skipped**. The rewritten
+Functions live suite has eight cases instead of nine: list and detail are one
+lifecycle case, sync queued execution adds a case, and async task-result envelope
+coverage is now in the HTTPX transport suite. The missing-task live case now
+expects the backend's PENDING envelope instead of an invented error.

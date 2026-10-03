@@ -2,7 +2,7 @@
 Functions API Module
 
 Provides methods for:
-- Executing functions (async)
+- Executing functions synchronously or queueing asynchronous runs
 - Getting function execution results by task ID
 - Listing functions
 - Getting function details
@@ -11,10 +11,17 @@ Provides methods for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
 from taruvi.modules.base import BaseModule
-from taruvi.types import Function, FunctionInvocation
+from taruvi.types import (
+    Function,
+    FunctionExecutionResponse,
+    FunctionInvocation,
+    FunctionInvocationListResponse,
+    FunctionListResponse,
+    FunctionTaskResultResponse,
+)
 from taruvi.utils import build_params
 
 if TYPE_CHECKING:
@@ -48,6 +55,46 @@ def _build_execute_request(
     return body
 
 
+def _build_invocation_params(
+    *,
+    function_slug: Optional[str],
+    status: Optional[str],
+    page: Optional[int],
+    page_size: Optional[int],
+    limit: Optional[int],
+    offset: Optional[int],
+    function_id: Optional[int],
+    trigger_type: Optional[str],
+    user_id: Optional[str],
+    has_error: Optional[bool],
+) -> dict[str, Any]:
+    if status is not None:
+        raise ValueError(
+            "status filtering is not supported; inspect each invocation's task_result.status"
+        )
+    if page_size is not None and limit is not None:
+        raise ValueError("Use page_size or its legacy limit alias, not both")
+    if page is not None and offset is not None:
+        raise ValueError("Use page or its legacy offset alias, not both")
+    size = page_size if page_size is not None else limit if limit is not None else 100
+    if size < 1:
+        raise ValueError("page_size must be positive")
+    if offset is not None and (offset < 0 or offset % size):
+        raise ValueError("Legacy offset must be a nonnegative multiple of page_size/limit")
+    current = page if page is not None else (offset // size + 1 if offset is not None else 1)
+    if current < 1:
+        raise ValueError("page must be positive")
+    return build_params(
+        function_slug=function_slug,
+        function_id=function_id,
+        trigger_type=trigger_type,
+        user_id=user_id,
+        has_error=has_error,
+        page=current,
+        page_size=size,
+    )
+
+
 class AsyncFunctionsModule(BaseModule):
     """Functions API operations."""
 
@@ -64,7 +111,7 @@ class AsyncFunctionsModule(BaseModule):
         app_slug: Optional[str] = None,
         is_async: Optional[bool] = None,
         timeout: Optional[int] = None,
-    ) -> FunctionInvocation:
+    ) -> FunctionExecutionResponse:
         """
         Execute a function.
 
@@ -77,7 +124,7 @@ class AsyncFunctionsModule(BaseModule):
             timeout: Seconds to wait for this call, overriding the client's timeout
 
         Returns:
-            FunctionInvocation dict with execution result
+            Full FunctionExecutionResponse envelope: data, invocation, and optional queued flag
 
         Example:
             ```python
@@ -94,13 +141,13 @@ class AsyncFunctionsModule(BaseModule):
         path = _FUNCTION_EXECUTE.format(app_slug=app_slug, function_slug=function_slug)
         body = _build_execute_request(params, is_async)
 
-        response = await self._http.post(path, json=body, headers={}, timeout=timeout)
-        return response
+        response = await self.client._http_client.post(path, json=body, headers={}, timeout=timeout)
+        return cast(FunctionExecutionResponse, response)
 
     async def get_result(
         self,
         task_id: str,
-    ) -> dict[str, Any]:
+    ) -> FunctionTaskResultResponse:
         """
         Get the result of a function execution by task ID.
 
@@ -108,14 +155,13 @@ class AsyncFunctionsModule(BaseModule):
             task_id: Celery task ID returned from async execution
 
         Returns:
-            Dict containing:
+            Envelope whose data contains:
                 - task_id: The task identifier
                 - status: Task status (SUCCESS, FAILURE, PENDING, etc.)
                 - result: Task result data (if completed successfully)
                 - traceback: Error traceback (if failed)
                 - date_created: Task creation timestamp
                 - date_done: Task completion timestamp
-                - params: User-provided execution parameters
 
         Example:
             ```python
@@ -129,13 +175,13 @@ class AsyncFunctionsModule(BaseModule):
 
             # Get result later
             task_result = await client.functions.get_result(task_id)
-            print(task_result['status'])  # 'SUCCESS', 'FAILURE', etc.
-            print(task_result['result'])  # Actual function output
+            print(task_result['data']['status'])  # 'SUCCESS', 'FAILURE', etc.
+            print(task_result['data']['result'])  # Actual function output
             ```
         """
         path = _FUNCTION_RESULT.format(task_id=task_id)
-        response = await self._http.get(path)
-        return response
+        response = await self.client._http_client.get(path)
+        return cast(FunctionTaskResultResponse, response)
 
     async def list(
         self,
@@ -143,7 +189,7 @@ class AsyncFunctionsModule(BaseModule):
         app_slug: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> dict[str, Any]:
+    ) -> FunctionListResponse:
         """List functions in an app."""
         app_slug = app_slug or self._config.app_slug
         if not app_slug:
@@ -152,8 +198,8 @@ class AsyncFunctionsModule(BaseModule):
         path = _FUNCTIONS_BASE.format(app_slug=app_slug)
         params = build_params(limit=limit, offset=offset)
 
-        response = await self._http.get(path, params=params)
-        return response
+        response = await self.client._http_client.get(path, params=params)
+        return cast(FunctionListResponse, response)
 
     async def get(
         self,
@@ -167,34 +213,50 @@ class AsyncFunctionsModule(BaseModule):
             raise ValueError("app_slug is required")
 
         path = _FUNCTION_DETAIL.format(app_slug=app_slug, function_slug=function_slug)
-        response = await self._http.get(path)
-        return response
+        response = await self.client._http_client.get(path)
+        return cast(Function, response)
 
     async def get_invocation(
         self,
-        invocation_id: str,
+        invocation_id: Union[int, str],
     ) -> FunctionInvocation:
         """Get function invocation details."""
         path = _INVOCATION_DETAIL.format(invocation_id=invocation_id)
-        response = await self._http.get(path)
-        return response
+        response = await self.client._http_client.get(path)
+        return cast(FunctionInvocation, response)
 
     async def list_invocations(
         self,
         *,
         function_slug: Optional[str] = None,
         status: Optional[str] = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> dict[str, Any]:
-        """List function invocations."""
-        path = _INVOCATIONS_LIST
-        params = build_params(
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
+        function_id: Optional[int] = None,
+        trigger_type: Optional[str] = None,
+        user_id: Optional[str] = None,
+        has_error: Optional[bool] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> FunctionInvocationListResponse:
+        """List invocation records using page/page_size.
+
+        The backend supports function, trigger, user and has_error filters.
+        It does not filter by Celery status; status is rejected instead of ignored.
+        Legacy limit/offset map to a page only when offset is aligned to the size.
+        Stay within the platform's configured maximum page size for exact paging.
+        """
+        params = _build_invocation_params(
             function_slug=function_slug,
             status=status,
+            page=page,
+            page_size=page_size,
             limit=limit,
             offset=offset,
+            function_id=function_id,
+            trigger_type=trigger_type,
+            user_id=user_id,
+            has_error=has_error,
         )
-
-        response = await self._http.get(path, params=params)
-        return response
+        response = await self.client._http_client.get(_INVOCATIONS_LIST, params=params)
+        return cast(FunctionInvocationListResponse, response)

@@ -421,6 +421,20 @@ result = client.functions.execute(
 print(result["data"])
 ```
 
+Both client modes return the complete execution envelope. `data` is the user
+result, `invocation` is the audit record, and matching servers include `queued`
+(`True` for an asynchronous acknowledgement, `False` for a synchronous run).
+Queued responses contain `data=[]`; a synchronous `None` result also becomes
+`[]`, so the data shape alone does not identify the mode. Older servers omit
+`queued`; select `is_async` explicitly when using them.
+
+Invocation records expose numeric `id` and `function`, nullable caller fields,
+and a nullable `task_result`. Read Celery status from `task_result["status"]`
+when it exists; there is no top-level invocation `status` or `task_status`.
+List records omit heavy `logs`, while detail records include them. The global
+`get_result` method returns its own envelope, with retained executor output
+under `data["result"]` and status under `data["status"]`.
+
 #### Execute Function (Asynchronous with Polling)
 
 ```python
@@ -445,7 +459,7 @@ while True:
         print("Completed:", task_result['data']['result'])
         break
     elif status == 'FAILURE':
-        print("Failed:", task_result['data']['traceback'])
+        print("Failed:", task_result['data'].get('traceback', 'Unavailable for this caller'))
         break
     else:
         print(f"Status: {status}, waiting...")
@@ -457,7 +471,7 @@ while True:
 ```python
 # List all functions
 functions = client.functions.list(limit=50, offset=0)
-for func in functions['results']:
+for func in functions['data']:
     print(f"{func['name']}: {func['slug']}")
 ```
 
@@ -473,25 +487,38 @@ print(func['name'], func['execution_mode'])
 
 ```python
 # List all invocations
-invocations = client.functions.list_invocations(limit=50, offset=0)
-for inv in invocations['results']:
-    print(f"{inv['function']['name']}: {inv['status']}")
+invocations = client.functions.list_invocations(page=1, page_size=50)
+for inv in invocations['data']:
+    task = inv['task_result']
+    print(inv['function_name'], task['status'] if task else 'No retained task result')
 
 # Filter by function
 invocations = client.functions.list_invocations(
     function_slug="process-order",
-    status="SUCCESS",
-    limit=20
+    has_error=False,
+    page=1,
+    page_size=20
 )
 ```
+
+Function lists use `limit`/`offset`; global invocation lists use
+`page`/`page_size`. Both list responses use `data` and `total`. Invocation
+filters support function slug/id, trigger type, user ID, and `has_error`;
+Celery status filtering is unsupported and raises `ValueError`. Inspect each
+record's nested task result instead. Legacy invocation `limit`/`offset` are
+aliases only when the offset is a nonnegative multiple of the requested size;
+do not mix them with canonical paging parameters or exceed the server's
+configured maximum page size when exact offset alignment matters.
 
 #### Get Invocation Details
 
 ```python
 # Get specific invocation by ID
-invocation = client.functions.get_invocation("inv_123")
-print(f"Status: {invocation['status']}")
-print(f"Result: {invocation['result']}")
+invocation = client.functions.get_invocation(42)  # numeric invocation id
+task = invocation["task_result"]
+if task is not None:
+    print("Status:", task["status"])
+    print("Stored executor result:", task["result"])
 ```
 
 ---

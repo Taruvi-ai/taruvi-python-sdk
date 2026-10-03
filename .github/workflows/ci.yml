@@ -43,6 +43,9 @@ jobs:
       run: |
         mypy src/
 
+    - name: Check Function declarations
+      run: python scripts/check_function_types.py
+
     - name: Run tests with pytest
       run: |
         pytest --cov=taruvi --cov-report=xml --cov-report=html
