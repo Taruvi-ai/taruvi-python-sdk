@@ -78,3 +78,14 @@ GET when that route is absent. Vector/hybrid `count()` fetches the bounded
 candidate window without `page` or `page_size`, preserving the builder's page
 for later reads; a one-row count request would undercount pure-vector results
 because that backend total describes the returned page.
+
+## Automated gate
+
+CI now includes pull requests and pushes on `beta` as well as the existing
+branches. The publish workflow runs pytest before tagging or uploading instead
+of skipping tests. Both workflows disable credentialed integration tests
+explicitly. Black formatting was repaired in ten files with unchanged Python
+ASTs; the full local gate remains **242 passed / 74 live skipped**, and Black
+and Ruff pass. Existing strict mypy findings remain advisory in CI; this does
+not claim that the type-check backlog is resolved. No workflow was dispatched
+or package published during this review.

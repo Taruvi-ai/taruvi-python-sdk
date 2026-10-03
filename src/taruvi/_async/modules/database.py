@@ -106,7 +106,9 @@ class _BaseQueryBuilder(BaseModule):
 
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
         # Keep JSON values and repeated conditions separate from URL encoding.
-        self._filter_conditions.append({"field": field, "operator": operator, "value": deepcopy(value)})
+        self._filter_conditions.append(
+            {"field": field, "operator": operator, "value": deepcopy(value)}
+        )
         if isinstance(value, (list, tuple)) and operator in _LIST_OPERATORS:
             value = ",".join(str(v) for v in value)
         key = field if operator == "eq" else f"{field}__{operator}"
@@ -243,7 +245,9 @@ class _BaseQueryBuilder(BaseModule):
         import json
 
         if self._record_id is not None:
-            raise ValueError("vector_search() cannot be combined with get(id); filter by the primary key instead.")
+            raise ValueError(
+                "vector_search() cannot be combined with get(id); filter by the primary key instead."
+            )
 
         raw_filters = json.loads(self._raw_filters) if self._raw_filters else None
         if isinstance(raw_filters, list):
@@ -259,7 +263,9 @@ class _BaseQueryBuilder(BaseModule):
             if raw_filters:
                 conditions.append(raw_filters)
             filters = (
-                {"and": conditions} if len(conditions) > 1 else conditions[0] if conditions else None
+                {"and": conditions}
+                if len(conditions) > 1
+                else conditions[0] if conditions else None
             )
 
         body: dict[str, Any] = {
@@ -615,7 +621,9 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             # complete bounded top-k window rather than shrinking it to one row.
             body.pop("page_size", None)
             body.pop("page", None)
-            path = _DATATABLE_QUERY.format(app_slug=self.app_slug, table_name=self._get_table_name())
+            path = _DATATABLE_QUERY.format(
+                app_slug=self.app_slug, table_name=self._get_table_name()
+            )
             response = await self._http.post(path, json=body)
             return response.get("total", 0)
 

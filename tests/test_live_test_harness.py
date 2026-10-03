@@ -14,7 +14,7 @@ import pytest
 
 def run_live_case(tmp_path, *, opt_in, outcome="success", credentials=True):
     harness = Path(__file__).with_name("conftest.py").read_text()
-    transport = '''
+    transport = """
 @pytest.fixture(scope="session", autouse=True)
 def controlled_login_transport():
     import httpx
@@ -34,30 +34,49 @@ def controlled_login_transport():
 
     with patch("httpx.post", side_effect=login):
         yield
-'''
+"""
     (tmp_path / "conftest.py").write_text(harness + transport)
     (tmp_path / "pytest.ini").write_text("[pytest]\n")
-    (tmp_path / "test_live.py").write_text('''
+    (tmp_path / "test_live.py").write_text("""
 import pytest
 pytestmark = pytest.mark.integration
 
 def test_live(fresh_jwt_token):
     assert fresh_jwt_token == "fixture-access-token"
-''')
+""")
     env = {key: value for key, value in os.environ.items() if not key.startswith("TARUVI_")}
-    env.update({
-        "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
-        "TARUVI_API_URL": "https://disposable.invalid",
-        "HARNESS_LOGIN_OUTCOME": outcome,
-    })
+    env.update(
+        {
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+            "TARUVI_API_URL": "https://disposable.invalid",
+            "HARNESS_LOGIN_OUTCOME": outcome,
+        }
+    )
     if credentials:
-        env.update(TARUVI_TEST_EMAIL="fixture@example.invalid", TARUVI_TEST_PASSWORD="private-fixture-password")
+        env.update(
+            TARUVI_TEST_EMAIL="fixture@example.invalid",
+            TARUVI_TEST_PASSWORD="private-fixture-password",
+        )
     env.pop("RUN_INTEGRATION_TESTS", None)
     if opt_in is not None:
         env["RUN_INTEGRATION_TESTS"] = opt_in
     return subprocess.run(
-        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "--confcutdir", str(tmp_path)],
-        cwd=tmp_path, env=env, text=True, capture_output=True, timeout=20, check=False,
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "--confcutdir",
+            str(tmp_path),
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=20,
+        check=False,
     )
 
 

@@ -33,9 +33,9 @@ _INVOCATION_DETAIL = "/api/invocations/{invocation_id}/"
 # Shared Implementation Logic
 # ============================================================================
 
+
 def _build_execute_request(
-    params: Optional[dict[str, Any]],
-    is_async: Optional[bool]
+    params: Optional[dict[str, Any]], is_async: Optional[bool]
 ) -> dict[str, Any]:
     """Build function execution request body.
 

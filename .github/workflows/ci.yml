@@ -2,12 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, dev ]
+    branches: [ main, master, dev, beta ]
   pull_request:
-    branches: [ main, master, dev ]
+    branches: [ main, master, dev, beta ]
 
 jobs:
   test:
+    env:
+      RUN_INTEGRATION_TESTS: "0"
     runs-on: ubuntu-latest
     strategy:
       matrix:

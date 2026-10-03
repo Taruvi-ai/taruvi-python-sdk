@@ -36,9 +36,10 @@ jobs:
           pip install build twine
 
       - name: Run tests
+        env:
+          RUN_INTEGRATION_TESTS: "0"
         run: |
-          # Skip tests in CI - dev tests locally before pushing
-          echo "Skipping tests - dev tests locally before pushing"
+          pytest -q
 
       - name: Check if version changed
         id: version_check

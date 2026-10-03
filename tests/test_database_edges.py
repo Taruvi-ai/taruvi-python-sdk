@@ -209,7 +209,9 @@ class TestEdgeRequestBody:
 
     @pytest.mark.asyncio
     async def test_first_keeps_the_requested_page(self, mock_async_client):
-        mock_async_client._http_client.get = AsyncMock(return_value={"data": [{"id": 21}, {"id": 22}], "total": 40})
+        mock_async_client._http_client.get = AsyncMock(
+            return_value={"data": [{"id": 21}, {"id": 22}], "total": 40}
+        )
         builder = AsyncQueryBuilder(mock_async_client, "employees").page(2).page_size(20)
         row = await builder.first()
         params = mock_async_client._http_client.get.call_args[1]["params"]
@@ -218,7 +220,9 @@ class TestEdgeRequestBody:
 
     @pytest.mark.asyncio
     async def test_first_requests_one_row_without_changing_the_builder(self, mock_async_client):
-        mock_async_client._http_client.get = AsyncMock(return_value={"data": [{"id": 1}], "total": 5})
+        mock_async_client._http_client.get = AsyncMock(
+            return_value={"data": [{"id": 1}], "total": 5}
+        )
         builder = AsyncQueryBuilder(mock_async_client, "employees").page_size(50)
         await builder.first()
         assert mock_async_client._http_client.get.call_args[1]["params"]["page_size"] == 1
@@ -328,8 +332,10 @@ class TestQueryBuilderCRUD:
 class TestFilterTreeWithFlatFilters:
 
     def test_list_read_sends_flat_filters_and_tree(self, mock_sync_client):
-        qb = QueryBuilder(mock_sync_client, "tasks").filter("owner", "eq", "ada").filter(
-            {"or": [{"status": "open"}, {"status": "blocked"}]}
+        qb = (
+            QueryBuilder(mock_sync_client, "tasks")
+            .filter("owner", "eq", "ada")
+            .filter({"or": [{"status": "open"}, {"status": "blocked"}]})
         )
         params = qb.build_params()
         assert params["owner"] == "ada"

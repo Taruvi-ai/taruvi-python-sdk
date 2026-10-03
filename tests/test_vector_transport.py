@@ -195,8 +195,12 @@ async def test_vector_filters_preserve_typed_list_values(transport_client, with_
     await resolve(query.vector_search("embedding", [1, 0]).execute())
     filters = json.loads(transport_client.requests[0].content)["filters"]
     expected = (
-        [{"field": "tag", "operator": "in", "value": values}, {"field": "active", "operator": "eq", "value": False}]
-        if with_raw_list else {"tag__in": values}
+        [
+            {"field": "tag", "operator": "in", "value": values},
+            {"field": "active", "operator": "eq", "value": False},
+        ]
+        if with_raw_list
+        else {"tag__in": values}
     )
     assert filters == expected
     actual_values = filters[0]["value"] if with_raw_list else filters["tag__in"]
@@ -206,7 +210,11 @@ async def test_vector_filters_preserve_typed_list_values(transport_client, with_
 @pytest.mark.asyncio
 @pytest.mark.parametrize("operation", ["execute", "count"])
 async def test_single_record_vector_query_is_rejected_before_transport(transport_client, operation):
-    query = transport_client.client.database.from_("documents").get(7).vector_search("embedding", [1, 0])
+    query = (
+        transport_client.client.database.from_("documents")
+        .get(7)
+        .vector_search("embedding", [1, 0])
+    )
     with pytest.raises(ValueError, match="vector_search.*get"):
         await resolve(getattr(query, operation)())
     assert transport_client.requests == []
@@ -221,8 +229,11 @@ async def test_large_vector_count_uses_post_without_mutating_the_requested_page(
         boundary.client.database.from_("documents")
         .filter("category", "eq", "public")
         .vector_search("embedding", vector, topk=10, metric="cosine", threshold=0.4, ef_search=32)
-        .search("machine learning").hybrid(alpha=0.0)
-        .sort("id").page(2).page_size(3)
+        .search("machine learning")
+        .hybrid(alpha=0.0)
+        .sort("id")
+        .page(2)
+        .page_size(3)
     )
     assert await resolve(query.count()) == 9
     request = boundary.requests[0]
@@ -231,8 +242,17 @@ async def test_large_vector_count_uses_post_without_mutating_the_requested_page(
     assert not request.url.query
     body = json.loads(request.content)
     assert body == {
-        "filters": {"category": "public"}, "search": "machine learning", "ordering": ["id"],
-        "vector": {"field": "embedding", "value": vector, "topk": 10, "metric": "cosine", "threshold": 0.4, "ef_search": 32},
+        "filters": {"category": "public"},
+        "search": "machine learning",
+        "ordering": ["id"],
+        "vector": {
+            "field": "embedding",
+            "value": vector,
+            "topk": 10,
+            "metric": "cosine",
+            "threshold": 0.4,
+            "ef_search": 32,
+        },
         "hybrid": {"strategy": "rrf", "alpha": 0.0},
     }
     await resolve(query.execute())
@@ -242,7 +262,11 @@ async def test_large_vector_count_uses_post_without_mutating_the_requested_page(
 
 @pytest.mark.asyncio
 async def test_scalar_list_filters_and_single_record_path_remain_get(transport_client):
-    query = transport_client.client.database.from_("documents").get(7).filter("tag", "in", ["guide", "faq"])
+    query = (
+        transport_client.client.database.from_("documents")
+        .get(7)
+        .filter("tag", "in", ["guide", "faq"])
+    )
     await resolve(query.execute())
     request = transport_client.requests[0]
     assert request.method == "GET"

@@ -148,6 +148,7 @@ class FunctionInvocation(TypedDict):
 
 class Secret(TypedDict):
     """A secret (type hint only). ``get()`` returns ``value``; list responses omit it."""
+
     key: str
     value: NotRequired[str | dict[str, Any]]
     tags: NotRequired[list[str]]

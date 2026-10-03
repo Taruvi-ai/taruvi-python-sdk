@@ -83,7 +83,11 @@ class NotAuthenticatedError(AuthenticationError):
     catches a 401 from a client that has no credential.
     """
 
-    def __init__(self, message: str = "Authentication required for this resource", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        message: str = "Authentication required for this resource",
+        details: Optional[dict[str, Any]] = None,
+    ) -> None:
         super().__init__(message, details=details)
 
 
@@ -171,7 +175,9 @@ BILLING_ERROR_CODES = frozenset({"account_suspended", "product_suspended", "gate
 class GatewayTimeoutError(APIError):
     """Raised when the platform times out a query or upstream call (504 Gateway Timeout)."""
 
-    def __init__(self, message: str = "Gateway timeout", details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Gateway timeout", details: Optional[dict[str, Any]] = None
+    ) -> None:
         super().__init__(message, status_code=504, details=details)
 
 
