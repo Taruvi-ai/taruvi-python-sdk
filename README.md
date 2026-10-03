@@ -615,7 +615,9 @@ Optional vector controls are `threshold` and `ef_search`. Hybrid supports
 `rrf`; `alpha=0` uses only text ranks and `alpha=1` only vector ranks.
 See the [search guide](https://docs.taruvi.cloud/docs/products/database/advanced/search)
 for schema, score, metric and pagination contracts. These builders send the
-existing GET query parameters; they do not expose the platform's POST query API.
+The SDK automatically sends vector and hybrid reads to the JSON-body
+`POST …/data/query/` endpoint so large embeddings do not exceed URL limits.
+Ordinary scalar reads continue to use `GET …/data/`.
 
 #### Get Single Record
 

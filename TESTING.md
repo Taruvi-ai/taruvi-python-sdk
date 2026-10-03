@@ -42,7 +42,7 @@ the repository or in command output.
 | Import, factory, config, auth | `test_imports.py`, `test_client_factory.py`, `test_credentials.py`, `test_auth_manager.py` | lazy imports, sync/async selection, credential precedence, auth lifecycle |
 | Transport and errors | `test_http_clients.py`, `test_retry_safety.py`, `test_errors.py` | httpx response parsing, typed errors, headers, retry safety, sync/async parity |
 | Query and database | `test_utils.py`, `test_aggregations*.py`, `test_database_edges.py`, `test_database_search.py` | encoded query builders and high-risk query operations |
-| Vector/hybrid transport | `test_vector_transport.py` | public sync/async builders through actual HTTPX request handling: site prefix, scalar/logical filters, metric/topk/threshold, zero/one hybrid weights, score preservation, validation errors, and delete refusal |
+| Vector/hybrid transport | `test_vector_transport.py` | public sync/async builders through actual HTTPX request handling: JSON-body POST for vector/hybrid, scalar GET fallback, site prefix, filters, controls, scores, validation errors, and delete refusal |
 | Live-test gating | `test_live_test_harness.py` | isolated pytest subprocesses exercise the actual collection hook and login fixture; a controlled transport makes external requests impossible |
 | Modules and sync/async parity | `test_module_contracts.py`, `test_sync_async_parity.py` | module routes/payloads, public method parity, generated sync behavior |
 | Feature integrations | `test_*_integration.py` | live database, storage, functions, secrets, analytics, and app/settings contracts |
@@ -51,8 +51,8 @@ Use parametrization for equivalent sync/async or status/operator families and
 assert stable API contracts. Keep transport tests deterministic and use the
 live suite for integration behavior that mocks cannot prove.
 
-On October 3, 2026 the default gate passed **224 tests, with 74 live tests
-skipped**. The harness/vector slice passed 24 tests. Nine harness regressions
+On October 3, 2026 the default gate passed **226 tests, with 74 live tests
+skipped**. The harness/vector slice passed 26 tests. Nine harness regressions
 failed before the gate and error handling changes. These figures do not claim
 that the 74 live workflows ran. Several module-specific live tests still skip
 missing remote resources; they need separately owned disposable fixtures before

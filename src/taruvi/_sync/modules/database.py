@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 # API endpoint paths for database
 _DATATABLE_DATA = "/api/apps/{app_slug}/datatables/{table_name}/data/"
+_DATATABLE_QUERY = "/api/apps/{app_slug}/datatables/{table_name}/data/query/"
 _DATATABLE_RECORD = "/api/apps/{app_slug}/datatables/{table_name}/data/{record_id}/"
 _DATATABLE_UPSERT = "/api/apps/{app_slug}/datatables/{table_name}/data/upsert/"
 
@@ -232,6 +233,62 @@ class _BaseQueryBuilder(BaseModule):
                 params["_hybrid_alpha"] = self._hybrid_alpha
 
         return params
+
+    def build_query_body(self) -> dict[str, Any]:
+        """Build the JSON body used for vector and hybrid reads."""
+        import json
+
+        filters: dict[str, Any] | list[dict[str, Any]] | None = dict(self._filters) or None
+        if self._raw_filters:
+            raw_filters = json.loads(self._raw_filters)
+            if filters and isinstance(raw_filters, dict):
+                filters = {**filters, **raw_filters}
+            elif filters and isinstance(raw_filters, list):
+                flat_filters = []
+                for key, value in filters.items():
+                    field, separator, operator = key.rpartition("__")
+                    flat_filters.append(
+                        {
+                            "field": field if separator else key,
+                            "operator": operator if separator else "eq",
+                            "value": value,
+                        }
+                    )
+                filters = [*flat_filters, *raw_filters]
+            else:
+                filters = raw_filters
+
+        body: dict[str, Any] = {
+            "filters": filters,
+            "search": self._search,
+            "ordering": self._ordering_parts or None,
+            "populate": self._populate_fields or None,
+            "aggregate": self._aggregates or None,
+            "group_by": self._group_by or None,
+            "having": self._having,
+            "page": self._page if self._page != 1 else None,
+            "page_size": self._page_size,
+            "allowed_actions": self._allowed_actions or None,
+            "format": self._format,
+            "relationship_type": self._relationship_types or None,
+            "include": self._include,
+            "depth": self._depth,
+            "vector": {
+                "field": self._vector_field,
+                "value": self._vector_value,
+                "topk": self._topk,
+                "threshold": self._vector_threshold,
+                "ef_search": self._ef_search,
+                "metric": self._vector_metric,
+            },
+            "hybrid": (
+                {"strategy": self._hybrid_strategy, "alpha": self._hybrid_alpha}
+                if self._hybrid_strategy
+                else None
+            ),
+        }
+        body["vector"] = {key: value for key, value in body["vector"].items() if value is not None}
+        return {key: value for key, value in body.items() if value is not None}
 
 
 class QueryBuilder(_BaseQueryBuilder):
@@ -485,6 +542,7 @@ class QueryBuilder(_BaseQueryBuilder):
             # delete_filtered: the endpoint reads one JSON object from ?filter=.
             # A filter tree travels under "filters", as it does on list requests.
             import json
+
             conditions: dict[str, Any] = dict(self._filters)
             if self._raw_filters:
                 conditions["filters"] = self._raw_filters
@@ -495,7 +553,8 @@ class QueryBuilder(_BaseQueryBuilder):
             # Refuse what narrows a read but can't narrow a delete; dropping it would
             # delete every row that matches the filters alone.
             unsupported = [
-                name for name, is_set in (
+                name
+                for name, is_set in (
                     ("search", self._search is not None),
                     ("vector_search", self._vector_value is not None),
                     ("page", self._page != 1),
@@ -503,7 +562,8 @@ class QueryBuilder(_BaseQueryBuilder):
                     ("aggregate", bool(self._aggregates)),
                     ("group_by", bool(self._group_by)),
                     ("having", self._having is not None),
-                ) if is_set
+                )
+                if is_set
             ]
             if unsupported:
                 raise ValueError(
@@ -512,6 +572,13 @@ class QueryBuilder(_BaseQueryBuilder):
                     "delete by ID."
                 )
             return self._http.delete(path, params={"filter": json.dumps(conditions)})
+
+        if self._vector_value is not None:
+            query_path = _DATATABLE_QUERY.format(
+                app_slug=self.app_slug, table_name=self._get_table_name()
+            )
+            response = self._http.post(query_path, json=self.build_query_body())
+            return {"data": self._extract_data_list(response), "total": response.get("total", 0)}
 
         # Default: GET
         response = self._http.get(path, params=params)
