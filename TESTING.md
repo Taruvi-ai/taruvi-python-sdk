@@ -51,8 +51,8 @@ Use parametrization for equivalent sync/async or status/operator families and
 assert stable API contracts. Keep transport tests deterministic and use the
 live suite for integration behavior that mocks cannot prove.
 
-On October 3, 2026 the default gate passed **226 tests, with 74 live tests
-skipped**. The harness/vector slice passed 26 tests. Nine harness regressions
+On October 3, 2026 the default gate passed **242 tests, with 74 live tests
+skipped**. The vector transport slice passed 30 tests. Nine harness regressions
 failed before the gate and error handling changes. These figures do not claim
 that the 74 live workflows ran. Several module-specific live tests still skip
 missing remote resources; they need separately owned disposable fixtures before
@@ -64,3 +64,17 @@ ranking or index behavior. The platform repository separately owns
 against its in-process Django WSGI application and real PostgreSQL/pgvector with
 a disposable tenant. Do not point the SDK live tests at that test database or a
 developer's ordinary organization.
+
+The October 3 POST-query audit reproduced 12 failing sync/async cases before
+repair: overlapping filters lost conditions, flat lists lost their JSON values,
+a record ID disappeared from a vector read, and a 1,536-dimension count still
+used a 23 KB URL. Those cases now pass through actual HTTPX request encoding;
+ordinary GET paths remain covered. A separate scratch check fed the emitted
+bodies through the current platform `DataQueryRequest` and typed filter parser
+and confirmed the AND tree and comma-containing/typed list elements survive.
+This parser check does not prove SQL ranking or a deployed route. The automatic
+POST behavior requires the matching backend feature and does not fall back to
+GET when that route is absent. Vector/hybrid `count()` fetches the bounded
+candidate window without `page` or `page_size`, preserving the builder's page
+for later reads; a one-row count request would undercount pure-vector results
+because that backend total describes the returned page.

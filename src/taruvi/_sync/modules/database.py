@@ -11,6 +11,7 @@ Provides methods for:
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
@@ -75,6 +76,7 @@ class _BaseQueryBuilder(BaseModule):
         self._is_upsert: bool = False
         self._unique_fields: Optional[str] = None
         self._filters: dict[str, Any] = {}
+        self._filter_conditions: list[dict[str, Any]] = []
         self._ordering_parts: list[str] = []
         self._page_size: Optional[int] = None
         self._page: int = 1
@@ -103,6 +105,8 @@ class _BaseQueryBuilder(BaseModule):
         return f"{self.table_name}_edges" if self._is_edges else self.table_name
 
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
+        # Keep JSON values and repeated conditions separate from URL encoding.
+        self._filter_conditions.append({"field": field, "operator": operator, "value": deepcopy(value)})
         if isinstance(value, (list, tuple)) and operator in _LIST_OPERATORS:
             value = ",".join(str(v) for v in value)
         key = field if operator == "eq" else f"{field}__{operator}"
@@ -238,25 +242,25 @@ class _BaseQueryBuilder(BaseModule):
         """Build the JSON body used for vector and hybrid reads."""
         import json
 
-        filters: dict[str, Any] | list[dict[str, Any]] | None = dict(self._filters) or None
-        if self._raw_filters:
-            raw_filters = json.loads(self._raw_filters)
-            if filters and isinstance(raw_filters, dict):
-                filters = {**filters, **raw_filters}
-            elif filters and isinstance(raw_filters, list):
-                flat_filters = []
-                for key, value in filters.items():
-                    field, separator, operator = key.rpartition("__")
-                    flat_filters.append(
-                        {
-                            "field": field if separator else key,
-                            "operator": operator if separator else "eq",
-                            "value": value,
-                        }
-                    )
-                filters = [*flat_filters, *raw_filters]
-            else:
-                filters = raw_filters
+        if self._record_id is not None:
+            raise ValueError("vector_search() cannot be combined with get(id); filter by the primary key instead.")
+
+        raw_filters = json.loads(self._raw_filters) if self._raw_filters else None
+        if isinstance(raw_filters, list):
+            # Both sides already use CrudFilters; preserve typed values and
+            # repeated field/operator pairs rather than flattening them.
+            filters = [*deepcopy(self._filter_conditions), *raw_filters]
+        else:
+            conditions = []
+            for condition in self._filter_conditions:
+                field, operator = condition["field"], condition["operator"]
+                key = field if operator == "eq" else f"{field}__{operator}"
+                conditions.append({key: condition["value"]})
+            if raw_filters:
+                conditions.append(raw_filters)
+            filters = (
+                {"and": conditions} if len(conditions) > 1 else conditions[0] if conditions else None
+            )
 
         body: dict[str, Any] = {
             "filters": filters,
@@ -603,6 +607,16 @@ class QueryBuilder(_BaseQueryBuilder):
 
     def count(self) -> int:
         """Get count of matching records."""
+        if self._vector_value is not None:
+            body = self.build_query_body()
+            # Pure-vector totals describe the returned page, so count the
+            # complete bounded top-k window rather than shrinking it to one row.
+            body.pop("page_size", None)
+            body.pop("page", None)
+            path = _DATATABLE_QUERY.format(app_slug=self.app_slug, table_name=self._get_table_name())
+            response = self._http.post(path, json=body)
+            return response.get("total", 0)
+
         path = self._build_path()
         params = self.build_params()
         params["_count"] = "true"

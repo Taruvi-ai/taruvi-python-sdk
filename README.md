@@ -614,10 +614,22 @@ sets the search window, while `page` and `page_size` choose a page within it.
 Optional vector controls are `threshold` and `ef_search`. Hybrid supports
 `rrf`; `alpha=0` uses only text ranks and `alpha=1` only vector ranks.
 See the [search guide](https://docs.taruvi.cloud/docs/products/database/advanced/search)
-for schema, score, metric and pagination contracts. These builders send the
-The SDK automatically sends vector and hybrid reads to the JSON-body
+for schema, score, metric and pagination contracts. This SDK revision sends
+vector and hybrid reads, including `count()`, to the JSON-body
 `POST …/data/query/` endpoint so large embeddings do not exceed URL limits.
+The backend must expose that route; older backends return a not-found error,
+with no automatic GET fallback. This is a source-revision contract, not a claim
+that the feature is available in every published SDK or hosted backend version.
 Ordinary scalar reads continue to use `GET …/data/`.
+
+JSON query filters preserve list elements and their types, including strings
+containing commas. Flat conditions and a supplied filter tree are combined with
+AND, even when they constrain the same field. Vector search cannot be combined
+with `.get(id)`; use `.filter("id", "eq", id)` (or your actual primary-key field)
+to scope the ranked query. For vector and hybrid queries, `count()` requests
+the complete bounded `topk` window without pagination and returns its total.
+It leaves the builder's configured page unchanged and does not count matches
+outside the candidate window.
 
 #### Get Single Record
 
