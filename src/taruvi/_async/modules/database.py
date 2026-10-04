@@ -696,7 +696,11 @@ class AsyncDatabaseModule(BaseModule[AsyncHTTPClient]):
         *,
         app_slug: Optional[str] = None,
     ) -> DatabaseRecord | list[DatabaseRecord]:
-        """Update single record by ID or multiple records in bulk."""
+        """Update a record by ID, or pass a list of records for a bulk update.
+
+        Returns the updated record for a single update and the updated records
+        as a list for a bulk update.
+        """
         app_slug = self._ensure_app_slug(app_slug)
 
         if isinstance(record_id, list):
@@ -704,7 +708,10 @@ class AsyncDatabaseModule(BaseModule[AsyncHTTPClient]):
                 raise ValueError("data parameter not allowed for bulk update")
             path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
             response = await self._http.patch(path, json=record_id)
-            return self._extract_data_list(response)
+            result = self._extract_data(response)
+            return cast(
+                list[DatabaseRecord], result["records"] if isinstance(result, dict) else result
+            )
         else:
             if data is None:
                 raise ValueError("data is required for single record update")

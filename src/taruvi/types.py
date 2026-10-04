@@ -13,7 +13,7 @@ Usage:
 """
 
 import sys
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired
@@ -81,16 +81,17 @@ class PgRangeValue(TypedDict):
 class StorageFile(TypedDict):
     """Storage file metadata (type hint only)."""
 
-    id: str
+    id: int
+    uuid: str
     filename: str
-    path: str
+    file_path: str
+    file_url: Optional[str]
     size: int
     mimetype: str
     storage_provider: Literal["s3", "sharepoint"]
     is_office_editable: bool
     visibility: Literal["public", "private"]
     created_at: str
-    url: NotRequired[str]
     metadata: NotRequired[dict[str, Any]]
 
 

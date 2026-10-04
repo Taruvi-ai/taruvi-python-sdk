@@ -1,206 +1,140 @@
-"""
-Integration tests for Secrets API module.
-"""
-
-import contextlib
-import os
-import uuid
+"""Read only synthetic fixture values; prove inheritance, catalogs and refusals."""
 
 import pytest
 
-from taruvi.exceptions import TaruviError
+from taruvi.exceptions import NotAuthenticatedError, NotFoundError
+
+pytestmark = pytest.mark.integration
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_get_secret_real_api(async_secrets_module):
-    """Test getting a secret from real backend."""
-    import httpx
-
-    secret_key = "TEST_SECRET_ASYNC"
-    secret_value = {
-        "host": "localhost",
-        "port": 3306,
-        "database": "testdb",
-        "username": "testuser",
-        "password": "testpass123",
+def assert_secret(secret, key, value, resource):
+    assert secret == {
+        "key": key,
+        "value": value,
+        "tags": [resource["tag"]],
+        "secret_type": resource["secret_type_name"],
     }
 
-    api_url = os.getenv("TARUVI_API_URL", "http://localhost:8000").rstrip("/")
-    email = os.getenv("TARUVI_TEST_EMAIL", "admin@example.com")
-    password = os.getenv("TARUVI_TEST_PASSWORD", "admin123")
 
-    login_resp = httpx.post(  # noqa: ASYNC210 - test setup; blocking is fine here
-        f"{api_url}/_allauth/app/v1/auth/login", json={"email": email, "password": password}
-    )
-    if login_resp.status_code != 200:
-        pytest.skip(f"Login failed: {login_resp.status_code}")
-
-    token = login_resp.json()["meta"]["access_token"]
-
-    try:
-        create_resp = httpx.post(  # noqa: ASYNC210 - test setup; blocking is fine here
-            f"{api_url}/api/secrets/",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"key": secret_key, "value": secret_value, "secret_type": "analytics-mysql"},
-        )
-
-        if create_resp.status_code not in [200, 201]:
-            pytest.skip(f"Cannot create secret: {create_resp.status_code}")
-
-        result = await async_secrets_module.get(secret_key)
-        assert result is not None
-        assert "value" in result
-        assert result["value"] == secret_value
-
-    except Exception as e:
-        if "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {e!s}")
-        raise
-    finally:
-        with contextlib.suppress(Exception):
-            httpx.delete(  # noqa: ASYNC210 - test cleanup; blocking is fine here
-                f"{api_url}/api/secrets/{secret_key}/", headers={"Authorization": f"Bearer {token}"}
-            )
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_list_secrets_real_api(async_secrets_module):
-    """Test listing secrets."""
-    try:
-        # Create multiple secrets
-        unique_id = uuid.uuid4().hex[:8]
-        secret_keys: list[str] = []
-        for i in range(3):
-            secret_key = f"LIST_TEST_{unique_id}_{i}"
-            await async_secrets_module.create(key=secret_key, value=f"list_value_{i}")
-            secret_keys.append(secret_key)
-
-        # List secrets
-        result = await async_secrets_module.list_secrets()
-
-        # Verify structure (list_secrets returns full response with data/total)
-        assert result is not None
-        assert "data" in result, "Response missing 'data' field - API contract changed!"
-
-        # Get the list of secrets
-        secrets_list = result["data"]
-
-        # Verify we have secrets
-        assert len(secrets_list) > 0
-
-        # Verify our created secrets are in the list
-        secret_keys_in_list = [s.get("key") or s.get("name") for s in secrets_list]
-        for secret_key in secret_keys:
-            assert (
-                secret_key in secret_keys_in_list
-            ), f"Created secret {secret_key} not found in list!"
-
-    except Exception as e:
-        if "permission" in str(e).lower():
-            pytest.skip(f"Skipping: {e!s}")
-        raise
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_list_with_filters_real_api(async_secrets_module):
-    """Test listing secrets with filters."""
-    try:
-        result = await async_secrets_module.list(search="TEST")
-        assert result is not None
-    except Exception as e:
-        if "permission" in str(e).lower():
-            pytest.skip(f"Skipping: {e!s}")
-        raise
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_batch_get_secrets_real_api(async_secrets_module):
-    """Test batch getting secrets."""
-    try:
-        result = await async_secrets_module.list(keys=["apitoken", "claude"])
-        assert result is not None
-    except Exception as e:
-        if "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {e!s}")
-        raise
-
-
-@pytest.mark.integration
-def test_get_secret_sync_real_api(sync_secrets_module):
-    """Test getting secret with sync client."""
-    import httpx
-
-    secret_key = "TEST_SECRET_SYNC"
-    secret_value = {
-        "host": "localhost",
-        "port": 3306,
-        "database": "testdb_sync",
-        "username": "testuser",
-        "password": "testpass456",
+def assert_catalog(first, second, resource):
+    assert first["status"] == second["status"] == "success"
+    assert first["total"] == second["total"] == 2
+    assert len(first["data"]) == len(second["data"]) == 1
+    values = {item["key"]: item["value"] for page in (first, second) for item in page["data"]}
+    assert values == {
+        resource["shadowed_key"]: resource["app_value"],
+        resource["site_only_key"]: resource["site_value"],
     }
 
-    api_url = os.getenv("TARUVI_API_URL", "http://localhost:8000").rstrip("/")
-    email = os.getenv("TARUVI_TEST_EMAIL", "admin@example.com")
-    password = os.getenv("TARUVI_TEST_PASSWORD", "admin123")
 
-    login_resp = httpx.post(
-        f"{api_url}/_allauth/app/v1/auth/login", json={"email": email, "password": password}
+async def test_async_secret_inheritance_batch_catalog_and_tag_refusal(
+    async_secrets_module, live_resources, live_manifest
+):
+    api = async_secrets_module
+    resource = live_resources["secrets"]
+    key = resource["shadowed_key"]
+    assert_secret(await api.get(key), key, resource["app_value"], resource)
+    assert_secret(
+        await api.get(key, app=live_resources["other_app_slug"]),
+        key,
+        resource["site_value"],
+        resource,
     )
-    if login_resp.status_code != 200:
-        pytest.skip("Login failed")
-
-    token = login_resp.json()["meta"]["access_token"]
-
-    try:
-        create_resp = httpx.post(
-            f"{api_url}/api/secrets/",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"key": secret_key, "value": secret_value, "secret_type": "analytics-mysql"},
-        )
-
-        if create_resp.status_code not in [200, 201]:
-            pytest.skip("Cannot create secret")
-
-        result = sync_secrets_module.get(secret_key)
-        assert result is not None
-        assert "value" in result
-        assert result["value"] == secret_value
-
-    except Exception as e:
-        if "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {e!s}")
-        raise
-    finally:
-        with contextlib.suppress(Exception):
-            httpx.delete(
-                f"{api_url}/api/secrets/{secret_key}/", headers={"Authorization": f"Bearer {token}"}
-            )
-
-
-@pytest.mark.integration
-def test_list_secrets_sync_real_api(sync_secrets_module):
-    """Test listing secrets with sync client."""
-    try:
-        result = sync_secrets_module.list()
-        assert result is not None
-    except Exception as e:
-        if "permission" in str(e).lower():
-            pytest.skip(f"Skipping: {e!s}")
-        raise
+    assert_secret(
+        await api.get(resource["site_only_key"], tags=[resource["tag"]]),
+        resource["site_only_key"],
+        resource["site_value"],
+        resource,
+    )
+    batch = await api.list(
+        keys=[key, resource["site_only_key"], f"{live_manifest['fixture_id']}-missing"]
+    )
+    assert batch["status"] == "success"
+    assert batch["data"] == {
+        key: resource["app_value"],
+        resource["site_only_key"]: resource["site_value"],
+    }
+    metadata = await api.list(keys=[key], include_metadata=True)
+    assert metadata["data"][key] == {
+        "value": resource["app_value"],
+        "tags": [resource["tag"]],
+        "secret_type": resource["secret_type_name"],
+        "sensitivity_level": "private",
+    }
+    assert_catalog(
+        await api.list(
+            secret_type=resource["secret_type_slug"], tags=[resource["tag"]], page=1, page_size=1
+        ),
+        await api.list(
+            secret_type=resource["secret_type_slug"], tags=[resource["tag"]], page=2, page_size=1
+        ),
+        resource,
+    )
+    for refused_key, tags in (
+        (key, [f"{live_manifest['fixture_id']}-missing"]),
+        (f"{live_manifest['fixture_id']}-missing", None),
+    ):
+        with pytest.raises(NotFoundError) as refused:
+            await api.get(refused_key, tags=tags)
+        assert refused.value.status_code == 404
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_get_nonexistent_secret_real_api(async_secrets_module):
-    """Test getting non-existent secret."""
-    try:
-        with pytest.raises(TaruviError):
-            await async_secrets_module.get("NONEXISTENT_SECRET_KEY_12345")
-    except Exception as e:
-        if "permission" in str(e).lower():
-            pytest.skip(f"Skipping: {e!s}")
-        raise
+def test_sync_secret_inheritance_batch_catalog_and_tag_refusal(
+    sync_secrets_module, live_resources, live_manifest
+):
+    api = sync_secrets_module
+    resource = live_resources["secrets"]
+    key = resource["shadowed_key"]
+    assert_secret(api.get(key), key, resource["app_value"], resource)
+    assert_secret(
+        api.get(key, app=live_resources["other_app_slug"]), key, resource["site_value"], resource
+    )
+    assert_secret(
+        api.get(resource["site_only_key"], tags=[resource["tag"]]),
+        resource["site_only_key"],
+        resource["site_value"],
+        resource,
+    )
+    batch = api.list(
+        keys=[key, resource["site_only_key"], f"{live_manifest['fixture_id']}-missing"]
+    )
+    assert batch["status"] == "success"
+    assert batch["data"] == {
+        key: resource["app_value"],
+        resource["site_only_key"]: resource["site_value"],
+    }
+    metadata = api.list(keys=[key], include_metadata=True)
+    assert metadata["data"][key] == {
+        "value": resource["app_value"],
+        "tags": [resource["tag"]],
+        "secret_type": resource["secret_type_name"],
+        "sensitivity_level": "private",
+    }
+    assert_catalog(
+        api.list(
+            secret_type=resource["secret_type_slug"], tags=[resource["tag"]], page=1, page_size=1
+        ),
+        api.list(
+            secret_type=resource["secret_type_slug"], tags=[resource["tag"]], page=2, page_size=1
+        ),
+        resource,
+    )
+    for refused_key, tags in (
+        (key, [f"{live_manifest['fixture_id']}-missing"]),
+        (f"{live_manifest['fixture_id']}-missing", None),
+    ):
+        with pytest.raises(NotFoundError) as refused:
+            api.get(refused_key, tags=tags)
+        assert refused.value.status_code == 404
+
+
+async def test_private_secret_refuses_anonymous_async(anonymous_async_client, live_resources):
+    with pytest.raises(NotAuthenticatedError) as refused:
+        await anonymous_async_client.secrets.get(live_resources["secrets"]["shadowed_key"])
+    assert refused.value.status_code == 401
+
+
+def test_private_secret_refuses_anonymous_sync(anonymous_sync_client, live_resources):
+    with pytest.raises(NotAuthenticatedError) as refused:
+        anonymous_sync_client.secrets.get(live_resources["secrets"]["shadowed_key"])
+    assert refused.value.status_code == 401

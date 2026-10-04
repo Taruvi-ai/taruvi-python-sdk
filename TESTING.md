@@ -32,8 +32,9 @@ The terminal summary reports passes, failures, and skips separately. Open
 `htmlcov/index.html` after the HTML coverage command. A default run skips live
 tests; those skips are not evidence that the deployed API works.
 
-Set `TARUVI_API_URL`, `TARUVI_TEST_APP_SLUG`, and the credentials documented in
-`tests/README.md` before running live tests. Live tests are marked
+Set `TARUVI_LIVE_FIXTURE_MANIFEST` and the fixture credentials documented in
+`tests/README.md` before running live tests. The manifest supplies the owned
+site/app; URL or app environment defaults do not select an existing site. Live tests are marked
 `integration` and are skipped unless `RUN_INTEGRATION_TESTS` is exactly `1`. Values
 such as `0`, `false`, and `off` leave live tests disabled. When explicitly enabled,
 missing credentials or a failed/malformed login fail the run with a sanitized
@@ -59,15 +60,24 @@ Use parametrization for equivalent sync/async or status/operator families and
 assert stable API contracts. Keep transport tests deterministic and use the
 live suite for integration behavior that mocks cannot prove.
 
-The October 4 local default gate passed **257 tests, with 73 live tests
-skipped**. Ruff and Black passed, strict mypy checked all 40 SDK source files
-without errors, and the declaration gate checked those files plus both positive
-consumer probes. The negative public-client probe required all ten expected
-diagnostics. The built wheel and source distribution passed Twine checks; a
-clean wheel installation retained lazy imports and passed the same consumer
-probes. These results do not claim live acceptance. Several module-specific live
-tests still skip missing remote resources; they need separately owned disposable
-fixtures before being treated as release acceptance.
+The final October 4 default gate passed **268 tests, with 44 explicitly gated
+live cases skipped**. The current strict public source gate checked **42 files
+(SDK source and two consumer probes)** and required **12 expected
+negative-consumer diagnostics**. Its log is
+`/tmp/taruvi-python-final-public-types-oct4.log`. The rebuilt final wheel also
+passes the isolated installed-consumer gate with all 12 required diagnostics,
+its `py.typed` marker and lazy imports verified:
+`/tmp/taruvi-python-installed-final-types-oct4.log`. Build and Twine checks pass.
+
+The final shared owned-platform run passed **all 44 Python live cases**, followed
+by eight JavaScript and six Refine live cases, in
+`/tmp/taruvi-sdk-owned-all-cleanup-final-oct4.log`. Python's selected live run took 8.29
+seconds. It used actual socket HTTP, tenant PostgreSQL/pgvector, Redis, MinIO and
+a separate Celery worker; the provisioner removed its owned processes and
+containers. Enabled missing resources, login failures and unexpected API errors
+fail the run rather than becoming skips. This is local acceptance of these
+source revisions and fixture configuration, not production deployment or
+external payment/SharePoint acceptance.
 
 The vector transport cases verify request and response contracts, not database
 ranking or index behavior. The platform repository separately owns
@@ -151,11 +161,13 @@ Run the focused source and static gates:
 
 The static gate checks the whole SDK and public Client factory, including
 Function responses, authentication, lazy API properties, and mode-sensitive
-await/context contracts. The live Functions suite remains opt-in. It has eight
-cases: list and detail share a lifecycle case, sync queued execution adds a
-case, and async task-result envelope coverage lives in the HTTPX transport
-suite. The missing-task live case expects the backend's PENDING envelope. No
-live function or provider job was invoked during this SDK review.
+await/context contracts. The live Functions suite remains opt-in. Its eight
+cases cover sync and async client modes, direct and queued execution with actual
+terminal worker results, matching invocation/detail/catalog identity, and the
+missing-task PENDING envelope versus a missing-function 404. All eight passed
+within the final owned HTTP run. The APP fixture echoes caller fields after
+excluding reserved context injected by the platform. No customer function,
+production worker, external provider or published package was exercised.
 
 
 The policy fixture `tests/fixtures/policy-wire.json` was generated from the

@@ -1,72 +1,101 @@
-"""Opt-in Functions acceptance against a disposable backend and existing function.
+"""Real broker/worker Functions acceptance using the owned echo function.
 
-Run RUN_INTEGRATION_TESTS=1 pytest tests/test_functions_integration.py.
-The default suite uses HTTPX contract fixtures and does not invoke live functions.
+A queued HTTP response is acceptance only. These cases wait for persisted
+terminal task results and verify invocation identity and payload, through both
+public clients. The fixture owner removes the function and its audit records.
 """
+
+import asyncio
+import inspect
+import time
+from uuid import uuid4
 
 import pytest
 
-from taruvi.exceptions import TaruviError
+from taruvi.exceptions import NotFoundError
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
-def assert_execution(response, queued):
+async def resolve(value):
+    return await value if inspect.isawaitable(value) else value
+
+
+@pytest.fixture(params=["sync", "async"])
+def functions_module(request, sync_functions_module, async_functions_module):
+    return sync_functions_module if request.param == "sync" else async_functions_module
+
+
+async def completed_task(module, task_id):
+    deadline = time.monotonic() + 60
+    while True:
+        response = await resolve(module.get_result(task_id))
+        assert response["status"] == "success"
+        task = response["data"]
+        assert task["task_id"] == task_id
+        if task["status"] in {"SUCCESS", "FAILURE", "REVOKED"}:
+            assert task["status"] == "SUCCESS", f"Owned task {task_id} finished {task['status']}"
+            return task
+        assert time.monotonic() < deadline, f"Owned task {task_id} remained {task['status']}"
+        await asyncio.sleep(0.25)
+
+
+@pytest.mark.parametrize("queued", [False, True])
+async def test_execute_waits_for_actual_worker_result_and_invocation(
+    functions_module, test_function_name, queued
+):
+    payload = {"marker": uuid4().hex, "value": False, "zero": 0, "empty": [], "nested": {"n": 7}}
+    response = await resolve(functions_module.execute(test_function_name, payload, is_async=queued))
     assert response["status"] == "success"
-    assert isinstance(response["invocation"]["id"], int)
-    assert isinstance(response["invocation"]["function"], int)
-    assert "task_result" in response["invocation"]
-    if "queued" in response:  # older supported servers omit this additive flag
-        assert response["queued"] is queued
-    if queued:
-        assert response["data"] == []
-        assert response["invocation"]["celery_task_id"]
+    assert response["queued"] is queued
+    invocation = response["invocation"]
+    assert isinstance(invocation["id"], int)
+    assert isinstance(invocation["function"], int)
+    assert invocation["function_slug"] == test_function_name
+    task_id = invocation["celery_task_id"]
+    assert task_id
+    assert response["data"] == ([] if queued else payload)
 
+    task = await completed_task(functions_module, task_id)
+    assert task["result"]["result"] == payload
+    assert task["date_created"]
+    assert task["date_done"]
+    detail = await resolve(functions_module.get_invocation(invocation["id"]))
+    assert detail["id"] == invocation["id"]
+    assert detail["celery_task_id"] == task_id
+    assert detail["task_result"]["status"] == "SUCCESS"
+    assert detail["task_result"]["result"]["result"] == payload
+    assert detail["has_error"] is False
+    assert "logs" in detail
 
-@pytest.mark.integration
-@pytest.mark.parametrize("queued", [False, True])
-def test_sync_execute_envelope(sync_functions_module, test_function_name, queued):
-    response = sync_functions_module.execute(test_function_name, {"order_id": 123}, is_async=queued)
-    assert_execution(response, queued)
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-@pytest.mark.parametrize("queued", [False, True])
-async def test_async_execute_envelope(async_functions_module, test_function_name, queued):
-    response = await async_functions_module.execute(
-        test_function_name, {"order_id": 123}, is_async=queued
+    page = await resolve(
+        functions_module.list_invocations(function_slug=test_function_name, page=1, page_size=100)
     )
-    assert_execution(response, queued)
+    assert page["total"] >= 1
+    assert invocation["id"] in {record["id"] for record in page["data"]}
+    assert all(record["function_slug"] == test_function_name for record in page["data"])
+    assert all("logs" not in record for record in page["data"])
 
 
-@pytest.mark.integration
-def test_sync_task_lookup_envelope(sync_functions_module, test_function_name):
-    execution = sync_functions_module.execute(test_function_name, {"order_id": 456}, is_async=True)
-    task_id = execution["invocation"]["celery_task_id"]
-    result = sync_functions_module.get_result(task_id)
-    assert result["data"]["task_id"] == task_id
-    assert isinstance(result["data"]["status"], str)
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_async_function_list_and_detail(async_functions_module, test_function_name):
-    page = await async_functions_module.list(limit=10, offset=0)
-    assert isinstance(page["data"], list)
-    assert isinstance(page["total"], int)
-    detail = await async_functions_module.get(test_function_name)
+async def test_function_catalog_and_detail_agree(functions_module, test_function_name):
+    page = await resolve(functions_module.list(limit=100, offset=0))
+    assert page["status"] == "success"
+    assert page["total"] >= 1
+    catalog = next(item for item in page["data"] if item["slug"] == test_function_name)
+    detail = await resolve(functions_module.get(test_function_name))
+    assert detail["id"] == catalog["id"]
     assert detail["slug"] == test_function_name
+    assert detail["execution_mode"] == "app"
+    assert detail["is_active"] is True
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_missing_task_lookup_is_pending(async_functions_module):
-    result = await async_functions_module.get_result("invalid-task-id-xyz")
-    assert result["data"]["status"] == "PENDING"
-    assert result["data"]["result"] is None
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_missing_function_is_refused(async_functions_module):
-    with pytest.raises(TaruviError):
-        await async_functions_module.execute("nonexistent-function-xyz-123", {}, is_async=False)
+async def test_unknown_function_is_not_found_but_unknown_task_is_pending(functions_module):
+    with pytest.raises(NotFoundError):
+        await resolve(functions_module.execute(f"absent-{uuid4().hex}", {}, is_async=False))
+    task_id = str(uuid4())
+    response = await resolve(functions_module.get_result(task_id))
+    assert response["status"] == "success"
+    assert response["data"]["task_id"] == task_id
+    assert response["data"]["status"] == "PENDING"
+    assert response["data"]["result"] is None
+    assert response["data"]["date_done"] is None

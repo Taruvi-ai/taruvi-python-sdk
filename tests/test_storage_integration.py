@@ -1,726 +1,186 @@
-import contextlib
+"""Owned S3/MinIO acceptance through both public HTTP clients.
 
-"""
-Integration tests for Storage API module.
-
-IMPORTANT: These are REAL integration tests - NO MOCKS!
-- Uploads actual files to Taruvi backend storage
-- Downloads and verifies file content
-- Tests bucket operations with real storage backend
-- All uploaded files are cleaned up after tests
-
-Setup:
-    1. Ensure .env is configured with backend URL and credentials
-    2. Backend must have storage functionality enabled
-    3. Run: RUN_INTEGRATION_TESTS=1 pytest tests/test_storage_integration.py -v
+Exercise actual binary storage and database inventory together. Batch partial
+results are inspected explicitly; an inaccessible bucket or provider failure is
+never converted into a skip.
 """
 
-import io
+import inspect
+from contextlib import asynccontextmanager
+from io import BytesIO
+from uuid import uuid4
 
 import pytest
 
-from taruvi.exceptions import TaruviError
+from taruvi.exceptions import NotFoundError, ValidationError
 
-# ============================================================================
-# File Upload Tests - Async (Real Storage Operations)
-# ============================================================================
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_upload_file_real_api(async_storage_module, generate_unique_id):
-    """
-    Test uploading a real file to storage backend.
+async def resolve(value):
+    return await value if inspect.isawaitable(value) else value
 
-    Creates file, uploads it, verifies it exists, then cleans up.
-    """
-    bucket_name = "test-bucket"  # Update with your test bucket
-    unique_id = generate_unique_id()
-    file_path = f"test_files/test_{unique_id}.txt"
 
-    # Create test file content
-    file_content = f"Test file content {unique_id}".encode()
-    file_obj = io.BytesIO(file_content)
+@pytest.fixture(params=["sync", "async"])
+def storage_module(request, sync_storage_module, async_storage_module):
+    return sync_storage_module if request.param == "sync" else async_storage_module
 
+
+@asynccontextmanager
+async def owned_objects(bucket):
+    paths = set()
     try:
-        # Upload file to real storage using query builder pattern
-        result = await async_storage_module.from_(bucket_name).upload(
-            files=[("test.txt", file_obj)], paths=[file_path]
-        )
-
-        # Verify response structure
-        assert result is not None
-        assert isinstance(result, list)
-        assert len(result) > 0
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {bucket_name} bucket not accessible - {e!s}")
-        raise
-
+        yield paths
     finally:
-        # Cleanup: Delete uploaded file
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete([file_path])
+        if paths:
+            result = await resolve(bucket.delete(sorted(paths)))
+            assert all(item["error"] == "Object not found" for item in result["failed"]), result
+            assert result["deleted_count"] + len(result["failed"]) == len(paths)
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_upload_and_download_file_real_api(async_storage_module, generate_unique_id):
-    """
-    Test complete upload-download cycle with real storage.
+def assert_uploaded(result, paths):
+    assert result["uploaded_count"] == len(paths)
+    assert result["failed_count"] == 0
+    assert result["failed"] == []
+    assert result["total"] == len(paths)
+    assert [entry["path"] for entry in result["successful"]] == paths
+    for index, entry in enumerate(result["successful"]):
+        assert entry["index"] == index
+        assert entry["object"]["file_path"] == paths[index]
+        assert entry["object"]["storage_provider"] == "s3"
 
-    Uploads file, downloads it, verifies content matches.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    file_path = f"test_files/roundtrip_{unique_id}.txt"
 
-    # Original content
-    original_content = f"Roundtrip test content {unique_id}".encode()
-    file_obj = io.BytesIO(original_content)
-
-    try:
-        # Upload
-        upload_result = await async_storage_module.from_(bucket_name).upload(
-            files=[("roundtrip.txt", file_obj)], paths=[file_path]
+async def test_binary_roundtrip_metadata_copy_move_and_delete(storage_module, live_resources):
+    resource = live_resources["storage"]
+    bucket = storage_module.from_(resource["bucket_slug"])
+    prefix = f'{resource["prefix"]}{uuid4().hex}/'
+    source, copied, moved = (
+        f"{prefix}{name}" for name in ("café #1.bin", "copied.bin", "moved.bin")
+    )
+    content = b"\x00\xff\x10SDK binary roundtrip\r\n"
+    async with owned_objects(bucket) as owned:
+        owned.add(source)
+        result = await resolve(
+            bucket.upload(
+                files=[("source.bin", BytesIO(content), "application/octet-stream")],
+                paths=[source],
+                metadatas=[{"purpose": "live-acceptance"}],
+            )
         )
+        assert_uploaded(result, [source])
+        assert result["successful"][0]["object"]["size"] == len(content)
+        assert await resolve(bucket.download(source)) == content
 
-        assert upload_result is not None
-        assert len(upload_result) > 0
+        metadata = {"reviewed": True, "revision": 2}
+        changed = await resolve(bucket.update(source, metadata=metadata, visibility="private"))
+        assert changed["metadata"] == metadata
+        inventory = await resolve(bucket.filter(prefix=prefix).list())
+        assert inventory["total"] == 1
+        assert inventory["data"][0]["metadata"] == metadata
+        assert inventory["data"][0]["visibility"] == "private"
 
-        # Download
-        downloaded = await async_storage_module.from_(bucket_name).download(file_path)
+        owned.add(copied)
+        copy = await resolve(bucket.copy_object(source, copied))
+        assert copy["file_path"] == copied
+        assert await resolve(bucket.download(copied)) == content
+        owned.add(moved)
+        move = await resolve(bucket.move_object(copied, moved))
+        assert move["file_path"] == moved
+        assert await resolve(bucket.download(moved)) == content
+        with pytest.raises(NotFoundError):
+            await resolve(bucket.download(copied))
+        owned.remove(copied)
 
-        # Verify content matches
-        assert downloaded is not None
-        assert downloaded == original_content
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-    finally:
-        # Cleanup
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete([file_path])
+        deleted = await resolve(bucket.delete([source, moved]))
+        assert deleted["deleted_count"] == 2
+        assert deleted["failed"] == []
+        owned.difference_update([source, moved])
+        assert (await resolve(bucket.filter(prefix=prefix).list()))["total"] == 0
+        with pytest.raises(NotFoundError):
+            await resolve(bucket.download(source))
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_upload_multiple_files_real_api(async_storage_module, generate_unique_id):
-    """
-    Test uploading multiple files to real storage.
-
-    Uploads multiple files and verifies all succeed.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    uploaded_paths = []
-    files = []
-
-    try:
-        # Prepare 3 files
-        for i in range(3):
-            file_path = f"test_files/multi_{unique_id}_{i}.txt"
-            file_content = f"Multi file test #{i} - {unique_id}".encode()
-            file_obj = io.BytesIO(file_content)
-
-            files.append((f"multi_{i}.txt", file_obj))
-            uploaded_paths.append(file_path)
-
-        # Upload all files at once
-        result = await async_storage_module.from_(bucket_name).upload(
-            files=files, paths=uploaded_paths
+async def test_folder_browse_pagination_sorting_and_list_filters(storage_module, live_resources):
+    resource = live_resources["storage"]
+    bucket = storage_module.from_(resource["bucket_slug"])
+    prefix = f'{resource["prefix"]}{uuid4().hex}/'
+    paths = [f"{prefix}{name}" for name in ("a.txt", "b.txt", "nested/c.txt")]
+    async with owned_objects(bucket) as owned:
+        owned.update(paths)
+        result = await resolve(
+            bucket.upload(
+                files=[
+                    (name, BytesIO(name.encode()), "text/plain")
+                    for name in ("a.txt", "b.txt", "c.txt")
+                ],
+                paths=paths,
+            )
         )
-
-        assert result is not None
-        assert len(result) == 3
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-    finally:
-        # Cleanup all uploaded files
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-
-
-# ============================================================================
-# File List Tests - Async (Real Storage Operations)
-# ============================================================================
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_list_files_real_api(async_storage_module, generate_unique_id):
-    """
-    Test listing files from real storage bucket.
-
-    Uploads files and verifies list endpoint returns them.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    prefix = f"test_list_{unique_id}/"
-    uploaded_paths = []
-    files = []
-
-    try:
-        # Prepare test files
-        for i in range(2):
-            file_path = f"{prefix}file_{i}.txt"
-            file_obj = io.BytesIO(f"List test {i}".encode())
-            files.append((f"file_{i}.txt", file_obj))
-            uploaded_paths.append(file_path)
-
-        # Upload files
-        await async_storage_module.from_(bucket_name).upload(files=files, paths=uploaded_paths)
-
-        # List files
-        result = await async_storage_module.from_(bucket_name).list()
-
-        # Verify structure
-        assert result is not None
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-    finally:
-        # Cleanup
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
+        assert_uploaded(result, paths)
+        pages = [
+            await resolve(
+                bucket.browse(prefix=prefix, page=page, page_size=2, sort="name", order="asc")
+            )
+            for page in (1, 2)
+        ]
+        assert pages[0]["prefix"] == prefix
+        assert [page["has_next"] for page in pages] == [True, False]
+        assert [page["page"] for page in pages] == [1, 2]
+        assert [obj["path"] for page in pages for obj in page["objects"]] == paths[:2]
+        assert [folder for page in pages for folder in page["folders"]] == [
+            {"type": "folder", "name": "nested", "path": f"{prefix}nested/"}
+        ]
+        nested = await resolve(bucket.browse(prefix=f"{prefix}nested/"))
+        assert nested["folders"] == []
+        assert [obj["path"] for obj in nested["objects"]] == paths[2:]
+        descending = await resolve(bucket.browse(prefix=prefix, sort="name", order="desc"))
+        assert [obj["name"] for obj in descending["objects"]] == ["b.txt", "a.txt"]
+        inventory = await resolve(bucket.filter(prefix=prefix, mimetype="text/plain").list())
+        assert inventory["total"] == 3
+        assert {obj["file_path"] for obj in inventory["data"]} == set(paths)
+        empty = await resolve(bucket.browse(prefix=f"{prefix}missing/"))
+        assert empty["objects"] == empty["folders"] == []
+        assert empty["has_next"] is False
 
 
-# ============================================================================
-# File Delete Tests - Async (Real Storage Operations)
-# ============================================================================
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_delete_file_real_api(async_storage_module, generate_unique_id):
-    """
-    Test deleting file from real storage.
-
-    Uploads file, deletes it, verifies it's gone.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    file_path = f"test_files/delete_{unique_id}.txt"
-
-    try:
-        # Upload file
-        file_obj = io.BytesIO(f"Delete test {unique_id}".encode())
-        await async_storage_module.from_(bucket_name).upload(
-            files=[("delete.txt", file_obj)], paths=[file_path]
+async def test_batch_partial_results_and_validation_do_not_hide_failures(
+    storage_module, live_resources
+):
+    resource = live_resources["storage"]
+    bucket = storage_module.from_(resource["bucket_slug"])
+    prefix = f'{resource["prefix"]}{uuid4().hex}/'
+    good, invalid, oversized, missing = (
+        f"{prefix}{name}" for name in ("good.txt", "invalid.txt", "oversized.txt", "absent.txt")
+    )
+    async with owned_objects(bucket) as owned:
+        owned.update([good, invalid, oversized])
+        result = await resolve(
+            bucket.upload(
+                files=[
+                    ("good.txt", BytesIO(b"good")),
+                    ("invalid.txt", BytesIO(b"invalid")),
+                    ("oversized.txt", BytesIO(b"x" * 2048)),
+                ],
+                paths=[good, invalid, oversized],
+                metadatas=[{"purpose": "accepted"}, {"large": "x" * 2050}, {}],
+            )
         )
-
-        # Delete file
-        await async_storage_module.from_(bucket_name).delete([file_path])
-
-        # Verify file is gone - should raise error
-        with pytest.raises(TaruviError):
-            await async_storage_module.from_(bucket_name).download(file_path)
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_delete_multiple_files_real_api(async_storage_module, generate_unique_id):
-    """
-    Test deleting multiple files from real storage.
-
-    Bulk delete operation test.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    file_paths = []
-    files = []
-
-    try:
-        # Prepare multiple files
-        for i in range(3):
-            file_path = f"test_files/bulk_delete_{unique_id}_{i}.txt"
-            file_obj = io.BytesIO(f"Bulk delete test {i}".encode())
-            files.append((f"bulk_{i}.txt", file_obj))
-            file_paths.append(file_path)
-
-        # Upload all files
-        await async_storage_module.from_(bucket_name).upload(files=files, paths=file_paths)
-
-        # Delete all files at once
-        await async_storage_module.from_(bucket_name).delete(file_paths)
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-    finally:
-        # Ensure cleanup
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete(file_paths)
-
-
-# ============================================================================
-# File Metadata Tests - Async (Real Storage Operations)
-# ============================================================================
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_file_metadata_real_api(async_storage_module, generate_unique_id):
-    """
-    Test getting file metadata from real storage.
-
-    Uploads file and retrieves its metadata.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    file_path = f"test_files/metadata_{unique_id}.txt"
-
-    try:
-        # Upload file
-        file_content = f"Metadata test {unique_id}".encode()
-        file_obj = io.BytesIO(file_content)
-
-        result = await async_storage_module.from_(bucket_name).upload(
-            files=[("metadata.txt", file_obj)], paths=[file_path]
-        )
-
-        # Verify upload result contains metadata
-        assert result is not None
-        assert len(result) > 0
-        # File metadata should be in the upload result
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-    finally:
-        # Cleanup
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete([file_path])
-
-
-# ============================================================================
-# Sync Client Tests - Real Storage Operations
-# ============================================================================
-
-
-@pytest.mark.integration
-def test_upload_file_sync_real_api(sync_storage_module, generate_unique_id):
-    """
-    Test uploading file with sync client (no async/await).
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    file_path = f"test_files/sync_{unique_id}.txt"
-
-    try:
-        # Upload with sync client
-        file_obj = io.BytesIO(f"Sync upload test {unique_id}".encode())
-
-        result = sync_storage_module.from_(bucket_name).upload(
-            files=[("sync.txt", file_obj)], paths=[file_path]
-        )
-
-        # Verify
-        assert result is not None
-        assert len(result) > 0
-
-        # Cleanup
-        sync_storage_module.from_(bucket_name).delete([file_path])
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-
-@pytest.mark.integration
-def test_download_file_sync_real_api(sync_storage_module, generate_unique_id):
-    """
-    Test downloading file with sync client.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    file_path = f"test_files/sync_download_{unique_id}.txt"
-
-    try:
-        # Upload
-        original_content = f"Sync download test {unique_id}".encode()
-        file_obj = io.BytesIO(original_content)
-
-        sync_storage_module.from_(bucket_name).upload(
-            files=[("sync_download.txt", file_obj)], paths=[file_path]
-        )
-
-        # Download
-        downloaded = sync_storage_module.from_(bucket_name).download(file_path)
-
-        # Verify content
-        assert downloaded is not None
-        assert downloaded == original_content
-
-        # Cleanup
-        sync_storage_module.from_(bucket_name).delete([file_path])
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-
-# ============================================================================
-# Error Handling Tests - Real API Errors
-# ============================================================================
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_download_nonexistent_file_real_api(async_storage_module):
-    """
-    Test downloading non-existent file returns real error.
-    """
-    bucket_name = "test-bucket"
-    fake_path = "nonexistent/file/path.txt"
-
-    try:
-        with pytest.raises(TaruviError) as exc_info:
-            await async_storage_module.from_(bucket_name).download(fake_path)
-
-        # Verify we got real error from backend
-        assert exc_info.value is not None
-
-    except Exception as e:
-        if "bucket" in str(e).lower():
-            pytest.skip("Skipping: Bucket not accessible")
-        raise
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_delete_nonexistent_file_real_api(async_storage_module):
-    """
-    Test deleting non-existent file handling.
-    """
-    bucket_name = "test-bucket"
-    fake_path = "nonexistent/delete/path.txt"
-
-    try:
-        # May or may not raise error depending on backend implementation
-        result = await async_storage_module.delete(bucket_name, fake_path)
-
-        # Either succeeds silently or raises error
-        assert result is not None or result is True
-
-    except Exception as e:  # noqa: BLE001 - integration script tolerates any backend error
-        # Expected - file doesn't exist
-        assert e is not None
-
-
-# ============================================================================
-# Browse Tests — Async (folder navigation)
-# ============================================================================
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_browse_root_real_api(async_storage_module, generate_unique_id):
-    """
-    Test browse() returns folders and files at bucket root.
-
-    Uploads files into two prefixes, then browses root and verifies structure.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    uploaded_paths = []
-
-    try:
-        # Seed: one root file + one file in a sub-prefix
-        root_path = f"browse_{unique_id}_root.txt"
-        sub_path = f"browse_{unique_id}_sub/file.txt"
-
-        await async_storage_module.from_(bucket_name).upload(
-            files=[
-                ("root.txt", io.BytesIO(b"root")),
-                ("file.txt", io.BytesIO(b"sub")),
-            ],
-            paths=[root_path, sub_path],
-        )
-        uploaded_paths = [root_path, sub_path]
-
-        # Browse root
-        data = await async_storage_module.from_(bucket_name).browse()
-
-        assert isinstance(data, dict)
-        assert "folders" in data
-        assert "objects" in data
-        assert "has_next" in data
-        assert "page" in data
-        assert "page_size" in data
-        assert isinstance(data["folders"], list)
-        assert isinstance(data["objects"], list)
-
-        # All folder entries must have type="folder"
-        for folder in data["folders"]:
-            assert folder["type"] == "folder"
-            assert isinstance(folder["name"], str)
-            assert folder["path"].endswith("/")
-
-        # All file entries must have type="file"
-        for obj in data["objects"]:
-            assert obj["type"] == "file"
-            assert isinstance(obj["name"], str)
-            assert isinstance(obj["size"], int)
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: {bucket_name} bucket not accessible - {e!s}")
-        raise
-
-    finally:
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_browse_subfolder_real_api(async_storage_module, generate_unique_id):
-    """
-    Test browse() navigation into a subfolder via prefix.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    prefix = f"browse_nav_{unique_id}/"
-    uploaded_paths = []
-
-    try:
-        # Seed two files in a known prefix
-        for i in range(2):
-            uploaded_paths.append(f"{prefix}file_{i}.txt")
-
-        await async_storage_module.from_(bucket_name).upload(
-            files=[(f"file_{i}.txt", io.BytesIO(f"content {i}".encode())) for i in range(2)],
-            paths=uploaded_paths,
-        )
-
-        # Browse that prefix
-        data = await async_storage_module.from_(bucket_name).browse(prefix=prefix)
-
-        assert data["prefix"] == prefix
-        file_names = [o["name"] for o in data["objects"]]
-        assert "file_0.txt" in file_names
-        assert "file_1.txt" in file_names
-
-        # Verify file paths are prefixed correctly
-        for obj in data["objects"]:
-            assert obj["path"].startswith(prefix)
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-    finally:
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_browse_pagination_real_api(async_storage_module, generate_unique_id):
-    """
-    Test browse() pagination — page_size and has_next.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    prefix = f"browse_page_{unique_id}/"
-    uploaded_paths = []
-
-    try:
-        # Seed 4 files
-        for i in range(4):
-            uploaded_paths.append(f"{prefix}file_{i}.txt")
-
-        await async_storage_module.from_(bucket_name).upload(
-            files=[(f"file_{i}.txt", io.BytesIO(f"content {i}".encode())) for i in range(4)],
-            paths=uploaded_paths,
-        )
-
-        # Fetch first page of 2
-        page1 = await async_storage_module.from_(bucket_name).browse(
-            prefix=prefix, page=1, page_size=2
-        )
-        assert page1["page"] == 1
-        assert page1["page_size"] == 2
-        p1_count = len(page1["folders"]) + len(page1["objects"])
-        assert p1_count <= 2
-        assert page1["has_next"] is True
-
-        # Fetch second page
-        page2 = await async_storage_module.from_(bucket_name).browse(
-            prefix=prefix, page=2, page_size=2
-        )
-        assert page2["page"] == 2
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-    finally:
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_browse_sorting_real_api(async_storage_module, generate_unique_id):
-    """
-    Test browse() sort parameter — name asc vs desc produces different orders.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    prefix = f"browse_sort_{unique_id}/"
-    uploaded_paths = [f"{prefix}a_file.txt", f"{prefix}z_file.txt"]
-
-    try:
-        await async_storage_module.from_(bucket_name).upload(
-            files=[("a_file.txt", io.BytesIO(b"a")), ("z_file.txt", io.BytesIO(b"z"))],
-            paths=uploaded_paths,
-        )
-
-        asc = await async_storage_module.from_(bucket_name).browse(
-            prefix=prefix, sort="name", order="asc"
-        )
-        desc = await async_storage_module.from_(bucket_name).browse(
-            prefix=prefix, sort="name", order="desc"
-        )
-
-        assert asc.get("status", True)
-        assert desc.get("status", True)
-
-        asc_names = [o["name"] for o in asc["objects"]]
-        desc_names = [o["name"] for o in desc["objects"]]
-        if len(asc_names) > 1:
-            assert asc_names != desc_names
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-    finally:
-        with contextlib.suppress(Exception):
-            await async_storage_module.from_(bucket_name).delete(uploaded_paths)
-
-
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_browse_empty_prefix_real_api(async_storage_module):
-    """
-    Test browse() with a nonexistent prefix returns empty folders/objects.
-    """
-    bucket_name = "test-bucket"
-
-    try:
-        data = await async_storage_module.from_(bucket_name).browse(
-            prefix="nonexistent_prefix_xyz_abc/"
-        )
-        assert data["folders"] == []
-        assert data["objects"] == []
-        assert data["has_next"] is False
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-
-# ============================================================================
-# Browse Tests — Sync client
-# ============================================================================
-
-
-@pytest.mark.integration
-def test_browse_sync_real_api(sync_storage_module, generate_unique_id):
-    """
-    Test browse() with sync client — same assertions, no async/await.
-    """
-    bucket_name = "test-bucket"
-    unique_id = generate_unique_id()
-    prefix = f"browse_sync_{unique_id}/"
-    uploaded_paths = [f"{prefix}file.txt"]
-
-    try:
-        sync_storage_module.from_(bucket_name).upload(
-            files=[("file.txt", io.BytesIO(b"hello"))],
-            paths=uploaded_paths,
-        )
-
-        data = sync_storage_module.from_(bucket_name).browse(prefix=prefix)
-
-        assert isinstance(data, dict)
-        assert "folders" in data
-        assert "objects" in data
-        assert data["prefix"] == prefix
-        file_names = [o["name"] for o in data["objects"]]
-        assert "file.txt" in file_names
-
-        sync_storage_module.from_(bucket_name).delete(uploaded_paths)
-
-    except Exception as e:
-        if "bucket" in str(e).lower() or "not found" in str(e).lower():
-            pytest.skip(f"Skipping: Storage not accessible - {e!s}")
-        raise
-
-
-# ============================================================================
-# Notes on Storage Integration Tests
-# ============================================================================
-
-"""
-IMPORTANT CONFIGURATION:
-
-1. Update `bucket_name = "test-bucket"` with your actual test bucket
-2. Ensure test bucket exists in your backend storage
-3. Verify storage permissions are configured
-
-Cleanup Strategy:
-- All tests clean up uploaded files in finally blocks
-- Use unique identifiers to avoid conflicts
-- Tests are idempotent
-
-Test Coverage:
-✅ Upload single file
-✅ Upload multiple files
-✅ Download files
-✅ Verify file content integrity
-✅ List files
-✅ Delete files
-✅ Bulk delete
-✅ File metadata (if supported)
-✅ Sync client operations
-✅ Error handling (file not found, etc.)
-
-File Types Tested:
-- Text files (basic test)
-- Can extend to: images, PDFs, binary files
-
-Example Bucket Setup:
-- Create bucket in Taruvi backend: "test-bucket"
-- Grant read/write permissions to test API key
-- Enable public or private access as needed
-"""
+        assert result["total"] == 3
+        assert result["uploaded_count"] == 1
+        assert result["failed_count"] == 2
+        assert [item["path"] for item in result["successful"]] == [good]
+        assert result["failed"][0]["path"] == invalid
+        assert result["failed"][0]["index"] == 1
+        assert "2KB" in result["failed"][0]["error"]
+        assert result["failed"][1]["path"] == oversized
+        assert result["failed"][1]["index"] == 2
+        assert "bucket limit" in result["failed"][1]["error"]
+        assert await resolve(bucket.download(good)) == b"good"
+        with pytest.raises(NotFoundError):
+            await resolve(bucket.download(invalid))
+        deleted = await resolve(bucket.delete([good, missing]))
+        assert deleted["deleted_count"] == 1
+        assert deleted["failed"] == [{"path": missing, "error": "Object not found"}]
+        owned.remove(good)
+        with pytest.raises(ValidationError):
+            await resolve(bucket.upload(files=[("mismatch.txt", BytesIO(b"data"))], paths=[]))

@@ -702,6 +702,10 @@ updated_many = client.database.update("users", record_id=[
 ])
 ```
 
+The convenience method returns one record for a single update and a list of
+updated records for a bulk update. The query builder's `.update(...).execute()`
+keeps the complete API envelope; its bulk `data` contains `records` and `count`.
+
 #### Delete Records
 
 ```python

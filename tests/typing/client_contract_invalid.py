@@ -27,3 +27,11 @@ def autodetection_is_not_assumed_sync() -> None:
     response = automatic.functions.execute("sample")
     result: FunctionExecutionResponse = response  # expect-error: assignment
     print(result)
+
+
+def storage_wire_fields_are_not_legacy_names() -> None:
+    client = Client(API_URL, APP, mode="sync")
+    file = client.storage.from_("documents").update("report.txt")
+    file_id: str = file["id"]  # expect-error: assignment
+    legacy_path = file["path"]  # expect-error: typeddict-item
+    print(file_id, legacy_path)

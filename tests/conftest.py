@@ -1,75 +1,112 @@
-"""Pytest configuration and shared fixtures for integration tests."""
+"""Explicitly opted-in live tests against an owned, disposable fixture."""
 
+import json
 import os
+from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
-
-# Configure pytest-asyncio
 pytest_plugins = ("pytest_asyncio",)
 
 
-# ============================================================================
-# Environment Configuration
-# ============================================================================
+@pytest.fixture(scope="session")
+def live_manifest():
+    """Read resource identities; never infer a developer's site or credentials."""
+    if os.getenv("RUN_INTEGRATION_TESTS") != "1":
+        pytest.fail("Live fixture requested without RUN_INTEGRATION_TESTS=1.", pytrace=False)
+    filename = os.getenv("TARUVI_LIVE_FIXTURE_MANIFEST")
+    if not filename:
+        pytest.fail("Live integration requires TARUVI_LIVE_FIXTURE_MANIFEST.", pytrace=False)
+    problem = None
+    try:
+        manifest = json.loads(Path(filename).read_text())
+    except (OSError, ValueError):
+        problem = "Live fixture manifest must be a readable JSON file."
+    if problem:
+        pytest.fail(problem, pytrace=False)
+    if not isinstance(manifest, dict):
+        pytest.fail("Live fixture manifest must be a JSON object.", pytrace=False)
+    if (
+        manifest.get("kind") != "taruvi-sdk-live-fixture-v1"
+        or manifest.get("disposable") is not True
+        or not isinstance(manifest.get("fixture_id"), str)
+        or not manifest["fixture_id"].startswith("sdk-live-")
+    ):
+        pytest.fail(
+            "Live fixture manifest must identify an owned disposable SDK fixture.", pytrace=False
+        )
+    api_url = manifest.get("api_url")
+    app_slug = manifest.get("app_slug")
+    if not isinstance(api_url, str) or not isinstance(app_slug, str) or not app_slug:
+        pytest.fail("Live fixture manifest requires api_url and app_slug.", pytrace=False)
+    parsed = urlsplit(api_url)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+    ):
+        pytest.fail(
+            "Live fixture api_url must be HTTP(S), without embedded credentials.", pytrace=False
+        )
+    if parsed.query or parsed.fragment or not isinstance(manifest.get("resources"), dict):
+        pytest.fail(
+            "Live fixture requires resources and an api_url without query/fragment.", pytrace=False
+        )
+    return manifest
 
 
 @pytest.fixture(scope="session")
-def test_config():
-    """Load test configuration from environment variables."""
+def live_resources(live_manifest):
+    return live_manifest["resources"]
+
+
+@pytest.fixture(scope="session")
+def test_config(live_manifest):
+    if os.getenv("TARUVI_FUNCTION_RUNTIME") == "true":
+        pytest.fail(
+            "Live integration must run as an external SDK client, outside a function runtime.",
+            pytrace=False,
+        )
     return {
-        "api_url": os.getenv("TARUVI_API_URL", "http://localhost:8000"),
-        "app_slug": os.getenv("TARUVI_TEST_APP_SLUG", "test-app"),
-        "api_key": os.getenv("TARUVI_API_KEY"),
-        "username": os.getenv("TARUVI_TEST_EMAIL", os.getenv("TARUVI_USERNAME")),
-        "password": os.getenv("TARUVI_TEST_PASSWORD", os.getenv("TARUVI_PASSWORD")),
+        "api_url": live_manifest["api_url"].rstrip("/"),
+        "app_slug": live_manifest["app_slug"],
+        "username": os.getenv("TARUVI_TEST_EMAIL"),
+        "password": os.getenv("TARUVI_TEST_PASSWORD"),
     }
 
 
 @pytest.fixture(scope="session")
-def fresh_jwt_token(test_config):
-    """
-    Generate a fresh JWT token by logging in to the backend.
-    This ensures tests always use a valid, non-expired token.
-    """
-    import httpx
-
-    username = test_config.get("username")
-    password = test_config.get("password")
-
-    if not username or not password:
+def login_credentials(test_config):
+    if not test_config["username"] or not test_config["password"]:
         pytest.fail(
-            "Live integration login requires TARUVI_TEST_EMAIL and TARUVI_TEST_PASSWORD. "
-            "Use credentials for a disposable test site.",
+            "Live authentication requires TARUVI_TEST_EMAIL and TARUVI_TEST_PASSWORD "
+            "for the disposable fixture user.",
             pytrace=False,
         )
+    return test_config["username"], test_config["password"]
 
-    # Login to get fresh token using allauth endpoint
+
+@pytest.fixture(scope="session")
+def fresh_jwt_token(test_config, login_credentials):
+    """One setup login; unexpected backend failures fail without leaking secrets."""
+    import httpx
+
+    email, password = login_credentials
     failure = None
     try:
-        api_url = test_config["api_url"].rstrip("/")
         response = httpx.post(
-            f"{api_url}/_allauth/app/v1/auth/login",
-            json={"email": username, "password": password},
+            f"{test_config['api_url']}/_allauth/app/v1/auth/login",
+            json={"email": email, "password": password},
             timeout=10,
         )
         response.raise_for_status()
     except httpx.HTTPStatusError as error:
-        failure = (
-            f"Live integration login returned HTTP {error.response.status_code}. "
-            "Check TARUVI_API_URL and the configured disposable test credentials."
-        )
+        failure = f"Live integration login returned HTTP {error.response.status_code}."
     except httpx.HTTPError as error:
-        failure = (
-            f"Live integration login could not complete ({type(error).__name__}). "
-            "Check TARUVI_API_URL and backend availability."
-        )
+        failure = f"Live integration login could not complete ({type(error).__name__})."
     if failure:
-        # Raise outside the exception handler so pytest cannot print the HTTP
-        # exception chain, which may contain sensitive URLs or response bodies.
         pytest.fail(failure, pytrace=False)
     invalid_json = False
     try:
@@ -85,27 +122,74 @@ def fresh_jwt_token(test_config):
     return token
 
 
+@pytest.fixture(scope="session")
+def live_auth(request, test_config):
+    """Resource cases may use any SDK-supported credential, supplied explicitly."""
+    for name, token_type in (
+        ("TARUVI_API_KEY", "api_key"),
+        ("TARUVI_JWT", "jwt"),
+        ("TARUVI_SESSION_TOKEN", "session_token"),
+    ):
+        token = os.getenv(name)
+        if token:
+            return token, token_type
+    return request.getfixturevalue("fresh_jwt_token"), "jwt"
+
+
+def client_options(test_config):
+    return {
+        "api_url": test_config["api_url"],
+        "app_slug": test_config["app_slug"],
+        "api_key": None,
+        "jwt": None,
+        "session_token": None,
+        "username": None,
+        "password": None,
+        "_env_file": None,
+        "max_retries": 0,
+        "timeout": 30,
+    }
+
+
+@pytest.fixture
+async def anonymous_async_client(test_config):
+    from taruvi import Client
+
+    async with Client(mode="async", **client_options(test_config)) as client:
+        yield client
+
+
+@pytest.fixture
+async def async_client(anonymous_async_client, live_auth):
+    token, token_type = live_auth
+    async with anonymous_async_client.auth.signInWithToken(token, token_type) as client:
+        yield client
+
+
+@pytest.fixture
+def anonymous_sync_client(test_config):
+    from taruvi import Client
+
+    with Client(mode="sync", **client_options(test_config)) as client:
+        yield client
+
+
+@pytest.fixture
+def sync_client(anonymous_sync_client, live_auth):
+    token, token_type = live_auth
+    with anonymous_sync_client.auth.signInWithToken(token, token_type) as client:
+        yield client
+
+
 @pytest.fixture
 def unauth_test_config(monkeypatch):
-    """
-    Test configuration without authentication.
-
-    Enables test mode to disable .env file loading and clears auth environment variables.
-    Use this fixture for tests that need unauthenticated clients.
-    """
-    # Enable test mode to disable .env file loading in TaruviConfig
+    """Factory tests never depend on a live fixture or developer configuration."""
     monkeypatch.setenv("TARUVI_TEST_MODE", "true")
-
-    # Clear auth environment variables
-    monkeypatch.delenv("TARUVI_JWT", raising=False)
-    monkeypatch.delenv("TARUVI_API_KEY", raising=False)
-    monkeypatch.delenv("TARUVI_SESSION_TOKEN", raising=False)
-    monkeypatch.delenv("TARUVI_USERNAME", raising=False)
-    monkeypatch.delenv("TARUVI_PASSWORD", raising=False)
-
+    for name in ("JWT", "API_KEY", "SESSION_TOKEN", "USERNAME", "PASSWORD"):
+        monkeypatch.delenv(f"TARUVI_{name}", raising=False)
     return {
-        "api_url": os.getenv("TARUVI_API_URL", "http://localhost:8000"),
-        "app_slug": os.getenv("TARUVI_TEST_APP_SLUG", "test-app"),
+        "api_url": "https://example.invalid",
+        "app_slug": "test-app",
         "api_key": None,
         "username": None,
         "password": None,
@@ -113,209 +197,87 @@ def unauth_test_config(monkeypatch):
     }
 
 
-# ============================================================================
-# Real Client Fixtures (NO MOCKS)
-# ============================================================================
-
-
-@pytest.fixture
-async def async_client(test_config, fresh_jwt_token):
-    """
-    Real async Taruvi client for integration tests.
-    Makes ACTUAL API calls to the backend.
-
-    Uses fresh JWT token generated at test session start.
-    """
-    from taruvi import Client
-
-    # Create base client
-    base_client = Client(
-        api_url=test_config["api_url"], app_slug=test_config["app_slug"], mode="async"
-    )
-
-    # Authenticate with fresh JWT token
-    client = base_client.auth.signInWithToken(token=fresh_jwt_token, token_type="jwt")
-
-    yield client
-
-    # Cleanup
-    await client._http_client.close()
-
-
-@pytest.fixture
-def sync_client(test_config, fresh_jwt_token):
-    """
-    Real sync Taruvi client for integration tests.
-    Makes ACTUAL API calls to the backend.
-
-    Uses fresh JWT token generated at test session start.
-    """
-    from taruvi import Client
-
-    # Create base client
-    base_client = Client(
-        api_url=test_config["api_url"], app_slug=test_config["app_slug"], mode="sync"
-    )
-
-    # Authenticate with fresh JWT token
-    client = base_client.auth.signInWithToken(token=fresh_jwt_token, token_type="jwt")
-
-    yield client
-
-    # Cleanup
-    client._http_client.close()
-
-
-# ============================================================================
-# Module-Specific Fixtures
-# ============================================================================
-
-
 @pytest.fixture
 async def async_functions_module(async_client):
-    """
-    Real Functions module for async integration tests.
-    All operations hit the actual backend.
-    """
     return async_client.functions
 
 
 @pytest.fixture
 def sync_functions_module(sync_client):
-    """
-    Real Functions module for sync integration tests.
-    All operations hit the actual backend.
-    """
     return sync_client.functions
 
 
 @pytest.fixture
 async def async_database_module(async_client):
-    """
-    Real Database module for async integration tests.
-    All operations hit the actual backend.
-    """
     return async_client.database
 
 
 @pytest.fixture
 def sync_database_module(sync_client):
-    """
-    Real Database module for sync integration tests.
-    All operations hit the actual backend.
-    """
     return sync_client.database
 
 
 @pytest.fixture
 async def async_storage_module(async_client):
-    """
-    Real Storage module for async integration tests.
-    All operations hit the actual backend.
-    """
     return async_client.storage
 
 
 @pytest.fixture
 def sync_storage_module(sync_client):
-    """
-    Real Storage module for sync integration tests.
-    All operations hit the actual backend.
-    """
     return sync_client.storage
 
 
 @pytest.fixture
 async def async_secrets_module(async_client):
-    """
-    Real Secrets module for async integration tests.
-    All operations hit the actual backend.
-    """
     return async_client.secrets
 
 
 @pytest.fixture
 def sync_secrets_module(sync_client):
-    """
-    Real Secrets module for sync integration tests.
-    All operations hit the actual backend.
-    """
     return sync_client.secrets
 
 
 @pytest.fixture
 async def async_analytics_module(async_client):
-    """
-    Real Analytics module for async integration tests.
-    All operations hit the actual backend.
-    """
     return async_client.analytics
 
 
 @pytest.fixture
 def sync_analytics_module(sync_client):
-    """
-    Real Analytics module for sync integration tests.
-    All operations hit the actual backend.
-    """
     return sync_client.analytics
 
 
 @pytest.fixture
 async def async_app_module(async_client):
-    """Real App module for async integration tests."""
     return async_client.app
 
 
 @pytest.fixture
 def sync_app_module(sync_client):
-    """Real App module for sync integration tests."""
     return sync_client.app
-
-
-# Auth module is accessed via client.auth - no separate fixtures needed
-
-
-# ============================================================================
-# Test Data Helpers
-# ============================================================================
 
 
 @pytest.fixture
 def generate_unique_id():
-    """Generate unique identifiers for test data to avoid conflicts."""
     from uuid import uuid4
 
-    return lambda: uuid4().hex[:8]
+    return lambda: uuid4().hex[:12]
 
 
 @pytest.fixture
-def test_function_name():
-    """
-    Provide test function name from environment.
-    Falls back to default if not configured.
-    """
-    return os.getenv("TARUVI_TEST_FUNCTION_NAME", "test-function")
-
-
-# ============================================================================
-# Skip Integration Tests if Not Configured
-# ============================================================================
+def test_function_name(live_resources):
+    return live_resources["functions"]["function_slug"]
 
 
 def pytest_configure(config):
-    """Register custom markers."""
     config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests (requires real backend)"
+        "markers", "integration: requires an owned disposable live backend fixture"
     )
 
 
 def pytest_collection_modifyitems(config, items):
-    """Enable live requests only with the documented explicit opt-in value."""
     if os.getenv("RUN_INTEGRATION_TESTS") != "1":
-        skip_integration = pytest.mark.skip(
-            reason="Integration tests disabled. Set RUN_INTEGRATION_TESTS=1 to enable."
-        )
+        skip = pytest.mark.skip(reason="Set RUN_INTEGRATION_TESTS=1 to enable owned live fixtures.")
         for item in items:
             if "integration" in item.keywords:
-                item.add_marker(skip_integration)
+                item.add_marker(skip)
