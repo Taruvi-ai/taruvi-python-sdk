@@ -10,13 +10,15 @@ Provides methods for:
 
 from __future__ import annotations
 
+import builtins
 import json
 import mimetypes
-from typing import TYPE_CHECKING, Any, BinaryIO, Literal, Optional
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal, Optional, cast
 from urllib.parse import quote
 
 import httpx
 
+from taruvi._async.http_client import AsyncHTTPClient
 from taruvi.http_client_base import transport_error
 from taruvi.modules.base import BaseModule
 from taruvi.types import Bucket, StorageAccessLinkResult, StorageBrowseData, StorageFile
@@ -68,7 +70,7 @@ class _BaseStorageQueryBuilder:
 
     def _extract_data(self, response: dict[str, Any]) -> Any:
         """Extract 'data' field from API response."""
-        return response.get("data", {})
+        return cast(Any, response.get("data", {}))
 
     def _add_filters(
         self,
@@ -161,9 +163,9 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
 
     async def upload(
         self,
-        files: list[tuple[str, BinaryIO]] | list[tuple[str, BinaryIO, str]],
-        paths: list[str],
-        metadatas: Optional[list[dict[str, Any]]] = None,
+        files: builtins.list[tuple[str, BinaryIO]] | builtins.list[tuple[str, BinaryIO, str]],
+        paths: builtins.list[str],
+        metadatas: Optional[builtins.list[dict[str, Any]]] = None,
     ) -> dict[str, Any]:
         """Upload multiple files to the bucket.
 
@@ -207,7 +209,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
                 timeout=self._config.timeout,
             ) from error
         response_data = self._http._handle_response(response)
-        return response_data.get("data", {})
+        return cast(dict[str, Any], response_data.get("data", {}))
 
     async def download(self, file_path: str) -> bytes:
         """Download a file from the bucket."""
@@ -244,9 +246,9 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
 
         body = _build_update_body(metadata, visibility)
         response = await self._http.patch(path, json=body)
-        return self._extract_data(response)
+        return cast(StorageFile, self._extract_data(response))
 
-    async def delete(self, paths: list[str]) -> dict[str, Any]:
+    async def delete(self, paths: builtins.list[str]) -> dict[str, Any]:
         """Delete multiple files from the bucket.
 
         Returns:
@@ -257,7 +259,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         path = _STORAGE_BATCH_DELETE.format(app_slug=self.app_slug, bucket=self.bucket)
 
         response = await self._http.post(path, json={"paths": paths})
-        return response.get("data", {})
+        return cast(dict[str, Any], response.get("data", {}))
 
     async def view_access(self, file_path: str) -> StorageAccessLinkResult:
         """Get a SharePoint view-access URL for an Office file."""
@@ -265,7 +267,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
             app_slug=self.app_slug, bucket=self.bucket, path=_encode_object_path(file_path)
         )
         response = await self._http.get(path)
-        return self._extract_data(response)
+        return cast(StorageAccessLinkResult, self._extract_data(response))
 
     async def edit_access(self, file_path: str) -> StorageAccessLinkResult:
         """Get a SharePoint edit-access URL for an Office file."""
@@ -273,7 +275,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
             app_slug=self.app_slug, bucket=self.bucket, path=_encode_object_path(file_path)
         )
         response = await self._http.get(path)
-        return self._extract_data(response)
+        return cast(StorageAccessLinkResult, self._extract_data(response))
 
     async def browse(
         self,
@@ -295,7 +297,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         )
         qs = build_query_string(params)
         response = await self._http.get(path + qs)
-        return self._extract_data(response)
+        return cast(StorageBrowseData, self._extract_data(response))
 
     async def copy_object(
         self, source_path: str, destination_path: str, destination_bucket: Optional[str] = None
@@ -333,7 +335,7 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
             body["destination_bucket"] = destination_bucket
 
         response = await self._http.post(path, json=body)
-        return self._extract_data(response)
+        return cast(StorageFile, self._extract_data(response))
 
     async def move_object(self, source_path: str, destination_path: str) -> StorageFile:
         """
@@ -360,10 +362,10 @@ class AsyncStorageQueryBuilder(_BaseStorageQueryBuilder):
         body = {"source_path": source_path, "destination_path": destination_path}
 
         response = await self._http.post(path, json=body)
-        return self._extract_data(response)
+        return cast(StorageFile, self._extract_data(response))
 
 
-class AsyncStorageModule(BaseModule):
+class AsyncStorageModule(BaseModule[AsyncHTTPClient]):
     """Storage API operations."""
 
     def __init__(self, client: AsyncClient) -> None:
@@ -436,7 +438,7 @@ class AsyncStorageModule(BaseModule):
         )
 
         response = await self._http.get(path, params=params)
-        return self._extract_data(response)
+        return cast(dict[str, Any], self._extract_data(response))
 
     async def create_bucket(
         self,
@@ -445,7 +447,7 @@ class AsyncStorageModule(BaseModule):
         slug: Optional[str] = None,
         visibility: str = "private",
         file_size_limit: Optional[int] = None,
-        allowed_mime_types: Optional[list[str]] = None,
+        allowed_mime_types: Optional[builtins.list[str]] = None,
         app_category: Optional[str] = None,
         max_size_bytes: Optional[int] = None,
         max_objects: Optional[int] = None,
@@ -509,7 +511,7 @@ class AsyncStorageModule(BaseModule):
             body["max_objects"] = max_objects
 
         response = await self._http.post(path, json=body)
-        return self._extract_data(response)
+        return cast(Bucket, self._extract_data(response))
 
     async def get_bucket(self, slug: str, *, app_slug: Optional[str] = None) -> Bucket:
         """
@@ -531,7 +533,7 @@ class AsyncStorageModule(BaseModule):
 
         path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
         response = await self._http.get(path)
-        return self._extract_data(response)
+        return cast(Bucket, self._extract_data(response))
 
     async def update_bucket(
         self,
@@ -540,7 +542,7 @@ class AsyncStorageModule(BaseModule):
         name: Optional[str] = None,
         visibility: Optional[str] = None,
         file_size_limit: Optional[int] = None,
-        allowed_mime_types: Optional[list[str]] = None,
+        allowed_mime_types: Optional[builtins.list[str]] = None,
         app_category: Optional[str] = None,
         max_size_bytes: Optional[int] = None,
         max_objects: Optional[int] = None,
@@ -595,7 +597,7 @@ class AsyncStorageModule(BaseModule):
             body["max_objects"] = max_objects
 
         response = await self._http.patch(path, json=body)
-        return self._extract_data(response)
+        return cast(Bucket, self._extract_data(response))
 
     async def delete_bucket(self, slug: str, *, app_slug: Optional[str] = None) -> None:
         """

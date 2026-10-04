@@ -1,0 +1,22 @@
+{
+  "request_id": "typing-probe",
+  "results": [
+    {
+      "resource": {
+        "id": "row-1",
+        "kind": "datatable",
+        "policy_version": "default"
+      },
+      "actions": {
+        "read": "EFFECT_ALLOW"
+      },
+      "validation_errors": [
+        {
+          "path": "attr.owner",
+          "message": "owner is required"
+        }
+      ]
+    }
+  ],
+  "cerbos_call_id": "call-probe"
+}

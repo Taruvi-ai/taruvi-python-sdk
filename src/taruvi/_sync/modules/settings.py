@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from taruvi._sync.http_client import HTTPClient
 from taruvi.modules.base import BaseModule
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ _SETTINGS_METADATA = "/api/settings/metadata/"
 _USER_ATTRIBUTES = "/api/settings/user-attributes/"
 
 
-class SettingsModule(BaseModule):
+class SettingsModule(BaseModule[HTTPClient]):
     """Settings API operations."""
 
     def __init__(self, client: SyncClient) -> None:

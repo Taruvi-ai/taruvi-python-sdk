@@ -20,6 +20,12 @@ python -m pytest -m integration -q           # live tests only, when enabled
 RUN_INTEGRATION_TESTS=1 python -m pytest -m integration -q
 python -m pytest --cov=taruvi --cov-report=term-missing
 python -m pytest --cov=taruvi --cov-report=html
+python scripts/check_sdk_types.py          # strict source + public Client contracts
+python -m ruff check src/ tests/
+python -m black --check src/ tests/
+python -m build
+python -m twine check dist/*
+python scripts/check_sdk_types.py --wheel dist/*.whl
 ```
 
 The terminal summary reports passes, failures, and skips separately. Open
@@ -45,19 +51,23 @@ the repository or in command output.
 | Vector/hybrid transport | `test_vector_transport.py` | public sync/async builders through actual HTTPX request handling: JSON-body POST for vector/hybrid, scalar GET fallback, site prefix, filters, controls, scores, validation errors, and delete refusal |
 | Live-test gating | `test_live_test_harness.py` | isolated pytest subprocesses exercise the actual collection hook and login fixture; a controlled transport makes external requests impossible |
 | Modules and sync/async parity | `test_module_contracts.py`, `test_sync_async_parity.py` | module routes/payloads, public method parity, generated sync behavior |
-| Functions wire and declarations | `test_functions_transport.py`, `typing/functions_contract.py` | Actual sync/async HTTPX request loop, backend-generated invocation/envelope fixtures, canonical invocation pages, supported filters and static return typing |
+| Function and policy wire | `test_functions_transport.py`, `typing/functions_contract.py` | Actual sync/async HTTPX request loop, backend-generated invocation/envelope fixtures, protobuf-generated policy metadata, canonical invocation pages, supported filters and static return typing |
+| SDK declarations and packaging | `typing/client_contract.py`, `typing/client_contract_invalid.py`, `scripts/check_sdk_types.py` | Public factory inference, all lazy module properties, mode-preserving authentication, await/context-manager contracts, packaged `py.typed`, and isolated installed-wheel consumers |
 | Feature integrations | `test_*_integration.py` | live database, storage, functions, secrets, analytics, and app/settings contracts |
 
 Use parametrization for equivalent sync/async or status/operator families and
 assert stable API contracts. Keep transport tests deterministic and use the
 live suite for integration behavior that mocks cannot prove.
 
-On October 3, 2026 the default gate passed **248 tests, with 74 live tests
-skipped**. The vector transport slice passed 30 tests. Nine harness regressions
-failed before the gate and error handling changes. These figures do not claim
-that the 74 live workflows ran. Several module-specific live tests still skip
-missing remote resources; they need separately owned disposable fixtures before
-being treated as release acceptance.
+The October 4 local default gate passed **257 tests, with 73 live tests
+skipped**. Ruff and Black passed, strict mypy checked all 40 SDK source files
+without errors, and the declaration gate checked those files plus both positive
+consumer probes. The negative public-client probe required all ten expected
+diagnostics. The built wheel and source distribution passed Twine checks; a
+clean wheel installation retained lazy imports and passed the same consumer
+probes. These results do not claim live acceptance. Several module-specific live
+tests still skip missing remote resources; they need separately owned disposable
+fixtures before being treated as release acceptance.
 
 The vector transport cases verify request and response contracts, not database
 ranking or index behavior. The platform repository separately owns
@@ -82,21 +92,37 @@ because that backend total describes the returned page.
 
 ## Automated gate
 
-CI now includes pull requests and pushes on `beta` as well as the existing
-branches. The publish workflow runs pytest before tagging or uploading instead
-of skipping tests. Both workflows disable credentialed integration tests
-explicitly. Black formatting was repaired in ten files with unchanged Python
-ASTs; the full local gate remains **242 passed / 74 live skipped**, and Black
-and Ruff pass. Existing strict mypy findings remain advisory in CI; this does
-not claim that the type-check backlog is resolved. No workflow was dispatched
+CI runs on pull requests and pushes to the supported branches, including `beta`.
+Pytest, Ruff, Black, strict whole-source mypy, and public-client declaration
+checks are required. The package build also requires an installed-wheel consumer
+check. The publish workflow requires pytest and the same source/type gates,
+then builds and checks the wheel before tagging or uploading. Both workflows
+explicitly disable credentialed integration tests. No workflow was dispatched
 or package published during this review.
+
+The type checker and formatters target the package's minimum supported Python
+version, 3.10. `NotRequired` and `Self` use `typing_extensions` on Python 3.10.
+Source types have no imported-module suppression; the former Function-only
+command `scripts/check_function_types.py` now delegates to the full SDK gate.
+The wheel probe creates a temporary virtual environment, installs the wheel
+and its dependencies, removes source import overrides, confirms the packaged
+`py.typed` marker, and checks the public factory from that installation. It
+requires package-index access for the isolated dependency installation.
+
+The probe verifies that explicit `mode="sync"` returns a blocking client and
+`mode="async"` returns an asynchronous client. Auto-detection has a conservative
+union type because the event-loop state is only known at runtime. Token login
+and sign-out return a mode-preserving client synchronously in both modes;
+password login and resource calls follow the client's mode. Incorrect awaits,
+missing awaits, mismatched context managers, and assuming auto-detection is
+synchronous must fail type checking. JSON data types remain annotations rather
+than additional runtime response validation.
 
 Six sync/async transport regressions failed before database record-ID encoding
 was corrected. They exercise actual HTTPX URLs for GET/PATCH/DELETE, including
-reserved query, fragment, slash and percent characters; these checks prove
+reserved query, fragment, slash and percent characters. These checks prove
 request identity preservation, not that every text ID is addressable by the
-backend. The complete default gate now passes **248 tests / 74 live skipped**.
-
+backend.
 
 ## Function response review
 
@@ -120,20 +146,24 @@ Run the focused source and static gates:
 
 ```bash
 .venv/bin/pytest tests/test_functions_transport.py tests/test_module_contracts.py tests/test_sync_async_parity.py
-.venv/bin/python scripts/check_function_types.py
+.venv/bin/python scripts/check_sdk_types.py
 ```
 
-The static probe checks the owned module declarations; `--follow-imports=silent`
-keeps pre-existing imported-module diagnostics out of this targeted gate. The
-script supplies the source import path and uses the invoking Python environment.
-PR CI and publication require this check; the whole-SDK mypy job remains advisory. It is
-not a clean whole-SDK mypy result or a claim that the currently unannotated
-unified client factory/property provides complete inference. The live Functions
-suite was rewritten around the actual wire contract and remains opt-in. No live
-function or provider job was invoked during the SDK contract review.
+The static gate checks the whole SDK and public Client factory, including
+Function responses, authentication, lazy API properties, and mode-sensitive
+await/context contracts. The live Functions suite remains opt-in. It has eight
+cases: list and detail share a lifecycle case, sync queued execution adds a
+case, and async task-result envelope coverage lives in the HTTPX transport
+suite. The missing-task live case expects the backend's PENDING envelope. No
+live function or provider job was invoked during this SDK review.
 
-The final default gate passes **255 tests / 73 live skipped**. The rewritten
-Functions live suite has eight cases instead of nine: list and detail are one
-lifecycle case, sync queued execution adds a case, and async task-result envelope
-coverage is now in the HTTPX transport suite. The missing-task live case now
-expects the backend's PENDING envelope instead of an invented error.
+
+The policy fixture `tests/fixtures/policy-wire.json` was generated from the
+platform environment's `cerbos.response.v1.response_pb2.CheckResourcesResponse`
+using `MessageToDict(..., preserving_proto_field_name=True)`, exactly as the
+platform endpoint serializes it. Sync and async transport cases preserve
+`request_id`, `cerbos_call_id`, `validation_errors`, resource `policy_version`,
+and the `EFFECT_ALLOW` enum spelling through the actual SDK request loop.
+Public-client consumer probes also type-check the optional metadata fields;
+six assertion errors reproduced the incorrect camelCase declarations before
+correction. The SDK has no protobuf/Cerbos dependency from these tests.

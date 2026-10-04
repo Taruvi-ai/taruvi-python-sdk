@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
+from taruvi._sync.http_client import HTTPClient
 from taruvi.modules.base import BaseModule
 from taruvi.types import (
     Function,
@@ -95,7 +96,7 @@ def _build_invocation_params(
     )
 
 
-class FunctionsModule(BaseModule):
+class FunctionsModule(BaseModule[HTTPClient]):
     """Functions API operations."""
 
     def __init__(self, client: SyncClient) -> None:

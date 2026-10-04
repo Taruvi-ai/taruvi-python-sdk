@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from taruvi._async.http_client import AsyncHTTPClient
 from taruvi.modules.base import BaseModule
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ _SETTINGS_METADATA = "/api/settings/metadata/"
 _USER_ATTRIBUTES = "/api/settings/user-attributes/"
 
 
-class AsyncSettingsModule(BaseModule):
+class AsyncSettingsModule(BaseModule[AsyncHTTPClient]):
     """Settings API operations."""
 
     def __init__(self, client: AsyncClient) -> None:

@@ -1,26 +1,6 @@
-"""Check Function declarations without the SDK's existing imported-module findings."""
+"""Compatibility command for the full SDK declaration gate."""
 
-import os
-import subprocess
-import sys
-from pathlib import Path
-
-
-def main() -> int:
-    root = Path(__file__).resolve().parents[1]
-    return subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "mypy",
-            "--follow-imports=silent",
-            "tests/typing/functions_contract.py",
-        ],
-        cwd=root,
-        env={**os.environ, "MYPYPATH": str(root / "src")},
-        check=False,
-    ).returncode
-
+from check_sdk_types import main
 
 if __name__ == "__main__":
     raise SystemExit(main())

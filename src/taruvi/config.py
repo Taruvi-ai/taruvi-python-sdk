@@ -7,7 +7,7 @@ Supports both external application mode and function runtime mode.
 
 import os
 import platform
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -150,7 +150,7 @@ class TaruviConfig(BaseSettings):
         """Accept a site URL with or without a trailing slash."""
         return value.rstrip("/")
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         """Initialize configuration with runtime mode detection."""
         # Auto-detect function runtime mode
         if os.getenv("TARUVI_FUNCTION_RUNTIME") == "true":
@@ -235,7 +235,7 @@ class TaruviConfig(BaseSettings):
 
         # All authentication is optional!
 
-    def model_dump_safe(self) -> dict:
+    def model_dump_safe(self) -> dict[str, Any]:
         """Dump configuration without sensitive data."""
         data = self.model_dump()
         # Redact sensitive fields
@@ -252,7 +252,7 @@ class TaruviConfig(BaseSettings):
         return data
 
     @classmethod
-    def from_runtime_and_params(cls, **explicit_params) -> "TaruviConfig":
+    def from_runtime_and_params(cls, **explicit_params: Any) -> "TaruviConfig":
         """
         Create config from runtime environment and explicit parameters.
 

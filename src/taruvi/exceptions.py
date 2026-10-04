@@ -250,7 +250,7 @@ def create_error_from_response(
         Appropriate APIError subclass
     """
     if code in BILLING_ERROR_CODES:
-        error = BillingError(message, status_code, code, module)
+        error: APIError = BillingError(message, status_code, code, module)
         error.detail = detail
         return error
 
@@ -268,7 +268,7 @@ def create_error_from_response(
 
     error_class = error_map.get(status_code)
     error = (
-        error_class(message, details)
+        error_class(message, details=details)
         if error_class is not None
         else APIError(message, status_code=status_code, details=details)
     )

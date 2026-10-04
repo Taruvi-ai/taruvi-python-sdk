@@ -9,10 +9,12 @@ Provides methods for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+import builtins
+from typing import TYPE_CHECKING, Any, Optional, cast
 
+from taruvi._sync.http_client import HTTPClient
 from taruvi.modules.base import BaseModule
-from taruvi.types import User
+from taruvi.types import UserResponse
 from taruvi.utils import build_params, build_query_string
 
 if TYPE_CHECKING:
@@ -123,7 +125,7 @@ def _build_revoke_roles_request(
 # ============================================================================
 
 
-class UsersModule(BaseModule):
+class UsersModule(BaseModule[HTTPClient]):
     """User management API operations."""
 
     def __init__(self, client: SyncClient) -> None:
@@ -131,7 +133,7 @@ class UsersModule(BaseModule):
         self.client = client
         super().__init__(client._http_client, client._config)
 
-    def get(self, username: str) -> User:
+    def get(self, username: str) -> UserResponse:
         """
         Get user details by username.
 
@@ -139,7 +141,7 @@ class UsersModule(BaseModule):
             username: Username to retrieve
 
         Returns:
-            User dict with id, email, username, etc.
+            UserResponse envelope with user fields under data.
 
         Example:
             ```python
@@ -149,9 +151,9 @@ class UsersModule(BaseModule):
         """
         path = _build_get_user_path(username)
         response = self._http.get(path)
-        return response
+        return cast(UserResponse, response)
 
-    def create(self, data: dict[str, Any]) -> User:
+    def create(self, data: dict[str, Any]) -> UserResponse:
         """
         Create a new user.
 
@@ -161,7 +163,7 @@ class UsersModule(BaseModule):
                   Optional: first_name, last_name, is_active, is_staff, attributes
 
         Returns:
-            User dict with created user details
+            UserResponse envelope with created user details under data
 
         Example:
             ```python
@@ -176,13 +178,13 @@ class UsersModule(BaseModule):
             ```
         """
         response = self._http.post("/api/users/", json=data)
-        return response
+        return cast(UserResponse, response)
 
     def update(
         self,
         username: str,
         data: dict[str, Any],
-    ) -> User:
+    ) -> UserResponse:
         """
         Update an existing user.
 
@@ -193,7 +195,7 @@ class UsersModule(BaseModule):
                   last_name, is_active, is_staff, attributes
 
         Returns:
-            User dict with updated user details
+            UserResponse envelope with updated user details under data
 
         Example:
             ```python
@@ -206,7 +208,7 @@ class UsersModule(BaseModule):
         """
         path = f"/api/users/{username}/"
         response = self._http.put(path, json=data)
-        return response
+        return cast(UserResponse, response)
 
     def delete(self, username: str) -> None:
         """
@@ -259,7 +261,7 @@ class UsersModule(BaseModule):
         response = self._http.get(path)
         return response
 
-    def apps(self, username: str) -> list[dict[str, Any]]:
+    def apps(self, username: str) -> builtins.list[dict[str, Any]]:
         """
         Get apps associated with a user.
 
@@ -280,7 +282,10 @@ class UsersModule(BaseModule):
         return self._extract_data_list(response)
 
     def assign_roles(
-        self, roles: list[str], usernames: list[str], expires_at: Optional[str] = None
+        self,
+        roles: builtins.list[str],
+        usernames: builtins.list[str],
+        expires_at: Optional[str] = None,
     ) -> dict[str, Any]:
         """
         Bulk assign roles to users.
@@ -356,7 +361,9 @@ class UsersModule(BaseModule):
         """
         return self._http.put("/api/users/me/preferences/", json=data)
 
-    def revoke_roles(self, roles: list[str], usernames: list[str]) -> dict[str, Any]:
+    def revoke_roles(
+        self, roles: builtins.list[str], usernames: builtins.list[str]
+    ) -> dict[str, Any]:
         """
         Bulk revoke roles from users.
 

@@ -12,12 +12,13 @@ Usage:
         ...
 """
 
+import sys
 from typing import Any, Literal, TypedDict
 
-try:
-    from typing import NotRequired  # Python 3.11+
-except ImportError:
-    from typing_extensions import NotRequired  # noqa: UP035 - Python 3.10 backport
+if sys.version_info >= (3, 11):
+    from typing import NotRequired
+else:
+    from typing_extensions import NotRequired
 
 
 # ============================================================================
@@ -26,17 +27,34 @@ except ImportError:
 
 
 class User(TypedDict):
-    """User response structure (type hint only)."""
+    """Tenant user as serialized by the platform's user detail endpoint."""
 
-    id: str
+    id: str  # UUID serialized as a string
     email: str
     username: str
-    first_name: NotRequired[str]
-    last_name: NotRequired[str]
+    first_name: str
+    last_name: str
+    full_name: str
     is_active: bool
-    is_staff: bool
-    created_at: str  # ISO datetime string
-    updated_at: str
+    is_cloud_user: bool
+    is_superuser: bool
+    is_deleted: bool
+    date_joined: str
+    last_login: str | None
+    icon_url: str | None
+    groups: NotRequired[list[dict[str, Any]]]
+    user_permissions: NotRequired[list[dict[str, Any]]]
+    roles: NotRequired[list[dict[str, Any]]]
+    attributes: NotRequired[dict[str, Any]]
+    missing_attributes: NotRequired[dict[str, Any] | list[dict[str, Any]]]
+
+
+class UserResponse(TypedDict):
+    """Single-user response envelope retained by users.get/create/update."""
+
+    status: Literal["success"]
+    message: str
+    data: User
 
 
 class DatabaseRecord(TypedDict, total=False):
@@ -263,19 +281,21 @@ class Setting(TypedDict):
 
 
 class PolicyCheckResult(TypedDict):
-    """Policy check result (type hint only)."""
+    """One Cerbos resource result from the platform's check/resources endpoint."""
 
-    allowed: bool
-    resource: str
-    action: str
-    principal: str
-    metadata: NotRequired[dict[str, Any]]
+    resource: dict[str, str]
+    actions: dict[str, str]
+    validation_errors: NotRequired[list[dict[str, Any]]]
+    outputs: NotRequired[list[dict[str, Any]]]
+    meta: NotRequired[dict[str, Any]]
 
 
 class PolicyCheckBatchResult(TypedDict):
-    """Batch policy check result (type hint only)."""
+    """Batch resource/action check response (without a data envelope)."""
 
     results: list[PolicyCheckResult]
+    request_id: NotRequired[str]
+    cerbos_call_id: NotRequired[str]
 
 
 class AnalyticsQueryResult(TypedDict):
@@ -366,6 +386,7 @@ class PaginatedResponse(TypedDict):
 __all__ = [  # noqa: RUF022 - grouped by kind on purpose
     # Response types
     "User",
+    "UserResponse",
     "DatabaseRecord",
     "StorageFile",
     "StorageAccessLinkResult",

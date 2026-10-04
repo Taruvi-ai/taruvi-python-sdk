@@ -9,7 +9,7 @@ Provides shared functionality for both async and sync HTTP clients:
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import httpx
 
@@ -129,7 +129,7 @@ class BaseHTTPClient:
             ResponseError: If JSON parsing fails
         """
         try:
-            return response.json()
+            return cast(dict[str, Any], response.json())
         except Exception as e:
             raise ResponseError(
                 "Failed to parse JSON response",

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
+from taruvi._async.http_client import AsyncHTTPClient
 from taruvi.modules.base import BaseModule
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ if TYPE_CHECKING:
 _ANALYTICS_EXECUTE = "/api/apps/{app_slug}/analytics/queries/{query_slug}/execute/"
 
 
-class AsyncAnalyticsModule(BaseModule):
+class AsyncAnalyticsModule(BaseModule[AsyncHTTPClient]):
     """Analytics API operations."""
 
     def __init__(self, client: AsyncClient) -> None:

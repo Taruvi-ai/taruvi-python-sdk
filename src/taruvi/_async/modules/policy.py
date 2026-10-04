@@ -8,8 +8,9 @@ Provides methods for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
+from taruvi._async.http_client import AsyncHTTPClient
 from taruvi.modules.base import BaseModule
 from taruvi.types import PolicyCheckBatchResult
 
@@ -39,7 +40,7 @@ def _build_check_resources_request(
     return body
 
 
-class AsyncPolicyModule(BaseModule):
+class AsyncPolicyModule(BaseModule[AsyncHTTPClient]):
     """Policy API operations for authorization checks."""
 
     def __init__(self, client: AsyncClient) -> None:
@@ -68,7 +69,7 @@ class AsyncPolicyModule(BaseModule):
 
         Returns:
             PolicyCheckBatchResult dict with:
-                - requestId: str
+                - request_id: str (when returned by Cerbos)
                 - results: list of PolicyCheckResult dicts
 
         Example:
@@ -95,7 +96,7 @@ class AsyncPolicyModule(BaseModule):
         body = _build_check_resources_request(resources, principal, aux_data)
 
         response = await self._http.post(path, json=body)
-        return response
+        return cast(PolicyCheckBatchResult, response)
 
     async def filter_allowed(
         self,

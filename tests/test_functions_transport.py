@@ -1,7 +1,8 @@
-"""Functions contracts through the actual SDK request loop and HTTPX transport.
+"""Function and policy contracts through the actual SDK request loop and HTTPX transport.
 
 Fixtures were generated with FunctionInvocationRecordSerializer and AppDataResponse
-from the platform checkout; no database rows or live functions are touched.
+from the platform checkout. The policy fixture uses its Cerbos protobuf and
+MessageToDict with preserving_proto_field_name=True. No live services are touched.
 """
 
 import json
@@ -14,6 +15,7 @@ from taruvi._async.client import AsyncClient
 from taruvi._sync.client import SyncClient
 
 WIRE = json.loads((Path(__file__).parent / "fixtures/function-wire.json").read_text())
+POLICY_WIRE = json.loads((Path(__file__).parent / "fixtures/policy-wire.json").read_text())
 BASE = "https://api.example.com/sites/demo"
 
 
@@ -153,3 +155,54 @@ def test_legacy_invocation_paging_maps_only_aligned_offsets_and_rejects_unsuppor
         client.close()
     assert len(requests) == 1
     assert dict(requests[0].url.params) == {"page": "3", "page_size": "10"}
+
+
+def test_sync_policy_preserves_protobuf_metadata(unauth_test_config):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=POLICY_WIRE)
+
+    client = sync_client(handler)
+    resources = [{"resource": {"id": "row-1", "kind": "datatable"}, "actions": ["read"]}]
+    try:
+        response = client.policy.check_resources(resources)
+    finally:
+        client.close()
+    assert response == POLICY_WIRE
+    assert response["request_id"] == "typing-probe"
+    assert response["cerbos_call_id"] == "call-probe"
+    resource = response["results"][0]
+    assert resource["resource"]["policy_version"] == "default"
+    assert resource["actions"]["read"] == "EFFECT_ALLOW"
+    assert resource["validation_errors"] == [{"path": "attr.owner", "message": "owner is required"}]
+    assert requests[0].method == "POST"
+    assert requests[0].url.path == "/sites/demo/api/apps/app/check/resources/"
+    assert json.loads(requests[0].content) == {"resources": resources}
+
+
+@pytest.mark.asyncio
+async def test_async_policy_preserves_protobuf_metadata(unauth_test_config):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=POLICY_WIRE)
+
+    client = await async_client(handler)
+    resources = [{"resource": {"id": "row-1", "kind": "datatable"}, "actions": ["read"]}]
+    try:
+        response = await client.policy.check_resources(resources)
+    finally:
+        await client.close()
+    assert response == POLICY_WIRE
+    assert response["request_id"] == "typing-probe"
+    assert response["cerbos_call_id"] == "call-probe"
+    resource = response["results"][0]
+    assert resource["resource"]["policy_version"] == "default"
+    assert resource["actions"]["read"] == "EFFECT_ALLOW"
+    assert resource["validation_errors"] == [{"path": "attr.owner", "message": "owner is required"}]
+    assert requests[0].method == "POST"
+    assert requests[0].url.path == "/sites/demo/api/apps/app/check/resources/"
+    assert json.loads(requests[0].content) == {"resources": resources}

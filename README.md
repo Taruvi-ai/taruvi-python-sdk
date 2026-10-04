@@ -900,26 +900,29 @@ users = client.users.list(
 # Filter by reference attributes (e.g., department_id from user attributes schema)
 users = client.users.list(department_id=123, is_active=True)
 
-# Get specific user
-user = client.users.get("alice")
+# Get specific user (UserResponse envelope)
+user_response = client.users.get("alice")
+user = user_response["data"]
+print(user["username"])
 
 # Create user
-new_user = client.users.create({
+new_user_response = client.users.create({
     "username": "bob",
     "email": "bob@example.com",
     "password": "secret456",
     "confirm_password": "secret456",
     "first_name": "Bob",
     "last_name": "Smith",
-    "is_active": True,
-    "is_staff": False
+    "is_active": True
 })
+new_user = new_user_response["data"]
 
 # Update user
-updated = client.users.update("bob", {
+updated_response = client.users.update("bob", {
     "email": "bob.smith@example.com",
     "first_name": "Robert"
 })
+updated_user = updated_response["data"]
 
 # Delete user
 client.users.delete("bob")
@@ -1656,9 +1659,23 @@ black src/ tests/
 # Lint with Ruff
 ruff check src/ tests/
 
-# Type checking with mypy
-mypy src/taruvi
+# Strict source and public Client declaration checks
+python scripts/check_sdk_types.py
+
+# Build and verify installed-package declarations
+python -m build
+python -m twine check dist/*
+python scripts/check_sdk_types.py --wheel dist/*.whl
 ```
+
+The package includes a PEP 561 `py.typed` marker. Type checkers infer a
+blocking client for explicit `mode="sync"` and an asynchronous client for
+`mode="async"`, including each lazy API property. Omitting `mode` returns a
+union in static analysis because auto-detection depends on a running event
+loop. Use an explicit mode when the caller needs a known await contract.
+Token sign-in and sign-out return a client synchronously in either mode;
+password sign-in follows the client's sync/async mode. User get/create/update
+return `UserResponse` envelopes with the user under `data`.
 
 ### Project Structure
 

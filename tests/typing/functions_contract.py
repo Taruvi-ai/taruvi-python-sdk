@@ -1,4 +1,4 @@
-"""Static contract probe; run mypy with imported module diagnostics silent."""
+"""Function wire declarations, also checked against the installed package."""
 
 from taruvi._async.modules.functions import AsyncFunctionsModule
 from taruvi._sync.modules.functions import FunctionsModule

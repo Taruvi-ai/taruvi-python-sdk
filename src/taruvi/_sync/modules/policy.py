@@ -8,8 +8,9 @@ Provides methods for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
+from taruvi._sync.http_client import HTTPClient
 from taruvi.modules.base import BaseModule
 from taruvi.types import PolicyCheckBatchResult
 
@@ -39,7 +40,7 @@ def _build_check_resources_request(
     return body
 
 
-class PolicyModule(BaseModule):
+class PolicyModule(BaseModule[HTTPClient]):
     """Policy API operations for authorization checks."""
 
     def __init__(self, client: SyncClient) -> None:
@@ -68,7 +69,7 @@ class PolicyModule(BaseModule):
 
         Returns:
             PolicyCheckBatchResult dict with:
-                - requestId: str
+                - request_id: str (when returned by Cerbos)
                 - results: list of PolicyCheckResult dicts
 
         Example:
@@ -95,7 +96,7 @@ class PolicyModule(BaseModule):
         body = _build_check_resources_request(resources, principal, aux_data)
 
         response = self._http.post(path, json=body)
-        return response
+        return cast(PolicyCheckBatchResult, response)
 
     def filter_allowed(
         self,

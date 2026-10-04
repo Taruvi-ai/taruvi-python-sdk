@@ -11,16 +11,19 @@ Provides methods for:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from copy import deepcopy
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 from urllib.parse import quote
 
+from taruvi._sync.http_client import HTTPClient
 from taruvi.modules.base import BaseModule
 from taruvi.types import DatabaseRecord
 from taruvi.utils import build_params as build_params_util
 
 if TYPE_CHECKING:
     from taruvi._sync.client import SyncClient
+    from taruvi.config import TaruviConfig
 
 # API endpoint paths for database
 _DATATABLE_DATA = "/api/apps/{app_slug}/datatables/{table_name}/data/"
@@ -60,11 +63,15 @@ _LIST_OPERATORS = frozenset(
 # ============================================================================
 
 
-class _BaseQueryBuilder(BaseModule):
+class _BaseQueryBuilder(BaseModule[HTTPClient]):
     """Base query builder with shared logic."""
 
     def __init__(
-        self, http_client, config, table_name: str, app_slug: Optional[str] = None
+        self,
+        http_client: HTTPClient,
+        config: TaruviConfig,
+        table_name: str,
+        app_slug: Optional[str] = None,
     ) -> None:
         super().__init__(http_client, config)
         self.app_slug = self._ensure_app_slug(app_slug)
@@ -72,8 +79,8 @@ class _BaseQueryBuilder(BaseModule):
         self._is_edges: bool = False
         self._record_id: Optional[str] = None
         self._operation: Optional[str] = None
-        self._body: Any = None
-        self._delete_ids: Optional[list[int]] = None
+        self._body: Optional[dict[str, Any] | list[dict[str, Any]]] = None
+        self._delete_ids: Optional[Sequence[str | int]] = None
         self._is_upsert: bool = False
         self._unique_fields: Optional[str] = None
         self._filters: dict[str, Any] = {}
@@ -105,7 +112,7 @@ class _BaseQueryBuilder(BaseModule):
     def _get_table_name(self) -> str:
         return f"{self.table_name}_edges" if self._is_edges else self.table_name
 
-    def _add_filter(self, field: str, operator: str, value: Any) -> None:
+    def _add_filter(self, field: str, operator: Optional[str], value: Any) -> None:
         # Keep JSON values and repeated conditions separate from URL encoding.
         self._filter_conditions.append(
             {"field": field, "operator": operator, "value": deepcopy(value)}
@@ -163,7 +170,7 @@ class _BaseQueryBuilder(BaseModule):
     def _set_search(self, query: str) -> None:
         self._search = query
 
-    def _set_raw_filters(self, filters: dict | list) -> None:
+    def _set_raw_filters(self, filters: dict[str, Any] | list[dict[str, Any]]) -> None:
         import json
 
         self._raw_filters = json.dumps(filters)
@@ -251,6 +258,7 @@ class _BaseQueryBuilder(BaseModule):
             )
 
         raw_filters = json.loads(self._raw_filters) if self._raw_filters else None
+        filters: list[dict[str, Any]] | dict[str, Any] | None
         if isinstance(raw_filters, list):
             # Both sides already use CrudFilters; preserve typed values and
             # repeated field/operator pairs rather than flattening them.
@@ -369,7 +377,10 @@ class QueryBuilder(_BaseQueryBuilder):
     # -- Filter & query methods --
 
     def filter(
-        self, field_or_logic: str | dict | list, operator: str | None = None, value: Any = None
+        self,
+        field_or_logic: str | dict[str, Any] | list[dict[str, Any]],
+        operator: str | None = None,
+        value: Any = None,
     ) -> QueryBuilder:
         """Filter records. Supports simple and complex filters.
 
@@ -609,8 +620,8 @@ class QueryBuilder(_BaseQueryBuilder):
                 self._page_size = previous_page_size
         data = result.get("data", [])
         if isinstance(data, list):
-            return data[0] if data else None
-        return data
+            return cast(Optional[dict[str, Any]], data[0] if data else None)
+        return cast(Optional[dict[str, Any]], data)
 
     def count(self) -> int:
         """Get count of matching records."""
@@ -624,7 +635,7 @@ class QueryBuilder(_BaseQueryBuilder):
                 app_slug=self.app_slug, table_name=self._get_table_name()
             )
             response = self._http.post(path, json=body)
-            return response.get("total", 0)
+            return cast(int, response.get("total", 0))
 
         path = self._build_path()
         params = self.build_params()
@@ -633,10 +644,10 @@ class QueryBuilder(_BaseQueryBuilder):
         params["page_size"] = 1
         params.pop("page", None)
         response = self._http.get(path, params=params)
-        return response.get("total", 0)
+        return cast(int, response.get("total", 0))
 
 
-class DatabaseModule(BaseModule):
+class DatabaseModule(BaseModule[HTTPClient]):
     """Database API operations."""
 
     def __init__(self, client: SyncClient) -> None:
@@ -660,7 +671,7 @@ class DatabaseModule(BaseModule):
             app_slug=app_slug, table_name=table_name, record_id=str(record_id)
         )
         response = self._http.get(path)
-        return self._extract_data(response)
+        return cast(DatabaseRecord, self._extract_data(response))
 
     def create(
         self,
@@ -673,7 +684,7 @@ class DatabaseModule(BaseModule):
         app_slug = self._ensure_app_slug(app_slug)
         path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
         response = self._http.post(path, json=data)
-        return response.get("data")
+        return cast(DatabaseRecord | list[DatabaseRecord], response.get("data"))
 
     def update(
         self,
@@ -699,7 +710,7 @@ class DatabaseModule(BaseModule):
                 app_slug=app_slug, table_name=table_name, record_id=str(record_id)
             )
             response = self._http.patch(path, json=data)
-            return self._extract_data(response)
+            return cast(DatabaseRecord | list[DatabaseRecord], self._extract_data(response))
 
     def delete(
         self,
@@ -736,3 +747,5 @@ class DatabaseModule(BaseModule):
             import json
 
             return self._http.delete(path, params={"filter": json.dumps(filter)})
+
+        return None

@@ -10,8 +10,10 @@ Provides methods for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+import builtins
+from typing import TYPE_CHECKING, Any, Optional, cast
 
+from taruvi._sync.http_client import HTTPClient
 from taruvi.modules.base import BaseModule
 from taruvi.types import Secret
 from taruvi.utils import build_params
@@ -24,7 +26,7 @@ _SECRETS_BASE = "/api/secrets/"
 _SECRET_DETAIL = "/api/secrets/{key}/"
 
 
-class SecretsModule(BaseModule):
+class SecretsModule(BaseModule[HTTPClient]):
     """Secrets API operations."""
 
     def __init__(self, client: SyncClient) -> None:
@@ -34,11 +36,11 @@ class SecretsModule(BaseModule):
 
     def list(
         self,
-        keys: Optional[list[str]] = None,
+        keys: Optional[builtins.list[str]] = None,
         *,
         search: Optional[str] = None,
         app: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        tags: Optional[builtins.list[str]] = None,
         secret_type: Optional[str] = None,
         include_metadata: bool = False,
         page: Optional[int] = None,
@@ -112,7 +114,7 @@ class SecretsModule(BaseModule):
         return response
 
     def get(
-        self, key: str, *, app: Optional[str] = None, tags: Optional[list[str]] = None
+        self, key: str, *, app: Optional[str] = None, tags: Optional[builtins.list[str]] = None
     ) -> Secret:
         """
         Get a specific secret by key.
@@ -159,6 +161,6 @@ class SecretsModule(BaseModule):
         )
 
         response = self._http.get(path, params=params)
-        return self._extract_data(response)
+        return cast(Secret, self._extract_data(response))
 
     # get_many removed: use list(keys=[...]) instead

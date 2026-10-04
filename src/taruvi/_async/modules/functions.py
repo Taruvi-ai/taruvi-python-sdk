@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional, Union, cast
 
+from taruvi._async.http_client import AsyncHTTPClient
 from taruvi.modules.base import BaseModule
 from taruvi.types import (
     Function,
@@ -95,7 +96,7 @@ def _build_invocation_params(
     )
 
 
-class AsyncFunctionsModule(BaseModule):
+class AsyncFunctionsModule(BaseModule[AsyncHTTPClient]):
     """Functions API operations."""
 
     def __init__(self, client: AsyncClient) -> None:

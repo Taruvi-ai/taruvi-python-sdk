@@ -11,8 +11,9 @@ Provides methods for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
+from taruvi._sync.http_client import HTTPClient
 from taruvi.modules.base import BaseModule
 from taruvi.utils import safe_get_nested
 
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     from taruvi._sync.client import SyncClient
 
 
-class AuthModule(BaseModule):
+class AuthModule(BaseModule[HTTPClient]):
     """Authentication module for user-level auth operations."""
 
     def __init__(self, client: SyncClient) -> None:
@@ -152,7 +153,7 @@ class AuthModule(BaseModule):
         # Clone client with no auth credentials
         return self._clone_with_auth(api_key=None, jwt=None, session_token=None)
 
-    def _clone_with_auth(self, **auth_kwargs) -> SyncClient:
+    def _clone_with_auth(self, **auth_kwargs: Optional[str]) -> SyncClient:
         """
         Clone parent client with updated auth credentials.
 
@@ -167,7 +168,6 @@ class AuthModule(BaseModule):
         Returns:
             New client instance with updated auth
         """
-        from taruvi._sync.http_client import HTTPClient
         from taruvi.config import TaruviConfig
 
         # Get current config as dict
