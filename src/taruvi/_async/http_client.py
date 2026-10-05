@@ -8,11 +8,20 @@ Handles all HTTP communication with Taruvi API using async/await:
 - Error response parsing
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Any, Optional
+import sys
+from types import TracebackType
+from typing import Any, Optional, Union
 
 import httpx
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 from taruvi.config import TaruviConfig
 from taruvi.exceptions import (
@@ -60,7 +69,7 @@ class AsyncHTTPClient(BaseHTTPClient):
         path: str,
         *,
         params: Optional[dict[str, Any]] = None,
-        json: Optional[dict[str, Any]] = None,
+        json: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None,
         data: Optional[dict[str, Any]] = None,
         headers: Optional[dict[str, str]] = None,
         retry: bool = True,
@@ -154,7 +163,7 @@ class AsyncHTTPClient(BaseHTTPClient):
         path: str,
         *,
         params: Optional[dict[str, Any]] = None,
-        json: Optional[dict[str, Any]] = None,
+        json: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None,
         data: Optional[dict[str, Any]] = None,
         headers: Optional[dict[str, str]] = None,
         timeout: Optional[float] = None,
@@ -168,7 +177,7 @@ class AsyncHTTPClient(BaseHTTPClient):
         self,
         path: str,
         *,
-        json: Optional[dict[str, Any]] = None,
+        json: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         """Make a PUT request."""
@@ -178,7 +187,7 @@ class AsyncHTTPClient(BaseHTTPClient):
         self,
         path: str,
         *,
-        json: Optional[dict[str, Any]] = None,
+        json: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         """Make a PATCH request."""
@@ -189,16 +198,21 @@ class AsyncHTTPClient(BaseHTTPClient):
         path: str,
         *,
         params: Optional[dict[str, Any]] = None,
-        json: Optional[dict[str, Any]] = None,
+        json: Optional[Union[dict[str, Any], list[dict[str, Any]]]] = None,
         headers: Optional[dict[str, str]] = None,
     ) -> dict[str, Any]:
         """Make a DELETE request."""
         return await self.request("DELETE", path, params=params, json=json, headers=headers)
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         """Support async context manager."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         """Close client on context exit."""
         await self.close()

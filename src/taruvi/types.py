@@ -12,12 +12,13 @@ Usage:
         ...
 """
 
-from typing import Any, Literal, TypedDict
+import sys
+from typing import Any, Literal, Optional, TypedDict
 
-try:
-    from typing import NotRequired  # Python 3.11+
-except ImportError:
-    from typing_extensions import NotRequired  # noqa: UP035 - Python 3.10 backport
+if sys.version_info >= (3, 11):
+    from typing import NotRequired
+else:
+    from typing_extensions import NotRequired
 
 
 # ============================================================================
@@ -26,17 +27,34 @@ except ImportError:
 
 
 class User(TypedDict):
-    """User response structure (type hint only)."""
+    """Tenant user as serialized by the platform's user detail endpoint."""
 
-    id: str
+    id: str  # UUID serialized as a string
     email: str
     username: str
-    first_name: NotRequired[str]
-    last_name: NotRequired[str]
+    first_name: str
+    last_name: str
+    full_name: str
     is_active: bool
-    is_staff: bool
-    created_at: str  # ISO datetime string
-    updated_at: str
+    is_cloud_user: bool
+    is_superuser: bool
+    is_deleted: bool
+    date_joined: str
+    last_login: str | None
+    icon_url: str | None
+    groups: NotRequired[list[dict[str, Any]]]
+    user_permissions: NotRequired[list[dict[str, Any]]]
+    roles: NotRequired[list[dict[str, Any]]]
+    attributes: NotRequired[dict[str, Any]]
+    missing_attributes: NotRequired[dict[str, Any] | list[dict[str, Any]]]
+
+
+class UserResponse(TypedDict):
+    """Single-user response envelope retained by users.get/create/update."""
+
+    status: Literal["success"]
+    message: str
+    data: User
 
 
 class DatabaseRecord(TypedDict, total=False):
@@ -63,16 +81,17 @@ class PgRangeValue(TypedDict):
 class StorageFile(TypedDict):
     """Storage file metadata (type hint only)."""
 
-    id: str
+    id: int
+    uuid: str
     filename: str
-    path: str
+    file_path: str
+    file_url: Optional[str]
     size: int
     mimetype: str
     storage_provider: Literal["s3", "sharepoint"]
     is_office_editable: bool
     visibility: Literal["public", "private"]
     created_at: str
-    url: NotRequired[str]
     metadata: NotRequired[dict[str, Any]]
 
 
@@ -125,29 +144,95 @@ class Function(TypedDict):
     id: int
     name: str
     slug: str
-    environment: Literal["python", "node"]
-    execution_mode: Literal["app", "system"]
-    app: NotRequired[int]
-    app_name: NotRequired[str]
-    app_slug: NotRequired[str]
+    environment: Literal["python", "javascript"]
+    execution_mode: Literal["app", "proxy", "system"]
+    app: NotRequired[int | None]
+    app_name: NotRequired[str | None]
+    app_slug: NotRequired[str | None]
     is_active: bool
     async_mode: bool
-    created_at: str
-    updated_at: str
+    created_at: str | None
+    updated_at: str | None
+
+
+class FunctionTaskResult(TypedDict):
+    """Celery result data; global lookup omits fields present on invocation metadata."""
+
+    task_id: str
+    status: str
+    result: Any
+    date_created: str | None
+    date_done: str | None
+    traceback: NotRequired[str | None]
+    task_args: NotRequired[Any]
+    task_kwargs: NotRequired[Any]
+    task_name: NotRequired[str | None]
+    worker: NotRequired[str | None]
+    meta: NotRequired[Any]
 
 
 class FunctionInvocation(TypedDict):
-    """Function invocation result (type hint only)."""
+    """Invocation serializer record. Task state lives in nullable task_result."""
 
     id: int
-    celery_task_id: NotRequired[str]
-    status: Literal["pending", "PENDING", "running", "STARTED", "completed", "SUCCESS", "FAILURE"]
-    result: NotRequired[Any]
-    error: NotRequired[str]
+    function: int
+    function_name: str
+    function_slug: str
+    celery_task_id: str
+    trigger_type: str
+    user_id: str | None
+    user_username: str | None
+    user_email: str | None
+    task_result: FunctionTaskResult | None
+    history_id: int | None
+    logs: NotRequired[list[dict[str, Any]] | None]
+    log_count: int
+    has_error: bool
+    created_at: str | None
+    updated_at: str | None
+    executed_code: NotRequired[str | None]
+
+
+class FunctionExecutionResponse(TypedDict):
+    """Full execute envelope, with queued optional for older platform releases."""
+
+    status: Literal["success", "error"]
+    message: str
+    data: Any
+    invocation: FunctionInvocation
+    queued: NotRequired[bool]
+    success: NotRequired[bool]
+
+
+class FunctionInvocationListResponse(TypedDict):
+    """Page-number invocation listing; list records omit heavy logs."""
+
+    status: Literal["success", "error"]
+    message: str
+    data: list[FunctionInvocation]
+    total: int
+
+
+class FunctionListResponse(TypedDict):
+    """Limit/offset function listing."""
+
+    status: Literal["success", "error"]
+    message: str
+    data: list[Function]
+    total: int
+
+
+class FunctionTaskResultResponse(TypedDict):
+    """Global task lookup envelope; result remains the executor's stored output."""
+
+    status: Literal["success", "error"]
+    message: str
+    data: FunctionTaskResult
 
 
 class Secret(TypedDict):
     """A secret (type hint only). ``get()`` returns ``value``; list responses omit it."""
+
     key: str
     value: NotRequired[str | dict[str, Any]]
     tags: NotRequired[list[str]]
@@ -197,19 +282,21 @@ class Setting(TypedDict):
 
 
 class PolicyCheckResult(TypedDict):
-    """Policy check result (type hint only)."""
+    """One Cerbos resource result from the platform's check/resources endpoint."""
 
-    allowed: bool
-    resource: str
-    action: str
-    principal: str
-    metadata: NotRequired[dict[str, Any]]
+    resource: dict[str, str]
+    actions: dict[str, str]
+    validation_errors: NotRequired[list[dict[str, Any]]]
+    outputs: NotRequired[list[dict[str, Any]]]
+    meta: NotRequired[dict[str, Any]]
 
 
 class PolicyCheckBatchResult(TypedDict):
-    """Batch policy check result (type hint only)."""
+    """Batch resource/action check response (without a data envelope)."""
 
     results: list[PolicyCheckResult]
+    request_id: NotRequired[str]
+    cerbos_call_id: NotRequired[str]
 
 
 class AnalyticsQueryResult(TypedDict):
@@ -250,7 +337,7 @@ class FunctionFilters(TypedDict, total=False):
     limit: int
     offset: int
     is_active: bool
-    environment: Literal["python", "node"]
+    environment: Literal["python", "javascript"]
 
 
 class SecretFilters(TypedDict, total=False):
@@ -300,6 +387,7 @@ class PaginatedResponse(TypedDict):
 __all__ = [  # noqa: RUF022 - grouped by kind on purpose
     # Response types
     "User",
+    "UserResponse",
     "DatabaseRecord",
     "StorageFile",
     "StorageAccessLinkResult",
@@ -308,6 +396,11 @@ __all__ = [  # noqa: RUF022 - grouped by kind on purpose
     "StorageBrowseData",
     "Function",
     "FunctionInvocation",
+    "FunctionExecutionResponse",
+    "FunctionInvocationListResponse",
+    "FunctionListResponse",
+    "FunctionTaskResult",
+    "FunctionTaskResultResponse",
     "Secret",
     "Bucket",
     "App",

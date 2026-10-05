@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
+from taruvi._sync.http_client import HTTPClient
 from taruvi.modules.base import BaseModule
 
 if TYPE_CHECKING:
@@ -21,7 +22,7 @@ _APP_ROLES = "/api/apps/{app_slug}/roles/"
 _APP_SETTINGS = "/api/apps/{app_slug}/settings/"
 
 
-class AppModule(BaseModule):
+class AppModule(BaseModule[HTTPClient]):
     """App API operations."""
 
     def __init__(self, client: SyncClient) -> None:

@@ -9,7 +9,7 @@ Provides shared functionality for both async and sync HTTP clients:
 """
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 import httpx
 
@@ -29,7 +29,9 @@ _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
 _NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
-def transport_error(error: httpx.TransportError, *, method: str, path: str, api_url: str, timeout: object) -> Exception:
+def transport_error(
+    error: httpx.TransportError, *, method: str, path: str, api_url: str, timeout: object
+) -> Exception:
     """Convert an httpx transport failure into the matching SDK error."""
     from taruvi.exceptions import ConnectionError, TimeoutError
 
@@ -127,7 +129,7 @@ class BaseHTTPClient:
             ResponseError: If JSON parsing fails
         """
         try:
-            return response.json()
+            return cast(dict[str, Any], response.json())
         except Exception as e:
             raise ResponseError(
                 "Failed to parse JSON response",
@@ -167,7 +169,7 @@ class BaseHTTPClient:
             code = error_data.get("code")
             detail = error_data.get("detail")
             module = error_data.get("module")
-        except Exception:
+        except (ValueError, AttributeError, TypeError):
             message = response.text or f"HTTP {response.status_code}"
             details = None
 

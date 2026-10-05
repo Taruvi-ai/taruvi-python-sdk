@@ -8,15 +8,17 @@ Provides common functionality for all Taruvi modules:
 - Common patterns
 """
 
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Generic, Optional, TypeVar, cast
 
 if TYPE_CHECKING:
     from taruvi.config import TaruviConfig
-    from taruvi.http_client import HTTPClient
-    from taruvi.sync_http_client import SyncHTTPClient
+    from taruvi.http_client_base import BaseHTTPClient
 
 
-class BaseModule:
+HTTPClientT = TypeVar("HTTPClientT", bound="BaseHTTPClient")
+
+
+class BaseModule(Generic[HTTPClientT]):
     """
     Base class for all Taruvi API modules.
 
@@ -31,7 +33,7 @@ class BaseModule:
 
     def __init__(
         self,
-        http_client: Union["HTTPClient", "SyncHTTPClient"],
+        http_client: HTTPClientT,
         config: "TaruviConfig",
     ) -> None:
         """
@@ -113,7 +115,7 @@ class BaseModule:
             items = self._extract_data_list(response)
             # Returns response["data"] or []
         """
-        return response.get("data", [])
+        return cast(list[Any], response.get("data", []))
 
     @staticmethod
     def _extract_count(response: dict[str, Any]) -> int:
@@ -130,7 +132,7 @@ class BaseModule:
             total = self._extract_count(response)
             # Returns response["count"] or 0
         """
-        return response.get("count", 0)
+        return cast(int, response.get("count", 0))
 
     @staticmethod
     def _extract_results(response: dict[str, Any]) -> list[Any]:
@@ -147,7 +149,7 @@ class BaseModule:
             items = self._extract_results(response)
             # Returns response["results"] or []
         """
-        return response.get("results", [])
+        return cast(list[Any], response.get("results", []))
 
     def _build_list_params(
         self,

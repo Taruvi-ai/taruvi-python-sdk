@@ -49,7 +49,7 @@ Taruvi Cloud is a multi-tenant Backend-as-a-Service platform that provides:
 The Taruvi Python SDK provides a clean, pythonic interface to all platform capabilities with:
 - **Full Type Safety**: Complete type hints for IDE autocomplete
 - **Dual Runtime Modes**: Both async and native blocking sync support
-- **AuthManager Authentication**: Clean separation of client initialization and authentication
+- **Client Authentication**: Sign in through `client.auth`, or supply an existing credential at initialization
 - **Production Ready**: Automatic retries, connection pooling, timeout handling
 
 📚 **[Full Documentation](https://docs.taruvi.cloud)** | 🌐 **[Taruvi Cloud](https://taruvi.cloud)**
@@ -63,7 +63,7 @@ The Taruvi Python SDK provides a clean, pythonic interface to all platform capab
 - Lazy-loaded modules for optimal performance
 - Context manager support (`with` / `async with`)
 
-🔐 **AuthManager-Based Authentication**
+🔐 **Client Authentication**
 - Clean separation of client initialization and authentication
 - JWT Bearer tokens
 - Knox API Keys
@@ -151,9 +151,9 @@ client = Client(
     app_slug="my-app"
 )
 
-# Step 2: Authenticate using AuthManager
+# Step 2: Authenticate using client.auth
 auth_client = client.auth.signInWithPassword(
-    username="alice@example.com",
+    email="alice@example.com",
     password="secret123"
 )
 
@@ -180,9 +180,9 @@ async def main():
         app_slug="my-app"
     )
 
-    # Step 2: Authenticate using AuthManager (not async)
-    auth_client = client.auth.signInWithPassword(
-        username="alice@example.com",
+    # Step 2: Password sign-in performs HTTP and must be awaited in async mode.
+    auth_client = await client.auth.signInWithPassword(
+        email="alice@example.com",
         password="secret123"
     )
 
@@ -195,6 +195,7 @@ async def main():
     print(f"Found {result['total']} users")
 
     await auth_client.close()
+    await client.close()
 
 asyncio.run(main())
 ```
@@ -227,7 +228,9 @@ def main(params, user_data):
 
 ### Overview
 
-Taruvi SDK uses **AuthManager** for all authentication. You create an unauthenticated client first, then authenticate using one of the AuthManager methods.
+Use **`client.auth`** to sign in or clone a client with a different credential.
+You can also initialize `Client` with an existing `api_key`, `jwt`, or
+`session_token`.
 
 This approach provides:
 - ✅ Clean separation of client initialization and authentication
@@ -246,7 +249,7 @@ client = Client(
 )
 ```
 
-**Step 2**: Authenticate using AuthManager (choose one method)
+**Step 2**: Authenticate using `client.auth` (choose one method)
 
 ---
 
@@ -255,7 +258,7 @@ client = Client(
 ```python
 # Authenticate with username/password
 auth_client = client.auth.signInWithPassword(
-    username="alice@example.com",
+    email="alice@example.com",
     password="secret123"
 )
 
@@ -323,7 +326,7 @@ client = Client(
 
 # Authenticate with username/password
 auth_client = client.auth.signInWithPassword(
-    username="alice@example.com",
+    email="alice@example.com",
     password="secret123"
 )
 
@@ -348,13 +351,13 @@ client = Client(api_url="...", app_slug="...")
 
 # Authenticate as user 1
 user1_client = client.auth.signInWithPassword(
-    username="user1@example.com",
+    email="user1@example.com",
     password="pass1"
 )
 
 # Switch to user 2
 user2_client = user1_client.auth.signInWithPassword(
-    username="user2@example.com",
+    email="user2@example.com",
     password="pass2"
 )
 
@@ -390,7 +393,7 @@ client = Client(
 
 # Authenticate with credentials from environment
 auth_client = client.auth.signInWithPassword(
-    username=os.getenv("TARUVI_USERNAME"),
+    email=os.getenv("TARUVI_USERNAME"),
     password=os.getenv("TARUVI_PASSWORD")
 )
 
@@ -418,6 +421,20 @@ result = client.functions.execute(
 print(result["data"])
 ```
 
+Both client modes return the complete execution envelope. `data` is the user
+result, `invocation` is the audit record, and matching servers include `queued`
+(`True` for an asynchronous acknowledgement, `False` for a synchronous run).
+Queued responses contain `data=[]`; a synchronous `None` result also becomes
+`[]`, so the data shape alone does not identify the mode. Older servers omit
+`queued`; select `is_async` explicitly when using them.
+
+Invocation records expose numeric `id` and `function`, nullable caller fields,
+and a nullable `task_result`. Read Celery status from `task_result["status"]`
+when it exists; there is no top-level invocation `status` or `task_status`.
+List records omit heavy `logs`, while detail records include them. The global
+`get_result` method returns its own envelope, with retained executor output
+under `data["result"]` and status under `data["status"]`.
+
 #### Execute Function (Asynchronous with Polling)
 
 ```python
@@ -442,7 +459,7 @@ while True:
         print("Completed:", task_result['data']['result'])
         break
     elif status == 'FAILURE':
-        print("Failed:", task_result['data']['traceback'])
+        print("Failed:", task_result['data'].get('traceback', 'Unavailable for this caller'))
         break
     else:
         print(f"Status: {status}, waiting...")
@@ -454,7 +471,7 @@ while True:
 ```python
 # List all functions
 functions = client.functions.list(limit=50, offset=0)
-for func in functions['results']:
+for func in functions['data']:
     print(f"{func['name']}: {func['slug']}")
 ```
 
@@ -470,25 +487,38 @@ print(func['name'], func['execution_mode'])
 
 ```python
 # List all invocations
-invocations = client.functions.list_invocations(limit=50, offset=0)
-for inv in invocations['results']:
-    print(f"{inv['function']['name']}: {inv['status']}")
+invocations = client.functions.list_invocations(page=1, page_size=50)
+for inv in invocations['data']:
+    task = inv['task_result']
+    print(inv['function_name'], task['status'] if task else 'No retained task result')
 
 # Filter by function
 invocations = client.functions.list_invocations(
     function_slug="process-order",
-    status="SUCCESS",
-    limit=20
+    has_error=False,
+    page=1,
+    page_size=20
 )
 ```
+
+Function lists use `limit`/`offset`; global invocation lists use
+`page`/`page_size`. Both list responses use `data` and `total`. Invocation
+filters support function slug/id, trigger type, user ID, and `has_error`;
+Celery status filtering is unsupported and raises `ValueError`. Inspect each
+record's nested task result instead. Legacy invocation `limit`/`offset` are
+aliases only when the offset is a nonnegative multiple of the requested size;
+do not mix them with canonical paging parameters or exceed the server's
+configured maximum page size when exact offset alignment matters.
 
 #### Get Invocation Details
 
 ```python
 # Get specific invocation by ID
-invocation = client.functions.get_invocation("inv_123")
-print(f"Status: {invocation['status']}")
-print(f"Result: {invocation['result']}")
+invocation = client.functions.get_invocation(42)  # numeric invocation id
+task = invocation["task_result"]
+if task is not None:
+    print("Status:", task["status"])
+    print("Stored executor result:", task["result"])
 ```
 
 ---
@@ -583,6 +613,51 @@ result = (
 
 **Note:** The table must have a `search_vector` field configured in its schema (via `x-search-fields`). The backend translates `?search=query` to a PostgreSQL full-text search using `tsvector`.
 
+#### Vector and hybrid search
+
+Supply an embedding with the table's configured dimensions and distance metric:
+
+```python
+result = (
+    client.database.from_("articles")
+    .vector_search("embedding", query_embedding, topk=20, metric="cosine")
+    .filter("is_published", "eq", True)
+    .page_size(5)
+    .execute()
+)
+
+# Combine vector and full-text ranks. Both search indexes must be configured.
+hybrid = (
+    client.database.from_("articles")
+    .vector_search("embedding", query_embedding, topk=20, metric="cosine")
+    .search("invoice")
+    .hybrid(strategy="rrf", alpha=0.5)
+    .execute()
+)
+```
+
+The same builders work with the async client; await `execute()`. `topk`
+sets the search window, while `page` and `page_size` choose a page within it.
+Optional vector controls are `threshold` and `ef_search`. Hybrid supports
+`rrf`; `alpha=0` uses only text ranks and `alpha=1` only vector ranks.
+See the [search guide](https://docs.taruvi.cloud/docs/products/database/advanced/search)
+for schema, score, metric and pagination contracts. This SDK revision sends
+vector and hybrid reads, including `count()`, to the JSON-body
+`POST …/data/query/` endpoint so large embeddings do not exceed URL limits.
+The backend must expose that route; older backends return a not-found error,
+with no automatic GET fallback. This is a source-revision contract, not a claim
+that the feature is available in every published SDK or hosted backend version.
+Ordinary scalar reads continue to use `GET …/data/`.
+
+JSON query filters preserve list elements and their types, including strings
+containing commas. Flat conditions and a supplied filter tree are combined with
+AND, even when they constrain the same field. Vector search cannot be combined
+with `.get(id)`; use `.filter("id", "eq", id)` (or your actual primary-key field)
+to scope the ranked query. For vector and hybrid queries, `count()` requests
+the complete bounded `topk` window without pagination and returns its total.
+It leaves the builder's configured page unchanged and does not count matches
+outside the candidate window.
+
 #### Get Single Record
 
 ```python
@@ -626,6 +701,10 @@ updated_many = client.database.update("users", record_id=[
     {"id": 456, "name": "Bob Updated"}
 ])
 ```
+
+The convenience method returns one record for a single update and a list of
+updated records for a bulk update. The query builder's `.update(...).execute()`
+keeps the complete API envelope; its bulk `data` contains `records` and `count`.
 
 #### Delete Records
 
@@ -780,29 +859,33 @@ result = (
 
 ### User Authentication & Management
 
-#### Login and Token Management
+#### Sign in and manage the client credential
 
 ```python
-# Login to get JWT tokens
-tokens = client.auth.login(
-    username="alice@example.com",
-    password="secret123"
+import os
+
+# Returns a new client authenticated with the returned JWT.
+user_client = client.auth.signInWithPassword(
+    email=os.environ["TARUVI_USER_EMAIL"],
+    password=os.environ["TARUVI_USER_PASSWORD"],
 )
-access_token = tokens['access']
-refresh_token = tokens['refresh']
 
-# Refresh access token
-new_tokens = client.auth.refresh_token(refresh_token)
-
-# Verify token
-is_valid = client.auth.verify_token(access_token)
+# Returns another client with no credential; the original is unchanged.
+signed_out_client = user_client.auth.signOut()
 ```
+
+For an async client, await `signInWithPassword()` and `get_current_user()`;
+`signInWithToken()` and `signOut()` are synchronous in both modes. Close each
+client after use (`await client.close()` in async mode).
+`signOut()` only removes credentials from the returned client; it does not
+revoke a token or end a remote session. The public auth module has no JWT
+refresh or token-verification method. Sign in again when the credential expires.
 
 #### Get Current User
 
 ```python
 # Get authenticated user info
-user = client.auth.get_current_user()
+user = user_client.auth.get_current_user()["data"]
 print(user['username'], user['email'])
 ```
 
@@ -821,26 +904,29 @@ users = client.users.list(
 # Filter by reference attributes (e.g., department_id from user attributes schema)
 users = client.users.list(department_id=123, is_active=True)
 
-# Get specific user
-user = client.users.get("alice")
+# Get specific user (UserResponse envelope)
+user_response = client.users.get("alice")
+user = user_response["data"]
+print(user["username"])
 
 # Create user
-new_user = client.users.create({
+new_user_response = client.users.create({
     "username": "bob",
     "email": "bob@example.com",
     "password": "secret456",
     "confirm_password": "secret456",
     "first_name": "Bob",
     "last_name": "Smith",
-    "is_active": True,
-    "is_staff": False
+    "is_active": True
 })
+new_user = new_user_response["data"]
 
 # Update user
-updated = client.users.update("bob", {
+updated_response = client.users.update("bob", {
     "email": "bob.smith@example.com",
     "first_name": "Robert"
 })
+updated_user = updated_response["data"]
 
 # Delete user
 client.users.delete("bob")
@@ -1263,7 +1349,7 @@ client = Client(
     max_retries=3,    # Max retry attempts (0-10, default: 3)
 )
 
-# Authentication is done separately via AuthManager
+# Alternatively, sign in through client.auth.
 auth_client = client.auth.signInWithPassword(email="...", password="...")
 ```
 
@@ -1277,7 +1363,8 @@ auth_client = client.auth.signInWithPassword(email="...", password="...")
 | `timeout` | `int` | `30` | Request timeout in seconds (1-300) |
 | `max_retries` | `int` | `3` | Maximum retry attempts (0-10) |
 
-**Note**: Authentication parameters are no longer passed to `Client()`. Use `AuthManager` methods instead.
+**Note**: Pass an existing `api_key`, `jwt`, or `session_token` to `Client()`,
+or use `client.auth` to sign in. Password sign-in returns a new client.
 
 ### Environment Variables
 
@@ -1292,7 +1379,7 @@ TARUVI_TIMEOUT=60
 TARUVI_MAX_RETRIES=5
 TARUVI_SITE_SLUG=my-site
 
-# Authentication credentials (use with AuthManager)
+# Authentication credentials (use with client.auth)
 TARUVI_JWT=your_jwt_token
 TARUVI_API_KEY=your_api_key
 TARUVI_SESSION_TOKEN=your_session_token
@@ -1313,7 +1400,7 @@ client = Client(
 
 # Authenticate
 auth_client = client.auth.signInWithPassword(
-    username=os.getenv("TARUVI_USERNAME"),
+    email=os.getenv("TARUVI_USERNAME"),
     password=os.getenv("TARUVI_PASSWORD")
 )
 ```
@@ -1542,27 +1629,29 @@ users: list[dict[str, Any]] = auth_client.database.from_("users").execute()
 git clone https://github.com/taruvi/taruvi-python-sdk.git
 cd taruvi-python-sdk
 
-# Install in editable mode with dev dependencies
-pip install -e ".[dev]"
-
-# Or with Poetry
-poetry install --with dev
+# Isolate the development toolchain
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
 ```
 
 ### Running Tests
 
+See [TESTING.md](TESTING.md) for the module map, coverage reports, and live-test
+configuration. The default run skips tests requiring a configured live backend.
+
 ```bash
-# Run all tests
-pytest
+# Run deterministic tests
+python -m pytest -q
 
 # Run with coverage
-pytest --cov=src/taruvi --cov-report=html
+python -m pytest --cov=taruvi --cov-report=html
 
 # Run specific test file
-pytest tests/test_database_integration.py -v
+python -m pytest tests/test_database_edges.py -q
 
 # Run integration tests (requires backend)
-RUN_INTEGRATION_TESTS=1 pytest tests/ -v
+RUN_INTEGRATION_TESTS=1 python -m pytest -m integration -v
 ```
 
 ### Code Quality
@@ -1574,9 +1663,23 @@ black src/ tests/
 # Lint with Ruff
 ruff check src/ tests/
 
-# Type checking with mypy
-mypy src/taruvi
+# Strict source and public Client declaration checks
+python scripts/check_sdk_types.py
+
+# Build and verify installed-package declarations
+python -m build
+python -m twine check dist/*
+python scripts/check_sdk_types.py --wheel dist/*.whl
 ```
+
+The package includes a PEP 561 `py.typed` marker. Type checkers infer a
+blocking client for explicit `mode="sync"` and an asynchronous client for
+`mode="async"`, including each lazy API property. Omitting `mode` returns a
+union in static analysis because auto-detection depends on a running event
+loop. Use an explicit mode when the caller needs a known await contract.
+Token sign-in and sign-out return a client synchronously in either mode;
+password sign-in follows the client's sync/async mode. User get/create/update
+return `UserResponse` envelopes with the user under `data`.
 
 ### Project Structure
 
@@ -1696,3 +1799,7 @@ Need help? We're here for you:
   <a href="https://github.com/taruvi">GitHub</a> •
   <a href="https://twitter.com/taruvi">Twitter</a>
 </p>
+
+Record IDs in database get/update/delete requests are encoded as a URL path
+segment, so reserved characters cannot become query parameters or fragments.
+The backend still determines which primary-key values its routes support.

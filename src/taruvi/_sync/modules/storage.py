@@ -10,18 +10,16 @@ Provides methods for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Optional, BinaryIO
-
-from taruvi.http_client_base import transport_error
-from taruvi.modules.base import BaseModule
-from taruvi.utils import build_query_string, build_params
-from taruvi.types import StorageFile, Bucket, StorageAccessLinkResult, StorageBrowseData
+import builtins
 import json
 import mimetypes
-
-import httpx
+from typing import TYPE_CHECKING, Any, BinaryIO, Literal, Optional, cast
 from urllib.parse import quote
 
+import httpx
+
+from taruvi._sync.http_client import HTTPClient
+from taruvi.http_client_base import transport_error
 from taruvi.modules.base import BaseModule
 from taruvi.types import Bucket, StorageAccessLinkResult, StorageBrowseData, StorageFile
 from taruvi.utils import build_params, build_query_string
@@ -61,6 +59,7 @@ def _guess_content_type(filename: str) -> str:
     """Guess a file's content type from its name."""
     return mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
+
 class _BaseStorageQueryBuilder:
     """Base storage query builder with shared logic."""
 
@@ -71,7 +70,7 @@ class _BaseStorageQueryBuilder:
 
     def _extract_data(self, response: dict[str, Any]) -> Any:
         """Extract 'data' field from API response."""
-        return response.get("data", {})
+        return cast(Any, response.get("data", {}))
 
     def _add_filters(
         self,
@@ -164,9 +163,9 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
 
     def upload(
         self,
-        files: list[tuple[str, BinaryIO]] | list[tuple[str, BinaryIO, str]],
-        paths: list[str],
-        metadatas: Optional[list[dict[str, Any]]] = None
+        files: builtins.list[tuple[str, BinaryIO]] | builtins.list[tuple[str, BinaryIO, str]],
+        paths: builtins.list[str],
+        metadatas: Optional[builtins.list[dict[str, Any]]] = None,
     ) -> dict[str, Any]:
         """Upload multiple files to the bucket.
 
@@ -178,15 +177,15 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
             The batch result: ``uploaded_count``, ``failed_count``, ``total``,
             and the ``successful`` and ``failed`` entries.
         """
-        path = _STORAGE_BATCH_UPLOAD.format(
-            app_slug=self.app_slug,
-            bucket=self.bucket
-        )
+        path = _STORAGE_BATCH_UPLOAD.format(app_slug=self.app_slug, bucket=self.bucket)
 
         # Prepare multipart files for httpx
         # Format: [('field_name', ('filename', file_obj, 'content_type'))]
         httpx_files = [
-            ("files", (entry[0], entry[1], entry[2] if len(entry) > 2 else _guess_content_type(entry[0])))
+            (
+                "files",
+                (entry[0], entry[1], entry[2] if len(entry) > 2 else _guess_content_type(entry[0])),
+            )
             for entry in files
         ]
 
@@ -199,34 +198,36 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         headers = {k: v for k, v in self._config.headers.items() if k != "Content-Type"}
         try:
             response = self._http.client.post(
-                f"{self._config.api_url}{path}",
-                files=httpx_files,
-                data=data,
-                headers=headers
+                f"{self._config.api_url}{path}", files=httpx_files, data=data, headers=headers
             )
         except httpx.TransportError as error:
             raise transport_error(
-                error, method="POST", path=path, api_url=self._config.api_url, timeout=self._config.timeout
+                error,
+                method="POST",
+                path=path,
+                api_url=self._config.api_url,
+                timeout=self._config.timeout,
             ) from error
         response_data = self._http._handle_response(response)
-        return response_data.get("data", {})
+        return cast(dict[str, Any], response_data.get("data", {}))
 
     def download(self, file_path: str) -> bytes:
         """Download a file from the bucket."""
         path = _STORAGE_OBJECT.format(
-            app_slug=self.app_slug,
-            bucket=self.bucket,
-            path=_encode_object_path(file_path)
+            app_slug=self.app_slug, bucket=self.bucket, path=_encode_object_path(file_path)
         )
 
         try:
             response = self._http.client.get(
-                f"{self._config.api_url}{path}",
-                headers=self._config.headers
+                f"{self._config.api_url}{path}", headers=self._config.headers
             )
         except httpx.TransportError as error:
             raise transport_error(
-                error, method="GET", path=path, api_url=self._config.api_url, timeout=self._config.timeout
+                error,
+                method="GET",
+                path=path,
+                api_url=self._config.api_url,
+                timeout=self._config.timeout,
             ) from error
         if response.status_code >= 400:
             self._http._handle_error_response(response)
@@ -240,16 +241,14 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
     ) -> StorageFile:
         """Update file metadata or visibility."""
         path = _STORAGE_OBJECT.format(
-            app_slug=self.app_slug,
-            bucket=self.bucket,
-            path=_encode_object_path(file_path)
+            app_slug=self.app_slug, bucket=self.bucket, path=_encode_object_path(file_path)
         )
 
         body = _build_update_body(metadata, visibility)
         response = self._http.patch(path, json=body)
-        return self._extract_data(response)
+        return cast(StorageFile, self._extract_data(response))
 
-    def delete(self, paths: list[str]) -> dict[str, Any]:
+    def delete(self, paths: builtins.list[str]) -> dict[str, Any]:
         """Delete multiple files from the bucket.
 
         Returns:
@@ -257,33 +256,26 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
             platform skips, because they're missing or a policy denies the
             delete, are listed in ``failed`` rather than raising.
         """
-        path = _STORAGE_BATCH_DELETE.format(
-            app_slug=self.app_slug,
-            bucket=self.bucket
-        )
+        path = _STORAGE_BATCH_DELETE.format(app_slug=self.app_slug, bucket=self.bucket)
 
         response = self._http.post(path, json={"paths": paths})
-        return response.get("data", {})
+        return cast(dict[str, Any], response.get("data", {}))
 
     def view_access(self, file_path: str) -> StorageAccessLinkResult:
         """Get a SharePoint view-access URL for an Office file."""
         path = _STORAGE_VIEW.format(
-            app_slug=self.app_slug,
-            bucket=self.bucket,
-            path=_encode_object_path(file_path)
+            app_slug=self.app_slug, bucket=self.bucket, path=_encode_object_path(file_path)
         )
         response = self._http.get(path)
-        return self._extract_data(response)
+        return cast(StorageAccessLinkResult, self._extract_data(response))
 
     def edit_access(self, file_path: str) -> StorageAccessLinkResult:
         """Get a SharePoint edit-access URL for an Office file."""
         path = _STORAGE_EDIT.format(
-            app_slug=self.app_slug,
-            bucket=self.bucket,
-            path=_encode_object_path(file_path)
+            app_slug=self.app_slug, bucket=self.bucket, path=_encode_object_path(file_path)
         )
         response = self._http.get(path)
-        return self._extract_data(response)
+        return cast(StorageAccessLinkResult, self._extract_data(response))
 
     def browse(
         self,
@@ -305,7 +297,7 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         )
         qs = build_query_string(params)
         response = self._http.get(path + qs)
-        return self._extract_data(response)
+        return cast(StorageBrowseData, self._extract_data(response))
 
     def copy_object(
         self, source_path: str, destination_path: str, destination_bucket: Optional[str] = None
@@ -343,7 +335,7 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
             body["destination_bucket"] = destination_bucket
 
         response = self._http.post(path, json=body)
-        return self._extract_data(response)
+        return cast(StorageFile, self._extract_data(response))
 
     def move_object(self, source_path: str, destination_path: str) -> StorageFile:
         """
@@ -370,10 +362,10 @@ class StorageQueryBuilder(_BaseStorageQueryBuilder):
         body = {"source_path": source_path, "destination_path": destination_path}
 
         response = self._http.post(path, json=body)
-        return self._extract_data(response)
+        return cast(StorageFile, self._extract_data(response))
 
 
-class StorageModule(BaseModule):
+class StorageModule(BaseModule[HTTPClient]):
     """Storage API operations."""
 
     def __init__(self, client: SyncClient) -> None:
@@ -446,7 +438,7 @@ class StorageModule(BaseModule):
         )
 
         response = self._http.get(path, params=params)
-        return self._extract_data(response)
+        return cast(dict[str, Any], self._extract_data(response))
 
     def create_bucket(
         self,
@@ -455,7 +447,7 @@ class StorageModule(BaseModule):
         slug: Optional[str] = None,
         visibility: str = "private",
         file_size_limit: Optional[int] = None,
-        allowed_mime_types: Optional[list[str]] = None,
+        allowed_mime_types: Optional[builtins.list[str]] = None,
         app_category: Optional[str] = None,
         max_size_bytes: Optional[int] = None,
         max_objects: Optional[int] = None,
@@ -519,7 +511,7 @@ class StorageModule(BaseModule):
             body["max_objects"] = max_objects
 
         response = self._http.post(path, json=body)
-        return self._extract_data(response)
+        return cast(Bucket, self._extract_data(response))
 
     def get_bucket(self, slug: str, *, app_slug: Optional[str] = None) -> Bucket:
         """
@@ -541,7 +533,7 @@ class StorageModule(BaseModule):
 
         path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
         response = self._http.get(path)
-        return self._extract_data(response)
+        return cast(Bucket, self._extract_data(response))
 
     def update_bucket(
         self,
@@ -550,7 +542,7 @@ class StorageModule(BaseModule):
         name: Optional[str] = None,
         visibility: Optional[str] = None,
         file_size_limit: Optional[int] = None,
-        allowed_mime_types: Optional[list[str]] = None,
+        allowed_mime_types: Optional[builtins.list[str]] = None,
         app_category: Optional[str] = None,
         max_size_bytes: Optional[int] = None,
         max_objects: Optional[int] = None,
@@ -605,7 +597,7 @@ class StorageModule(BaseModule):
             body["max_objects"] = max_objects
 
         response = self._http.patch(path, json=body)
-        return self._extract_data(response)
+        return cast(Bucket, self._extract_data(response))
 
     def delete_bucket(self, slug: str, *, app_slug: Optional[str] = None) -> None:
         """

@@ -81,7 +81,7 @@ def build_path(*segments: str) -> str:
     return "/" + "/".join(cleaned)
 
 
-def safe_get_nested(data: dict, *keys: str, default: Any = None) -> Any:
+def safe_get_nested(data: dict[str, Any], *keys: str, default: Any = None) -> Any:
     """
     Safely get nested dictionary value without KeyError.
 
@@ -101,13 +101,14 @@ def safe_get_nested(data: dict, *keys: str, default: Any = None) -> Any:
         >>> safe_get_nested(response, "data", "user", "email", default="unknown")
         'unknown'
     """
+    current: Any = data
     for key in keys:
-        if isinstance(data, dict):
-            data = data.get(key)
+        if isinstance(current, dict):
+            current = current.get(key)
         else:
             return default
 
-    return data if data is not None else default
+    return current if current is not None else default
 
 
 def build_params(

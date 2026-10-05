@@ -108,11 +108,13 @@ Function Runtime Example:
     ```
 """
 
-import os
-from typing import TYPE_CHECKING, Any, Optional
+from __future__ import annotations
 
+import os
+from typing import TYPE_CHECKING, Any, Literal, Optional, Union, overload
+
+from taruvi._modes import RuntimeMode
 from taruvi._version import __version__ as __version__
-from taruvi.config import RuntimeMode, TaruviConfig
 from taruvi.exceptions import (
     APIError,
     AuthenticationError,
@@ -149,8 +151,13 @@ from taruvi.types import (
     DatabaseFilters,
     DatabaseRecord,
     Function,
+    FunctionExecutionResponse,
     FunctionFilters,
     FunctionInvocation,
+    FunctionInvocationListResponse,
+    FunctionListResponse,
+    FunctionTaskResult,
+    FunctionTaskResultResponse,
     PaginatedResponse,
     PgRangeValue,
     PolicyCheckBatchResult,
@@ -167,9 +174,12 @@ from taruvi.types import (
     # Response types
     User,
     UserFilters,
+    UserResponse,
 )
 
 if TYPE_CHECKING:
+    from taruvi._async.client import AsyncClient
+    from taruvi._sync.client import SyncClient
     from taruvi.config import TaruviConfig
 
 # Names resolved lazily by __getattr__ (PEP 562). TaruviConfig pulls in
@@ -218,6 +228,31 @@ def _is_async_context() -> bool:
         return False
 
 
+@overload
+def Client(
+    api_url: str,
+    app_slug: str,
+    *,
+    mode: Literal["sync"],
+    timeout: int = 120,
+    max_retries: int = 3,
+    **kwargs: Any,
+) -> SyncClient: ...
+
+
+@overload
+def Client(
+    api_url: str,
+    app_slug: str,
+    *,
+    mode: Literal["async"],
+    timeout: int = 120,
+    max_retries: int = 3,
+    **kwargs: Any,
+) -> AsyncClient: ...
+
+
+@overload
 def Client(
     api_url: str,
     app_slug: str,
@@ -226,7 +261,18 @@ def Client(
     timeout: int = 120,
     max_retries: int = 3,
     **kwargs: Any,
-):
+) -> Union[AsyncClient, SyncClient]: ...
+
+
+def Client(
+    api_url: str,
+    app_slug: str,
+    *,
+    mode: Optional[str] = None,
+    timeout: int = 120,
+    max_retries: int = 3,
+    **kwargs: Any,
+) -> Union[AsyncClient, SyncClient]:
     """
     Create a Taruvi client (unified factory).
 
@@ -283,8 +329,6 @@ def Client(
         )
 
 
-
-
 __all__ = [  # noqa: RUF022 - grouped by kind on purpose
     # Main client
     "Client",
@@ -319,6 +363,7 @@ __all__ = [  # noqa: RUF022 - grouped by kind on purpose
     "ResponseError",
     # Response types
     "User",
+    "UserResponse",
     "DatabaseRecord",
     "StorageFile",
     "StorageAccessLinkResult",
@@ -327,6 +372,11 @@ __all__ = [  # noqa: RUF022 - grouped by kind on purpose
     "StorageBrowseData",
     "Function",
     "FunctionInvocation",
+    "FunctionExecutionResponse",
+    "FunctionInvocationListResponse",
+    "FunctionListResponse",
+    "FunctionTaskResult",
+    "FunctionTaskResultResponse",
     "Secret",
     "Bucket",
     "App",

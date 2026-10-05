@@ -5,10 +5,31 @@ Sync client class for interacting with Taruvi API.
 Supports both external application mode and function runtime mode.
 """
 
-from typing import Any
+from __future__ import annotations
+
+import sys
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Optional
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 from taruvi._sync.http_client import HTTPClient
 from taruvi.config import TaruviConfig
+
+if TYPE_CHECKING:
+    from taruvi._sync.modules.analytics import AnalyticsModule
+    from taruvi._sync.modules.app import AppModule
+    from taruvi._sync.modules.auth import AuthModule
+    from taruvi._sync.modules.database import DatabaseModule
+    from taruvi._sync.modules.functions import FunctionsModule
+    from taruvi._sync.modules.policy import PolicyModule
+    from taruvi._sync.modules.secrets import SecretsModule
+    from taruvi._sync.modules.settings import SettingsModule
+    from taruvi._sync.modules.storage import StorageModule
+    from taruvi._sync.modules.users import UsersModule
 
 
 class SyncClient:
@@ -84,16 +105,16 @@ class SyncClient:
         self._http_client = HTTPClient(self._config)
 
         # Module instances (lazy-loaded)
-        self._functions = None
-        self._database = None
-        self._auth = None
-        self._storage = None
-        self._secrets = None
-        self._policy = None
-        self._app = None
-        self._settings = None
-        self._users = None
-        self._analytics = None
+        self._functions: Optional[FunctionsModule] = None
+        self._database: Optional[DatabaseModule] = None
+        self._auth: Optional[AuthModule] = None
+        self._storage: Optional[StorageModule] = None
+        self._secrets: Optional[SecretsModule] = None
+        self._policy: Optional[PolicyModule] = None
+        self._app: Optional[AppModule] = None
+        self._settings: Optional[SettingsModule] = None
+        self._users: Optional[UsersModule] = None
+        self._analytics: Optional[AnalyticsModule] = None
 
     @property
     def config(self) -> TaruviConfig:
@@ -101,7 +122,7 @@ class SyncClient:
         return self._config
 
     @property
-    def functions(self):
+    def functions(self) -> FunctionsModule:
         """Access Functions API."""
         if self._functions is None:
             from taruvi._sync.modules.functions import FunctionsModule
@@ -110,7 +131,7 @@ class SyncClient:
         return self._functions
 
     @property
-    def database(self):
+    def database(self) -> DatabaseModule:
         """Access Database API."""
         if self._database is None:
             from taruvi._sync.modules.database import DatabaseModule
@@ -119,7 +140,7 @@ class SyncClient:
         return self._database
 
     @property
-    def auth(self):
+    def auth(self) -> AuthModule:
         """
         Authentication module for user-level auth operations.
 
@@ -170,7 +191,7 @@ class SyncClient:
         )
 
     @property
-    def storage(self):
+    def storage(self) -> StorageModule:
         """Access Storage API."""
         if self._storage is None:
             from taruvi._sync.modules.storage import StorageModule
@@ -179,7 +200,7 @@ class SyncClient:
         return self._storage
 
     @property
-    def secrets(self):
+    def secrets(self) -> SecretsModule:
         """Access Secrets API."""
         if self._secrets is None:
             from taruvi._sync.modules.secrets import SecretsModule
@@ -188,7 +209,7 @@ class SyncClient:
         return self._secrets
 
     @property
-    def policy(self):
+    def policy(self) -> PolicyModule:
         """Access Policy API."""
         if self._policy is None:
             from taruvi._sync.modules.policy import PolicyModule
@@ -197,7 +218,7 @@ class SyncClient:
         return self._policy
 
     @property
-    def app(self):
+    def app(self) -> AppModule:
         """Access App API."""
         if self._app is None:
             from taruvi._sync.modules.app import AppModule
@@ -206,7 +227,7 @@ class SyncClient:
         return self._app
 
     @property
-    def settings(self):
+    def settings(self) -> SettingsModule:
         """Access Settings API."""
         if self._settings is None:
             from taruvi._sync.modules.settings import SettingsModule
@@ -215,7 +236,7 @@ class SyncClient:
         return self._settings
 
     @property
-    def users(self):
+    def users(self) -> UsersModule:
         """Access Users API for user and role management operations."""
         if self._users is None:
             from taruvi._sync.modules.users import UsersModule
@@ -224,7 +245,7 @@ class SyncClient:
         return self._users
 
     @property
-    def analytics(self):
+    def analytics(self) -> AnalyticsModule:
         """Access Analytics API for executing analytics queries."""
         if self._analytics is None:
             from taruvi._sync.modules.analytics import AnalyticsModule
@@ -236,11 +257,16 @@ class SyncClient:
         """Close the client and release resources."""
         self._http_client.close()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         """Support context manager."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         """Close client on context exit."""
         self.close()
 

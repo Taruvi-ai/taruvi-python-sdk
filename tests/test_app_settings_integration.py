@@ -1,167 +1,78 @@
-"""
-Integration tests for App Settings API.
-
-IMPORTANT: These are REAL integration tests - NO MOCKS!
-- Makes actual HTTP requests to Taruvi backend
-- Tests app settings retrieval via GET /api/apps/{app_slug}/settings/
-
-Setup:
-    1. Ensure .env is configured with backend URL and credentials
-    2. Backend must have an app with settings configured
-    3. Run: RUN_INTEGRATION_TESTS=1 pytest tests/test_app_settings_integration.py -v
-"""
+"""App settings: exact owned defaults, alternate app scope, and typed refusals."""
 
 import pytest
 
-from taruvi.exceptions import ConfigurationError
+from taruvi.exceptions import ConfigurationError, NotAuthenticatedError, NotFoundError
 
-# ============================================================================
-# App Settings Tests - Async
-# ============================================================================
+_FIELDS = {
+    "display_name",
+    "primary_color",
+    "secondary_color",
+    "icon",
+    "icon_url",
+    "icon_background_color",
+    "category",
+    "documentation_url",
+    "support_email",
+    "default_frontend_worker_url",
+    "default_frontend_worker_slug",
+    "created_at",
+    "updated_at",
+}
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_get_app_settings_async(async_app_module):
-    """Test retrieving app settings (async)."""
-    try:
-        result = await async_app_module.settings()
-
-        assert result is not None
-        assert isinstance(result, dict)
-        # Verify expected fields from AppSettingSerializer
-        expected_fields = [
-            "display_name",
-            "primary_color",
-            "secondary_color",
-            "icon",
-            "icon_url",
-            "icon_background_color",
-            "category",
-            "documentation_url",
-            "support_email",
-            "default_frontend_worker_url",
-            "created_at",
-            "updated_at",
-        ]
-        data = result.get("data", result)
-        for field in expected_fields:
-            assert field in data, f"Missing field: {field}"
-
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "not found" in error_msg:
-            pytest.skip(f"Skipping: App settings not configured - {e}")
-        raise
+def assert_settings(response, expected):
+    assert response["status"] == "success"
+    data = response["data"]
+    assert set(data) == _FIELDS
+    assert {key: data[key] for key in expected} == expected
 
 
 @pytest.mark.integration
-@pytest.mark.asyncio
-async def test_get_app_settings_with_slug_override_async(async_app_module):
-    """Test retrieving app settings with explicit app_slug (async)."""
-    try:
-        result = await async_app_module.settings(app_slug="test-app")
-
-        assert result is not None
-        assert isinstance(result, dict)
-
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "not found" in error_msg:
-            pytest.skip(f"Skipping: App 'test-app' not found - {e}")
-        raise
+async def test_async_settings_uses_requested_app(async_app_module, live_resources):
+    assert_settings(await async_app_module.settings(), live_resources["app_settings"])
+    assert_settings(
+        await async_app_module.settings(app_slug=live_resources["other_app_slug"]),
+        live_resources["other_app_settings"],
+    )
 
 
 @pytest.mark.integration
-@pytest.mark.asyncio
-async def test_get_app_settings_nonexistent_app_async(async_app_module):
-    """Test retrieving settings for non-existent app raises error (async)."""
-    from taruvi.exceptions import APIError, NotFoundError
-
-    try:
-        await async_app_module.settings(app_slug="nonexistent-app-99999")
-        pytest.fail("Expected error for non-existent app")
-    except (NotFoundError, APIError):
-        pass  # Expected
-
-
-# ============================================================================
-# App Settings Tests - Sync
-# ============================================================================
+def test_sync_settings_uses_requested_app(sync_app_module, live_resources):
+    assert_settings(sync_app_module.settings(), live_resources["app_settings"])
+    assert_settings(
+        sync_app_module.settings(app_slug=live_resources["other_app_slug"]),
+        live_resources["other_app_settings"],
+    )
 
 
 @pytest.mark.integration
-def test_get_app_settings_sync(sync_app_module):
-    """Test retrieving app settings (sync)."""
-    try:
-        result = sync_app_module.settings()
-
-        assert result is not None
-        assert isinstance(result, dict)
-        expected_fields = [
-            "display_name",
-            "primary_color",
-            "secondary_color",
-            "icon",
-            "icon_url",
-            "icon_background_color",
-            "category",
-            "documentation_url",
-            "support_email",
-            "default_frontend_worker_url",
-            "created_at",
-            "updated_at",
-        ]
-        data = result.get("data", result)
-        for field in expected_fields:
-            assert field in data, f"Missing field: {field}"
-
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "not found" in error_msg:
-            pytest.skip(f"Skipping: App settings not configured - {e}")
-        raise
+async def test_async_settings_refuses_missing_app_and_anonymous(
+    async_app_module, anonymous_async_client, live_manifest
+):
+    with pytest.raises(NotFoundError) as missing:
+        await async_app_module.settings(app_slug=f"{live_manifest['fixture_id']}-missing")
+    assert missing.value.status_code == 404
+    with pytest.raises(NotAuthenticatedError) as anonymous:
+        await anonymous_async_client.app.settings()
+    assert anonymous.value.status_code == 401
 
 
 @pytest.mark.integration
-def test_get_app_settings_with_slug_override_sync(sync_app_module):
-    """Test retrieving app settings with explicit app_slug (sync)."""
-    try:
-        result = sync_app_module.settings(app_slug="test-app")
-
-        assert result is not None
-        assert isinstance(result, dict)
-
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "not found" in error_msg:
-            pytest.skip(f"Skipping: App 'test-app' not found - {e}")
-        raise
-
-
-@pytest.mark.integration
-def test_get_app_settings_nonexistent_app_sync(sync_app_module):
-    """Test retrieving settings for non-existent app raises error (sync)."""
-    from taruvi.exceptions import APIError, NotFoundError
-
-    try:
-        sync_app_module.settings(app_slug="nonexistent-app-99999")
-        pytest.fail("Expected error for non-existent app")
-    except (NotFoundError, APIError):
-        pass  # Expected
-
-
-# ============================================================================
-# Validation Tests (no backend needed)
-# ============================================================================
+def test_sync_settings_refuses_missing_app_and_anonymous(
+    sync_app_module, anonymous_sync_client, live_manifest
+):
+    with pytest.raises(NotFoundError) as missing:
+        sync_app_module.settings(app_slug=f"{live_manifest['fixture_id']}-missing")
+    assert missing.value.status_code == 404
+    with pytest.raises(NotAuthenticatedError) as anonymous:
+        anonymous_sync_client.app.settings()
+    assert anonymous.value.status_code == 401
 
 
 def test_settings_requires_app_slug(monkeypatch):
-    """A client without an app_slug is refused when it's created, before settings() can run."""
     monkeypatch.setenv("TARUVI_TEST_MODE", "true")
-
     from taruvi import Client
-    from taruvi.exceptions import ConfigurationError
 
     with pytest.raises(ConfigurationError, match="app_slug is required"):
-        Client(api_url="http://localhost:8000", app_slug="")
+        Client(api_url="https://example.invalid", app_slug="")

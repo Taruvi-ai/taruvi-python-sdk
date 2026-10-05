@@ -5,11 +5,11 @@ Provides user-level authentication methods that return new authenticated client 
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Optional, Union
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
-    from taruvi._sync.sync_client import SyncClient
+    from taruvi._sync.client import SyncClient
 
 __all__ = ["AuthManager"]
 
@@ -205,7 +205,7 @@ class AuthManager:
         # Clone client with no auth credentials
         return self._clone_with_auth(api_key=None, jwt=None, session_token=None)
 
-    def _clone_with_auth(self, **auth_kwargs) -> Union[AsyncClient, SyncClient]:
+    def _clone_with_auth(self, **auth_kwargs: Optional[str]) -> Union[AsyncClient, SyncClient]:
         """
         Clone parent client with updated auth credentials.
 

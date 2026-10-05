@@ -11,17 +11,23 @@ Provides methods for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional
+from collections.abc import Sequence
+from copy import deepcopy
+from typing import TYPE_CHECKING, Any, Optional, cast
+from urllib.parse import quote
 
+from taruvi._async.http_client import AsyncHTTPClient
 from taruvi.modules.base import BaseModule
 from taruvi.types import DatabaseRecord
 from taruvi.utils import build_params as build_params_util
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
+    from taruvi.config import TaruviConfig
 
 # API endpoint paths for database
 _DATATABLE_DATA = "/api/apps/{app_slug}/datatables/{table_name}/data/"
+_DATATABLE_QUERY = "/api/apps/{app_slug}/datatables/{table_name}/data/query/"
 _DATATABLE_RECORD = "/api/apps/{app_slug}/datatables/{table_name}/data/{record_id}/"
 _DATATABLE_UPSERT = "/api/apps/{app_slug}/datatables/{table_name}/data/upsert/"
 
@@ -57,11 +63,15 @@ _LIST_OPERATORS = frozenset(
 # ============================================================================
 
 
-class _BaseQueryBuilder(BaseModule):
+class _BaseQueryBuilder(BaseModule[AsyncHTTPClient]):
     """Base query builder with shared logic."""
 
     def __init__(
-        self, http_client, config, table_name: str, app_slug: Optional[str] = None
+        self,
+        http_client: AsyncHTTPClient,
+        config: TaruviConfig,
+        table_name: str,
+        app_slug: Optional[str] = None,
     ) -> None:
         super().__init__(http_client, config)
         self.app_slug = self._ensure_app_slug(app_slug)
@@ -69,11 +79,12 @@ class _BaseQueryBuilder(BaseModule):
         self._is_edges: bool = False
         self._record_id: Optional[str] = None
         self._operation: Optional[str] = None
-        self._body: Any = None
-        self._delete_ids: Optional[list[int]] = None
+        self._body: Optional[dict[str, Any] | list[dict[str, Any]]] = None
+        self._delete_ids: Optional[Sequence[str | int]] = None
         self._is_upsert: bool = False
         self._unique_fields: Optional[str] = None
         self._filters: dict[str, Any] = {}
+        self._filter_conditions: list[dict[str, Any]] = []
         self._ordering_parts: list[str] = []
         self._page_size: Optional[int] = None
         self._page: int = 1
@@ -101,7 +112,11 @@ class _BaseQueryBuilder(BaseModule):
     def _get_table_name(self) -> str:
         return f"{self.table_name}_edges" if self._is_edges else self.table_name
 
-    def _add_filter(self, field: str, operator: str, value: Any) -> None:
+    def _add_filter(self, field: str, operator: Optional[str], value: Any) -> None:
+        # Keep JSON values and repeated conditions separate from URL encoding.
+        self._filter_conditions.append(
+            {"field": field, "operator": operator, "value": deepcopy(value)}
+        )
         if isinstance(value, (list, tuple)) and operator in _LIST_OPERATORS:
             value = ",".join(str(v) for v in value)
         key = field if operator == "eq" else f"{field}__{operator}"
@@ -155,7 +170,7 @@ class _BaseQueryBuilder(BaseModule):
     def _set_search(self, query: str) -> None:
         self._search = query
 
-    def _set_raw_filters(self, filters: dict | list) -> None:
+    def _set_raw_filters(self, filters: dict[str, Any] | list[dict[str, Any]]) -> None:
         import json
 
         self._raw_filters = json.dumps(filters)
@@ -233,6 +248,67 @@ class _BaseQueryBuilder(BaseModule):
 
         return params
 
+    def build_query_body(self) -> dict[str, Any]:
+        """Build the JSON body used for vector and hybrid reads."""
+        import json
+
+        if self._record_id is not None:
+            raise ValueError(
+                "vector_search() cannot be combined with get(id); filter by the primary key instead."
+            )
+
+        raw_filters = json.loads(self._raw_filters) if self._raw_filters else None
+        filters: list[dict[str, Any]] | dict[str, Any] | None
+        if isinstance(raw_filters, list):
+            # Both sides already use CrudFilters; preserve typed values and
+            # repeated field/operator pairs rather than flattening them.
+            filters = [*deepcopy(self._filter_conditions), *raw_filters]
+        else:
+            conditions = []
+            for condition in self._filter_conditions:
+                field, operator = condition["field"], condition["operator"]
+                key = field if operator == "eq" else f"{field}__{operator}"
+                conditions.append({key: condition["value"]})
+            if raw_filters:
+                conditions.append(raw_filters)
+            filters = (
+                {"and": conditions}
+                if len(conditions) > 1
+                else conditions[0] if conditions else None
+            )
+
+        body: dict[str, Any] = {
+            "filters": filters,
+            "search": self._search,
+            "ordering": self._ordering_parts or None,
+            "populate": self._populate_fields or None,
+            "aggregate": self._aggregates or None,
+            "group_by": self._group_by or None,
+            "having": self._having,
+            "page": self._page if self._page != 1 else None,
+            "page_size": self._page_size,
+            "allowed_actions": self._allowed_actions or None,
+            "format": self._format,
+            "relationship_type": self._relationship_types or None,
+            "include": self._include,
+            "depth": self._depth,
+            "vector": {
+                "field": self._vector_field,
+                "value": self._vector_value,
+                "topk": self._topk,
+                "threshold": self._vector_threshold,
+                "ef_search": self._ef_search,
+                "metric": self._vector_metric,
+            },
+            "hybrid": (
+                {"strategy": self._hybrid_strategy, "alpha": self._hybrid_alpha}
+                if self._hybrid_strategy
+                else None
+            ),
+        }
+        body["vector"] = {key: value for key, value in body["vector"].items() if value is not None}
+        return {key: value for key, value in body.items() if value is not None}
+
 
 class AsyncQueryBuilder(_BaseQueryBuilder):
     """Query builder for database operations."""
@@ -303,7 +379,10 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
     # -- Filter & query methods --
 
     def filter(
-        self, field_or_logic: str | dict | list, operator: str | None = None, value: Any = None
+        self,
+        field_or_logic: str | dict[str, Any] | list[dict[str, Any]],
+        operator: str | None = None,
+        value: Any = None,
     ) -> AsyncQueryBuilder:
         """Filter records. Supports simple and complex filters.
 
@@ -457,7 +536,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             return _DATATABLE_UPSERT.format(app_slug=self.app_slug, table_name=table)
         if self._record_id:
             return _DATATABLE_RECORD.format(
-                app_slug=self.app_slug, table_name=table, record_id=self._record_id
+                app_slug=self.app_slug, table_name=table, record_id=quote(self._record_id, safe="")
             )
         return _DATATABLE_DATA.format(app_slug=self.app_slug, table_name=table)
 
@@ -487,6 +566,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             # delete_filtered: the endpoint reads one JSON object from ?filter=.
             # A filter tree travels under "filters", as it does on list requests.
             import json
+
             conditions: dict[str, Any] = dict(self._filters)
             if self._raw_filters:
                 conditions["filters"] = self._raw_filters
@@ -497,7 +577,8 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             # Refuse what narrows a read but can't narrow a delete; dropping it would
             # delete every row that matches the filters alone.
             unsupported = [
-                name for name, is_set in (
+                name
+                for name, is_set in (
                     ("search", self._search is not None),
                     ("vector_search", self._vector_value is not None),
                     ("page", self._page != 1),
@@ -505,7 +586,8 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                     ("aggregate", bool(self._aggregates)),
                     ("group_by", bool(self._group_by)),
                     ("having", self._having is not None),
-                ) if is_set
+                )
+                if is_set
             ]
             if unsupported:
                 raise ValueError(
@@ -514,6 +596,13 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                     "delete by ID."
                 )
             return await self._http.delete(path, params={"filter": json.dumps(conditions)})
+
+        if self._vector_value is not None:
+            query_path = _DATATABLE_QUERY.format(
+                app_slug=self.app_slug, table_name=self._get_table_name()
+            )
+            response = await self._http.post(query_path, json=self.build_query_body())
+            return {"data": self._extract_data_list(response), "total": response.get("total", 0)}
 
         # Default: GET
         response = await self._http.get(path, params=params)
@@ -533,11 +622,23 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                 self._page_size = previous_page_size
         data = result.get("data", [])
         if isinstance(data, list):
-            return data[0] if data else None
-        return data
+            return cast(Optional[dict[str, Any]], data[0] if data else None)
+        return cast(Optional[dict[str, Any]], data)
 
     async def count(self) -> int:
         """Get count of matching records."""
+        if self._vector_value is not None:
+            body = self.build_query_body()
+            # Pure-vector totals describe the returned page, so count the
+            # complete bounded top-k window rather than shrinking it to one row.
+            body.pop("page_size", None)
+            body.pop("page", None)
+            path = _DATATABLE_QUERY.format(
+                app_slug=self.app_slug, table_name=self._get_table_name()
+            )
+            response = await self._http.post(path, json=body)
+            return cast(int, response.get("total", 0))
+
         path = self._build_path()
         params = self.build_params()
         params["_count"] = "true"
@@ -545,10 +646,10 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         params["page_size"] = 1
         params.pop("page", None)
         response = await self._http.get(path, params=params)
-        return response.get("total", 0)
+        return cast(int, response.get("total", 0))
 
 
-class AsyncDatabaseModule(BaseModule):
+class AsyncDatabaseModule(BaseModule[AsyncHTTPClient]):
     """Database API operations."""
 
     def __init__(self, client: AsyncClient) -> None:
@@ -572,7 +673,7 @@ class AsyncDatabaseModule(BaseModule):
             app_slug=app_slug, table_name=table_name, record_id=str(record_id)
         )
         response = await self._http.get(path)
-        return self._extract_data(response)
+        return cast(DatabaseRecord, self._extract_data(response))
 
     async def create(
         self,
@@ -585,7 +686,7 @@ class AsyncDatabaseModule(BaseModule):
         app_slug = self._ensure_app_slug(app_slug)
         path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
         response = await self._http.post(path, json=data)
-        return response.get("data")
+        return cast(DatabaseRecord | list[DatabaseRecord], response.get("data"))
 
     async def update(
         self,
@@ -595,7 +696,11 @@ class AsyncDatabaseModule(BaseModule):
         *,
         app_slug: Optional[str] = None,
     ) -> DatabaseRecord | list[DatabaseRecord]:
-        """Update single record by ID or multiple records in bulk."""
+        """Update a record by ID, or pass a list of records for a bulk update.
+
+        Returns the updated record for a single update and the updated records
+        as a list for a bulk update.
+        """
         app_slug = self._ensure_app_slug(app_slug)
 
         if isinstance(record_id, list):
@@ -603,7 +708,10 @@ class AsyncDatabaseModule(BaseModule):
                 raise ValueError("data parameter not allowed for bulk update")
             path = _DATATABLE_DATA.format(app_slug=app_slug, table_name=table_name)
             response = await self._http.patch(path, json=record_id)
-            return self._extract_data_list(response)
+            result = self._extract_data(response)
+            return cast(
+                list[DatabaseRecord], result["records"] if isinstance(result, dict) else result
+            )
         else:
             if data is None:
                 raise ValueError("data is required for single record update")
@@ -611,7 +719,7 @@ class AsyncDatabaseModule(BaseModule):
                 app_slug=app_slug, table_name=table_name, record_id=str(record_id)
             )
             response = await self._http.patch(path, json=data)
-            return self._extract_data(response)
+            return cast(DatabaseRecord | list[DatabaseRecord], self._extract_data(response))
 
     async def delete(
         self,
@@ -648,3 +756,5 @@ class AsyncDatabaseModule(BaseModule):
             import json
 
             return await self._http.delete(path, params={"filter": json.dumps(filter)})
+
+        return None

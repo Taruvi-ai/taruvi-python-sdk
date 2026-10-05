@@ -5,10 +5,31 @@ Async client class for interacting with Taruvi API.
 Supports both external application mode and function runtime mode.
 """
 
-from typing import Any
+from __future__ import annotations
+
+import sys
+from types import TracebackType
+from typing import TYPE_CHECKING, Any, Optional
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    from typing_extensions import Self
 
 from taruvi._async.http_client import AsyncHTTPClient
 from taruvi.config import TaruviConfig
+
+if TYPE_CHECKING:
+    from taruvi._async.modules.analytics import AsyncAnalyticsModule
+    from taruvi._async.modules.app import AsyncAppModule
+    from taruvi._async.modules.auth import AsyncAuthModule
+    from taruvi._async.modules.database import AsyncDatabaseModule
+    from taruvi._async.modules.functions import AsyncFunctionsModule
+    from taruvi._async.modules.policy import AsyncPolicyModule
+    from taruvi._async.modules.secrets import AsyncSecretsModule
+    from taruvi._async.modules.settings import AsyncSettingsModule
+    from taruvi._async.modules.storage import AsyncStorageModule
+    from taruvi._async.modules.users import AsyncUsersModule
 
 
 class AsyncClient:
@@ -84,16 +105,16 @@ class AsyncClient:
         self._http_client = AsyncHTTPClient(self._config)
 
         # Module instances (lazy-loaded)
-        self._functions = None
-        self._database = None
-        self._auth = None
-        self._storage = None
-        self._secrets = None
-        self._policy = None
-        self._app = None
-        self._settings = None
-        self._users = None
-        self._analytics = None
+        self._functions: Optional[AsyncFunctionsModule] = None
+        self._database: Optional[AsyncDatabaseModule] = None
+        self._auth: Optional[AsyncAuthModule] = None
+        self._storage: Optional[AsyncStorageModule] = None
+        self._secrets: Optional[AsyncSecretsModule] = None
+        self._policy: Optional[AsyncPolicyModule] = None
+        self._app: Optional[AsyncAppModule] = None
+        self._settings: Optional[AsyncSettingsModule] = None
+        self._users: Optional[AsyncUsersModule] = None
+        self._analytics: Optional[AsyncAnalyticsModule] = None
 
     @property
     def config(self) -> TaruviConfig:
@@ -101,7 +122,7 @@ class AsyncClient:
         return self._config
 
     @property
-    def functions(self):
+    def functions(self) -> AsyncFunctionsModule:
         """Access Functions API."""
         if self._functions is None:
             from taruvi._async.modules.functions import AsyncFunctionsModule
@@ -110,7 +131,7 @@ class AsyncClient:
         return self._functions
 
     @property
-    def database(self):
+    def database(self) -> AsyncDatabaseModule:
         """Access Database API."""
         if self._database is None:
             from taruvi._async.modules.database import AsyncDatabaseModule
@@ -119,7 +140,7 @@ class AsyncClient:
         return self._database
 
     @property
-    def auth(self):
+    def auth(self) -> AsyncAuthModule:
         """
         Authentication module for user-level auth operations.
 
@@ -170,7 +191,7 @@ class AsyncClient:
         )
 
     @property
-    def storage(self):
+    def storage(self) -> AsyncStorageModule:
         """Access Storage API."""
         if self._storage is None:
             from taruvi._async.modules.storage import AsyncStorageModule
@@ -179,7 +200,7 @@ class AsyncClient:
         return self._storage
 
     @property
-    def secrets(self):
+    def secrets(self) -> AsyncSecretsModule:
         """Access Secrets API."""
         if self._secrets is None:
             from taruvi._async.modules.secrets import AsyncSecretsModule
@@ -188,7 +209,7 @@ class AsyncClient:
         return self._secrets
 
     @property
-    def policy(self):
+    def policy(self) -> AsyncPolicyModule:
         """Access Policy API."""
         if self._policy is None:
             from taruvi._async.modules.policy import AsyncPolicyModule
@@ -197,7 +218,7 @@ class AsyncClient:
         return self._policy
 
     @property
-    def app(self):
+    def app(self) -> AsyncAppModule:
         """Access App API."""
         if self._app is None:
             from taruvi._async.modules.app import AsyncAppModule
@@ -206,7 +227,7 @@ class AsyncClient:
         return self._app
 
     @property
-    def settings(self):
+    def settings(self) -> AsyncSettingsModule:
         """Access Settings API."""
         if self._settings is None:
             from taruvi._async.modules.settings import AsyncSettingsModule
@@ -215,7 +236,7 @@ class AsyncClient:
         return self._settings
 
     @property
-    def users(self):
+    def users(self) -> AsyncUsersModule:
         """Access Users API for user and role management operations."""
         if self._users is None:
             from taruvi._async.modules.users import AsyncUsersModule
@@ -224,7 +245,7 @@ class AsyncClient:
         return self._users
 
     @property
-    def analytics(self):
+    def analytics(self) -> AsyncAnalyticsModule:
         """Access Analytics API for executing analytics queries."""
         if self._analytics is None:
             from taruvi._async.modules.analytics import AsyncAnalyticsModule
@@ -236,11 +257,16 @@ class AsyncClient:
         """Close the client and release resources."""
         await self._http_client.close()
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> Self:
         """Support async context manager."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         """Close client on context exit."""
         await self.close()
 

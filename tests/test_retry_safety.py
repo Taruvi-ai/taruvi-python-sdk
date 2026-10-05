@@ -5,9 +5,9 @@ from unittest import mock
 import httpx
 import pytest
 
+from taruvi._sync.http_client import HTTPClient
 from taruvi.config import TaruviConfig
 from taruvi.exceptions import ConnectionError, TimeoutError
-from taruvi._sync.http_client import HTTPClient
 
 
 def _client(handler) -> HTTPClient:
@@ -70,7 +70,9 @@ def test_post_passes_a_per_request_timeout():
 def _sdk_client(handler):
     from taruvi import Client
 
-    client = Client(api_url="https://api.example.com", app_slug="test-app", api_key="key", mode="sync")
+    client = Client(
+        api_url="https://api.example.com", app_slug="test-app", api_key="key", mode="sync"
+    )
     client._http_client.client.close()
     client._http_client.client = httpx.Client(
         base_url="https://api.example.com", transport=httpx.MockTransport(handler)
@@ -87,11 +89,16 @@ def test_upload_sends_a_guessed_content_type():
         seen["body"] = request.read()
         return httpx.Response(
             200,
-            json={"status": "success", "data": {"uploaded_count": 1, "failed_count": 0, "successful": [], "failed": []}},
+            json={
+                "status": "success",
+                "data": {"uploaded_count": 1, "failed_count": 0, "successful": [], "failed": []},
+            },
         )
 
-    result = _sdk_client(handler).storage.from_("docs").upload(
-        files=[("chart.png", io.BytesIO(b"png"))], paths=["charts/chart.png"]
+    result = (
+        _sdk_client(handler)
+        .storage.from_("docs")
+        .upload(files=[("chart.png", io.BytesIO(b"png"))], paths=["charts/chart.png"])
     )
     assert b"Content-Type: image/png" in seen["body"]
     assert result["uploaded_count"] == 1
@@ -118,7 +125,9 @@ def test_download_raises_on_error_and_encodes_the_path():
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["path"] = request.url.raw_path.decode()
-        return httpx.Response(404, json={"status": "error", "code": "NOT_FOUND", "message": "Missing"})
+        return httpx.Response(
+            404, json={"status": "error", "code": "NOT_FOUND", "message": "Missing"}
+        )
 
     with pytest.raises(NotFoundError):
         _sdk_client(handler).storage.from_("docs").download("reports/Q3 #1?.pdf")
@@ -129,7 +138,13 @@ def test_storage_delete_returns_skipped_objects():
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             207,
-            json={"status": "success", "data": {"deleted_count": 0, "failed": [{"path": "a.txt", "error": "Permission denied"}]}},
+            json={
+                "status": "success",
+                "data": {
+                    "deleted_count": 0,
+                    "failed": [{"path": "a.txt", "error": "Permission denied"}],
+                },
+            },
         )
 
     result = _sdk_client(handler).storage.from_("docs").delete(["a.txt"])
