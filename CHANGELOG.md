@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3b1] - 2026-10-07
+
+Pre-release of 0.2.3 for beta testing. Install it with `pip install --pre taruvi` or `pip install taruvi==0.2.3b1`.
+
+### Fixed
+- An unauthenticated `401` now keeps Taruvi's `UNAUTHORIZED` code on `AuthenticationError` / `NotAuthenticatedError`, instead of leaving `error.code` as `None`.
+
 ## [0.2.2b1] - 2026-09-28
 
 Pre-release of 0.2.2 for beta testing. Install it with `pip install --pre taruvi` or `pip install taruvi==0.2.2b1`.

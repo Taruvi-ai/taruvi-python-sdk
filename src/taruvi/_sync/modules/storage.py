@@ -120,6 +120,18 @@ def _build_update_body(
     return body
 
 
+def _bucket_body(response: dict[str, Any]) -> dict[str, Any]:
+    """Return bucket metadata from retrieve, create, or update.
+
+    Those endpoints return the bucket at the top level. A ``data`` object is
+    used when one is present.
+    """
+    data = response.get("data")
+    if isinstance(data, dict):
+        return data
+    return response
+
+
 # ============================================================================
 # Sync Implementation
 # ============================================================================
@@ -519,7 +531,7 @@ class StorageModule(BaseModule):
             body["max_objects"] = max_objects
 
         response = self._http.post(path, json=body)
-        return self._extract_data(response)
+        return _bucket_body(response)
 
     def get_bucket(self, slug: str, *, app_slug: Optional[str] = None) -> Bucket:
         """
@@ -541,7 +553,7 @@ class StorageModule(BaseModule):
 
         path = _STORAGE_BUCKET.format(app_slug=app_slug, slug=slug)
         response = self._http.get(path)
-        return self._extract_data(response)
+        return _bucket_body(response)
 
     def update_bucket(
         self,
@@ -605,7 +617,7 @@ class StorageModule(BaseModule):
             body["max_objects"] = max_objects
 
         response = self._http.patch(path, json=body)
-        return self._extract_data(response)
+        return _bucket_body(response)
 
     def delete_bucket(self, slug: str, *, app_slug: Optional[str] = None) -> None:
         """

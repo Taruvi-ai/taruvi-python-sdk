@@ -148,13 +148,6 @@ class BaseHTTPClient:
             APIError: Appropriate error based on status code
             NotAuthenticatedError: When accessing protected resource without authentication
         """
-        # Special handling for 401 when client is not authenticated
-        if response.status_code == 401 and not self._is_client_authenticated():
-            raise NotAuthenticatedError(
-                "Authentication required for this resource. "
-                "Use client.auth.signInWithToken() or client.auth.signInWithPassword() to authenticate."
-            )
-
         # Try to parse error details from response
         code = None
         detail = None
@@ -170,6 +163,17 @@ class BaseHTTPClient:
         except Exception:
             message = response.text or f"HTTP {response.status_code}"
             details = None
+
+        # Keep NotAuthenticatedError for a client with no credential, but still
+        # attach the platform envelope (status 401, code UNAUTHORIZED).
+        if response.status_code == 401 and not self._is_client_authenticated():
+            error = NotAuthenticatedError(
+                "Authentication required for this resource. "
+                "Use client.auth.signInWithToken() or client.auth.signInWithPassword() to authenticate."
+            )
+            error.code = code
+            error.detail = detail
+            raise error
 
         # Create and raise appropriate error
         error = create_error_from_response(
