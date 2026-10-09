@@ -7,12 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-09
+
+First stable release with the changes tested in 0.2.3b1 and 0.2.2b1, listed below. **0.2.2 does not include them:** it was released from `main` and contains 0.2.1 plus the changes listed under [0.2.2]. Upgrade from 0.2.2 or earlier to get the credential, retry, storage, error and filtered-delete fixes.
+
+### Fixed
+- `import taruvi` again loads `asyncio` and `pydantic_settings` only when a `Client` is created, as in 0.2.2; 0.2.3b1 loaded them at import time. `RuntimeMode` is again one class whether imported from `taruvi`, `taruvi.config` or `taruvi.runtime`.
+
 ## [0.2.3b1] - 2026-10-07
 
 Pre-release of 0.2.3 for beta testing. Install it with `pip install --pre taruvi` or `pip install taruvi==0.2.3b1`.
 
 ### Fixed
 - An unauthenticated `401` now keeps Taruvi's `UNAUTHORIZED` code on `AuthenticationError` / `NotAuthenticatedError`, instead of leaving `error.code` as `None`.
+
+## [0.2.2] - 2026-09-29
+
+### Changed
+- **Faster `import taruvi`** — `asyncio` and `pydantic_settings` (via `taruvi.config`) are
+  no longer imported at package import time; they load lazily when a `Client` is
+  constructed or `TaruviConfig` is accessed. `RuntimeMode` now lives in `taruvi._modes`
+  and is re-exported from `taruvi.config`, so all existing import paths keep working.
+
+### Fixed
+- `Client(...)` without an explicit `mode` raised `RuntimeError: no running event loop`
+  when called outside an event loop, because the SDK's own `RuntimeError` shadowed the
+  builtin in the auto-detection check. Auto-detect now correctly falls back to sync mode.
 
 ## [0.2.2b1] - 2026-09-28
 
