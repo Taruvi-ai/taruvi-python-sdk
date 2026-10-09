@@ -1,7 +1,5 @@
 """Tests for mapping API error responses to SDK exceptions."""
 
-from unittest.mock import MagicMock
-
 import httpx
 import pytest
 
@@ -71,16 +69,27 @@ def test_function_execute_omits_async_unless_set():
 
 @pytest.mark.parametrize(
     ("status", "code", "retryable"),
-    [(402, "account_suspended", False), (429, "product_suspended", False), (503, "gate_unavailable", True)],
+    [
+        (402, "account_suspended", False),
+        (429, "product_suspended", False),
+        (503, "gate_unavailable", True),
+    ],
 )
 def test_billing_refusals_raise_billing_error(status, code, retryable):
     from taruvi import BillingError, RateLimitError
 
-    response = httpx.Response(status, json={"detail": "Blocked by billing", "code": code, "module": "database"})
+    response = httpx.Response(
+        status, json={"detail": "Blocked by billing", "code": code, "module": "database"}
+    )
     with pytest.raises(BillingError) as exc_info:
         _client()._handle_error_response(response)
 
     error = exc_info.value
     assert not isinstance(error, RateLimitError)
     assert error.message == "Blocked by billing"
-    assert (error.status_code, error.code, error.module, error.retryable) == (status, code, "database", retryable)
+    assert (error.status_code, error.code, error.module, error.retryable) == (
+        status,
+        code,
+        "database",
+        retryable,
+    )

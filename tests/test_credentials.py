@@ -26,7 +26,9 @@ def test_environment_credential_still_used_when_none_is_passed(env_api_key):
 
 
 def test_only_one_credential_header_is_sent():
-    config = TaruviConfig(api_url="https://api.example.com", app_slug="app", api_key="k", session_token="s")
+    config = TaruviConfig(
+        api_url="https://api.example.com", app_slug="app", api_key="k", session_token="s"
+    )
     assert config.headers["Authorization"] == "Api-Key k"
     assert "X-Session-Token" not in config.headers
 

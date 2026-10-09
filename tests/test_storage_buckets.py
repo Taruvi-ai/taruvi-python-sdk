@@ -47,7 +47,10 @@ def test_get_bucket_still_unwraps_a_data_envelope():
 def test_create_and_update_bucket_return_the_resource_body():
     storage = _sync_client(_json_ok).storage
     assert storage.create_bucket("Public")["visibility"] == "public"
-    assert storage.update_bucket("oct5pubshareattach", visibility="public")["slug"] == "oct5pubshareattach"
+    assert (
+        storage.update_bucket("oct5pubshareattach", visibility="public")["slug"]
+        == "oct5pubshareattach"
+    )
 
 
 @pytest.mark.asyncio
