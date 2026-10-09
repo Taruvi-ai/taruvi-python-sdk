@@ -161,7 +161,6 @@ def test_settings_requires_app_slug(monkeypatch):
     monkeypatch.setenv("TARUVI_TEST_MODE", "true")
 
     from taruvi import Client
-    from taruvi.exceptions import ConfigurationError
 
     with pytest.raises(ConfigurationError, match="app_slug is required"):
         Client(api_url="http://localhost:8000", app_slug="")

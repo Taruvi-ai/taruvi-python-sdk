@@ -487,6 +487,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             # delete_filtered: the endpoint reads one JSON object from ?filter=.
             # A filter tree travels under "filters", as it does on list requests.
             import json
+
             conditions: dict[str, Any] = dict(self._filters)
             if self._raw_filters:
                 conditions["filters"] = self._raw_filters
@@ -497,7 +498,8 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             # Refuse what narrows a read but can't narrow a delete; dropping it would
             # delete every row that matches the filters alone.
             unsupported = [
-                name for name, is_set in (
+                name
+                for name, is_set in (
                     ("search", self._search is not None),
                     ("vector_search", self._vector_value is not None),
                     ("page", self._page != 1),
@@ -505,7 +507,8 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                     ("aggregate", bool(self._aggregates)),
                     ("group_by", bool(self._group_by)),
                     ("having", self._having is not None),
-                ) if is_set
+                )
+                if is_set
             ]
             if unsupported:
                 raise ValueError(

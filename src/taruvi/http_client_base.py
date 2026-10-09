@@ -29,7 +29,9 @@ _IDEMPOTENT_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
 _NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
-def transport_error(error: httpx.TransportError, *, method: str, path: str, api_url: str, timeout: object) -> Exception:
+def transport_error(
+    error: httpx.TransportError, *, method: str, path: str, api_url: str, timeout: object
+) -> Exception:
     """Convert an httpx transport failure into the matching SDK error."""
     from taruvi.exceptions import ConnectionError, TimeoutError
 
@@ -160,7 +162,7 @@ class BaseHTTPClient:
             code = error_data.get("code")
             detail = error_data.get("detail")
             module = error_data.get("module")
-        except Exception:
+        except (ValueError, AttributeError):  # not JSON, or JSON that is not an object
             message = response.text or f"HTTP {response.status_code}"
             details = None
 

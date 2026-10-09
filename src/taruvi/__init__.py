@@ -111,8 +111,8 @@ Function Runtime Example:
 import os
 from typing import TYPE_CHECKING, Any, Optional
 
+from taruvi._modes import RuntimeMode
 from taruvi._version import __version__ as __version__
-from taruvi.config import RuntimeMode, TaruviConfig
 from taruvi.exceptions import (
     APIError,
     AuthenticationError,
@@ -281,8 +281,6 @@ def Client(
             f"Invalid mode: '{mode}'. Must be 'sync' or 'async'. "
             f"Use Client(mode='sync') for synchronous or Client(mode='async') for async/await."
         )
-
-
 
 
 __all__ = [  # noqa: RUF022 - grouped by kind on purpose
