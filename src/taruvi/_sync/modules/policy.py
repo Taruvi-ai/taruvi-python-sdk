@@ -61,7 +61,8 @@ class PolicyModule(BaseModule):
             resources: List of resource check requests, each with:
                 - resource: Dict with kind, id, attr (optional)
                 - actions: List of actions to check
-            principal: Optional principal override (defaults to authenticated user)
+            principal: Deprecated. The platform rejects an explicit principal with a 400;
+                checks always run as the authenticated caller. Leave as None.
             aux_data: Optional auxiliary data for policy evaluation
             app_slug: App slug (defaults to client's app_slug)
 
@@ -110,7 +111,8 @@ class PolicyModule(BaseModule):
         Args:
             resources: List of resource dicts (each with 'kind' and 'id')
             actions: List of actions to check (e.g., ['read', 'write'])
-            principal: Optional principal override
+            principal: Deprecated. The platform rejects an explicit principal with a 400;
+                checks always run as the authenticated caller. Leave as None.
             aux_data: Optional auxiliary data
             app_slug: App slug (defaults to client's app_slug)
 
@@ -158,7 +160,8 @@ class PolicyModule(BaseModule):
         Args:
             resource: Resource dict with 'kind' and 'id'
             actions: Optional list of actions to check (defaults to common CRUD actions)
-            principal: Optional principal override
+            principal: Deprecated. The platform rejects an explicit principal with a 400;
+                checks always run as the authenticated caller. Leave as None.
             aux_data: Optional auxiliary data
             app_slug: App slug (defaults to client's app_slug)
 

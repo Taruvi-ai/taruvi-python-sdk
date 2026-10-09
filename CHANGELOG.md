@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-09
+
+First stable release with the changes tested in 0.2.3b1 and 0.2.2b1, listed below. **0.2.2 does not include them:** it was released from `main` and contains 0.2.1 plus the changes listed under [0.2.2]. Upgrade from 0.2.2 or earlier to get the credential, retry, storage, error and filtered-delete fixes.
+
+### Fixed
+- `import taruvi` again loads `asyncio` and `pydantic_settings` only when a `Client` is created, as in 0.2.2; 0.2.3b1 loaded them at import time. `RuntimeMode` is again one class whether imported from `taruvi`, `taruvi.config` or `taruvi.runtime`.
+
+## [0.2.3b1] - 2026-10-07
+
+Pre-release of 0.2.3 for beta testing. Install it with `pip install --pre taruvi` or `pip install taruvi==0.2.3b1`.
+
+### Fixed
+- An unauthenticated `401` now keeps Taruvi's `UNAUTHORIZED` code on `AuthenticationError` / `NotAuthenticatedError`, instead of leaving `error.code` as `None`.
+
 ## [0.2.2] - 2026-09-29
 
 ### Changed
@@ -19,6 +33,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Client(...)` without an explicit `mode` raised `RuntimeError: no running event loop`
   when called outside an event loop, because the SDK's own `RuntimeError` shadowed the
   builtin in the auto-detection check. Auto-detect now correctly falls back to sync mode.
+
+## [0.2.2b1] - 2026-09-28
+
+Pre-release of 0.2.2 for beta testing. Install it with `pip install --pre taruvi` or `pip install taruvi==0.2.2b1`.
+
+### Added
+- Every request identifies the SDK with `X-Taruvi-Client` and `User-Agent` headers, for example `taruvi-python/0.2.2 (python/3.12.4)`, so the platform can tell which SDK and version made a call.
+- `GatewayTimeoutError` for `504 Gateway Timeout` responses (query and upstream timeouts).
+- `BillingError` for billing-gate refusals: `402 account_suspended`, `429 product_suspended`, and `503 gate_unavailable`, with `module` and `retryable`. These were `APIError`, `RateLimitError`, and `ServiceUnavailableError`.
+- Every API error now carries the platform error envelope: `error.code` (for example `"NOT_FOUND"`) and `error.detail`.
+
+### Changed
+- `functions.execute()` now omits `async` unless you pass `is_async`, so the function's own default execution mode applies. Pass `is_async=False` to keep forcing a synchronous run.
+- A credential passed to `Client()` (`api_key`, `jwt`, or `session_token`) now replaces every credential in the environment, and each request sends exactly one credential. Previously `Client(session_token=...)` also sent `TARUVI_API_KEY` from the environment, and data-table requests then ran as the key's owner instead of the user.
+- `NotAuthenticatedError` is now a subclass of `AuthenticationError`.
+
+### Fixed
+- Timeouts and dropped connections no longer resend `POST` or `PATCH` requests the server may already have applied, such as record creates and function runs. They are still retried when the connection never opened; `GET`, `PUT`, and `DELETE` keep their retries.
+- `functions.execute(timeout=...)` was ignored; it now sets that call's timeout.
+- `storage.upload()` sent every file as `application/octet-stream`, so TaruviBase stored that MIME type; it now guesses the type from the filename, or takes `(filename, file, content_type)`. It returns the batch result (`uploaded_count`, `successful`, `failed`) and raises SDK errors instead of `httpx.HTTPStatusError`.
+- `storage.download()` returned the error body as file bytes on `403` or `404`; it now raises the matching SDK error.
+- `storage.upload()` and `storage.download()` raised raw `httpx` exceptions on network failures; they now raise `TimeoutError` or `ConnectionError`. A dropped connection (`RemoteProtocolError`) is now handled like other network errors.
+- `count()` downloaded every matching record; it now requests one row and reads the total.
+- A filter tree (`filter({...})`) replaced the flat filters on the same query, so reads returned, and `delete_filtered()` deleted, rows matching the tree alone. Both are now sent and combined with AND.
+- `storage.delete()` returns the batch result (`deleted_count`, `failed`) instead of `None`, so skipped objects, such as those a policy denies, are visible.
+- A trailing slash on `api_url` produced `//api/...` storage URLs; it is now removed.
+- Object paths are URL-encoded segment by segment, so names containing spaces, `#`, or `?` reach the right object.
+- `taruvi.__version__` reports the installed package version instead of `0.1.9`.
+- Error messages fall back to the response's `detail` when it has no `message`, instead of the raw response body.
+- Errors for HTTP statuses without a dedicated class (for example 422 or 502) kept `details` in `status_code`; they now carry the real status code.
+- `delete_filtered()` with a filter tree sent a value the delete endpoint rejects; the tree is now sent under `filters`, matching list requests.
+- `delete_filtered()` with no filters now raises `ValueError` before sending a request.
+- Docstrings showed `client.database.query(...)`, `signInWithPassword(username=...)`, and a no-argument `Client()`; they now show `from_(...)`, `email=`, and the `sdk_client` passed to function code.
+- `delete_filtered()` raises `ValueError` when the query also uses `search()`, `vector_search()`, `page()`, `page_size()`, or aggregation, instead of dropping them and deleting every row that matches the other filters.
+- `first()` returned the wrong row when `page()` was set; it now reads the requested page, and no longer changes the builder's page size.
+- The `Secret` type hint now declares `value` and `tags`, which `secrets.get()` returns.
+- Docstring examples for `auth.get_current_user()`, `secrets.list()`, and `users.list()` read the fields the platform actually returns (`["data"]`), and no longer call a nonexistent `list_secrets()`.
+
+### Deprecated
+- The `principal` argument of the policy methods. The platform rejects an explicit principal with a 400; checks always run as the authenticated caller.
 
 ## [0.1.6] - 2026-03-26
 

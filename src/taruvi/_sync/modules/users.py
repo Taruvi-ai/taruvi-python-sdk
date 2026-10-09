@@ -251,7 +251,7 @@ class UsersModule(BaseModule):
                 page=1,
                 page_size=20
             )
-            for user in users["results"]:
+            for user in users["data"]:
                 print(user["username"])
             ```
         """
