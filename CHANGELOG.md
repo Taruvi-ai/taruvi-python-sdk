@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4b1] - 2026-11-02
+
+Pre-release for beta testing. Install it with `pip install --pre taruvi` or `pip install taruvi==0.2.4b1`.
+
+### Changed
+- `vector_search().execute()` sends the embedding in a `POST …/data/query/` body instead of the query string, so a 1536-float vector is not rejected with 414. Lists that do not call `vector_search()` stay GET.
+
 ## [0.2.3] - 2026-10-09
 
 First stable release with the changes tested in 0.2.3b1 and 0.2.2b1, listed below. **0.2.2 does not include them:** it was released from `main` and contains 0.2.1 plus the changes listed under [0.2.2]. Upgrade from 0.2.2 or earlier to get the credential, retry, storage, error and filtered-delete fixes.
