@@ -186,6 +186,68 @@ class _BaseQueryBuilder(BaseModule):
         self._hybrid_strategy = strategy
         self._hybrid_alpha = alpha
 
+    def _vector_query_body(self) -> dict[str, Any]:
+        """Body of POST …/data/query/. The embedding stays out of the URL."""
+        import json
+
+        vector: dict[str, Any] = {
+            "field": self._vector_field,
+            "value": self._vector_value,
+        }
+        if self._topk is not None:
+            vector["topk"] = self._topk
+        if self._vector_threshold is not None:
+            vector["threshold"] = self._vector_threshold
+        if self._ef_search is not None:
+            vector["ef_search"] = self._ef_search
+        if self._vector_metric is not None:
+            vector["metric"] = self._vector_metric
+
+        body: dict[str, Any] = {"vector": vector}
+        if self._search is not None:
+            body["search"] = self._search
+        # GET ignores hybrid when there is no text query. POST rejects that pair.
+        if self._hybrid_strategy and self._search:
+            hybrid: dict[str, Any] = {"strategy": self._hybrid_strategy}
+            if self._hybrid_alpha is not None:
+                hybrid["alpha"] = self._hybrid_alpha
+            body["hybrid"] = hybrid
+
+        filters: dict[str, Any] | list[Any] = dict(self._filters)
+        if self._raw_filters:
+            raw = json.loads(self._raw_filters)
+            if isinstance(raw, dict):
+                filters.update(raw)
+            elif not filters:
+                filters = raw
+        if filters:
+            body["filters"] = filters
+        if self._ordering_parts:
+            body["ordering"] = list(self._ordering_parts)
+        if self._page != 1:
+            body["page"] = self._page
+        if self._page_size is not None:
+            body["page_size"] = self._page_size
+        if self._populate_fields:
+            body["populate"] = list(self._populate_fields)
+        if self._aggregates:
+            body["aggregate"] = list(self._aggregates)
+        if self._group_by:
+            body["group_by"] = list(self._group_by)
+        if self._having is not None:
+            body["having"] = self._having
+        if self._allowed_actions:
+            body["allowed_actions"] = list(self._allowed_actions)
+        if self._format is not None:
+            body["format"] = self._format
+        if self._relationship_types:
+            body["relationship_type"] = list(self._relationship_types)
+        if self._include is not None:
+            body["include"] = self._include
+        if self._depth is not None:
+            body["depth"] = self._depth
+        return body
+
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
         ordering = ",".join(self._ordering_parts) if self._ordering_parts else None
@@ -462,7 +524,6 @@ class QueryBuilder(_BaseQueryBuilder):
     def execute(self) -> dict[str, Any]:
         """Execute the staged operation (GET/POST/PATCH/DELETE)."""
         path = self._build_path()
-        params = self.build_params()
         op = self._operation or "GET"
 
         if op == "POST":
@@ -516,8 +577,11 @@ class QueryBuilder(_BaseQueryBuilder):
                 )
             return self._http.delete(path, params={"filter": json.dumps(conditions)})
 
-        # Default: GET
-        response = self._http.get(path, params=params)
+        # Default: GET. An embedding does not fit in the URL, so that read is a POST body.
+        if self._vector_value is not None:
+            response = self._http.post(f"{path}query/", json=self._vector_query_body())
+        else:
+            response = self._http.get(path, params=self.build_params())
         return {"data": self._extract_data_list(response), "total": response.get("total", 0)}
 
     def first(self) -> Optional[dict[str, Any]]:
