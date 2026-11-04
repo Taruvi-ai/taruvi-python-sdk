@@ -121,3 +121,49 @@ async def test_async_vector_search_posts_embedding_in_body():
         },
     )
     assert result == {"data": [{"id": 1}], "total": 1}
+
+
+def test_simple_filter_and_crud_list_are_both_sent():
+    client = _client()
+    (
+        QueryBuilder(client, "document_chunks")
+        .filter("team", "eq", "a")
+        .filter([{"field": "code", "operator": "eq", "value": "007"}])
+        .vector_search("embedding", [0.1], topk=10)
+        .execute()
+    )
+
+    body = client._http_client.post.call_args.kwargs["json"]
+    assert body["filters"] == {"and": [{"team": "a"}, {"code": "007"}]}
+
+
+def test_record_vector_search_stays_on_the_record_route():
+    client = _client()
+    QueryBuilder(client, "document_chunks").get(1).vector_search("embedding", [0.1], topk=1).execute()
+
+    client._http_client.post.assert_not_called()
+    assert client._http_client.get.call_args.args[0].endswith("/data/1/")
+
+
+@pytest.mark.asyncio
+async def test_async_simple_filter_and_crud_list_are_both_sent():
+    client = _client(async_http=True)
+    await (
+        AsyncQueryBuilder(client, "document_chunks")
+        .filter("team", "eq", "a")
+        .filter([{"field": "code", "operator": "eq", "value": "007"}])
+        .vector_search("embedding", [0.1], topk=10)
+        .execute()
+    )
+
+    body = client._http_client.post.call_args.kwargs["json"]
+    assert body["filters"] == {"and": [{"team": "a"}, {"code": "007"}]}
+
+
+@pytest.mark.asyncio
+async def test_async_record_vector_search_stays_on_the_record_route():
+    client = _client(async_http=True)
+    await AsyncQueryBuilder(client, "document_chunks").get(1).vector_search("embedding", [0.1], topk=1).execute()
+
+    client._http_client.post.assert_not_called()
+    assert client._http_client.get.call_args.args[0].endswith("/data/1/")

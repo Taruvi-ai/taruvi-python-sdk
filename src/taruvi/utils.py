@@ -143,9 +143,60 @@ def build_params(
     return params
 
 
+def combine_query_filters(
+    flat: dict[str, Any] | None, raw: Any
+) -> dict[str, Any] | list[Any] | None:
+    """AND a flat filter dict with a complex filter object or a CrudFilters list.
+
+    Either form alone is returned as itself. A list is turned into the same
+    filter tree the platform builds, so a simple filter is not dropped when a
+    Refine list is also set.
+    """
+    flat = dict(flat or {})
+    if isinstance(raw, list):
+        converted = _crud_list_to_tree(raw)
+        raw = converted or (raw or None)
+    elif not isinstance(raw, dict):
+        raw = None
+    if flat and raw:
+        return {"and": [flat, raw]}
+    if flat:
+        return flat
+    return raw or None
+
+
+def _crud_list_to_tree(filters: list[Any]) -> dict[str, Any]:
+    children = [child for child in (_crud_condition(item) for item in filters) if child]
+    if not children:
+        return {}
+    if len(children) == 1:
+        return children[0]
+    return {"and": children}
+
+
+def _crud_condition(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {}
+    operator = item.get("operator", "eq")
+    if operator in ("or", "and"):
+        return {operator: [_crud_condition(child) for child in (item.get("value") or [])]}
+    if operator == "not":
+        inner = item.get("value")
+        nested = _crud_condition(inner) if isinstance(inner, dict) else {}
+        return {"not": nested} if nested else {}
+    field = item.get("field") or ""
+    if not field:
+        return {}
+    value = item.get("value", "")
+    if operator in ("eq", None, ""):
+        return {field: value}
+    return {f"{field}__{operator}": value}
+
+
 __all__ = [
     "build_params",
     "build_path",
     "build_query_string",
+    "combine_query_filters",
     "safe_get_nested",
 ]
