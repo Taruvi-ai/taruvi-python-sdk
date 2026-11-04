@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
 from taruvi.types import DatabaseRecord
-from taruvi.utils import build_params as build_params_util
+from taruvi.utils import build_params as build_params_util, combine_query_filters
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
@@ -213,13 +213,8 @@ class _BaseQueryBuilder(BaseModule):
                 hybrid["alpha"] = self._hybrid_alpha
             body["hybrid"] = hybrid
 
-        filters: dict[str, Any] | list[Any] = dict(self._filters)
-        if self._raw_filters:
-            raw = json.loads(self._raw_filters)
-            if isinstance(raw, dict):
-                filters.update(raw)
-            elif not filters:
-                filters = raw
+        raw = json.loads(self._raw_filters) if self._raw_filters else None
+        filters = combine_query_filters(self._filters, raw)
         if filters:
             body["filters"] = filters
         if self._ordering_parts:
@@ -579,8 +574,10 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                 )
             return await self._http.delete(path, params={"filter": json.dumps(conditions)})
 
-        # Default: GET. An embedding does not fit in the URL, so that read is a POST body.
-        if self._vector_value is not None:
+        # Default: GET. An embedding does not fit in the URL, so a collection read
+        # is a POST body. A single record stays on GET …/data/{id}/, which is the
+        # route that exists; …/data/{id}/query/ does not.
+        if self._vector_value is not None and not self._record_id:
             response = await self._http.post(f"{path}query/", json=self._vector_query_body())
         else:
             response = await self._http.get(path, params=self.build_params())

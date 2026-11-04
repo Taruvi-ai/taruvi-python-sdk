@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4b2] - 2026-11-03
+
+### Fixed
+- A vector read that sets both a simple filter and a Refine filter list now sends both, combined with AND. 0.2.4b1 kept only the simple filter.
+- `.get(id).vector_search().execute()` stays on `GET …/data/{id}/`. 0.2.4b1 posted to `…/data/{id}/query/`, which does not exist.
+
 ## [0.2.4b1] - 2026-11-02
 
 Pre-release for beta testing. Install it with `pip install --pre taruvi` or `pip install taruvi==0.2.4b1`.
