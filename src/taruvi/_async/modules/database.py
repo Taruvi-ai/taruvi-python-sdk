@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
 from taruvi.types import DatabaseRecord
-from taruvi.utils import build_params as build_params_util
+from taruvi.utils import build_params as build_params_util, combine_query_filters
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
@@ -186,6 +186,63 @@ class _BaseQueryBuilder(BaseModule):
         self._hybrid_strategy = strategy
         self._hybrid_alpha = alpha
 
+    def _vector_query_body(self) -> dict[str, Any]:
+        """Body of POST …/data/query/. The embedding stays out of the URL."""
+        import json
+
+        vector: dict[str, Any] = {
+            "field": self._vector_field,
+            "value": self._vector_value,
+        }
+        if self._topk is not None:
+            vector["topk"] = self._topk
+        if self._vector_threshold is not None:
+            vector["threshold"] = self._vector_threshold
+        if self._ef_search is not None:
+            vector["ef_search"] = self._ef_search
+        if self._vector_metric is not None:
+            vector["metric"] = self._vector_metric
+
+        body: dict[str, Any] = {"vector": vector}
+        if self._search is not None:
+            body["search"] = self._search
+        # GET ignores hybrid when there is no text query. POST rejects that pair.
+        if self._hybrid_strategy and self._search:
+            hybrid: dict[str, Any] = {"strategy": self._hybrid_strategy}
+            if self._hybrid_alpha is not None:
+                hybrid["alpha"] = self._hybrid_alpha
+            body["hybrid"] = hybrid
+
+        raw = json.loads(self._raw_filters) if self._raw_filters else None
+        filters = combine_query_filters(self._filters, raw)
+        if filters:
+            body["filters"] = filters
+        if self._ordering_parts:
+            body["ordering"] = list(self._ordering_parts)
+        if self._page != 1:
+            body["page"] = self._page
+        if self._page_size is not None:
+            body["page_size"] = self._page_size
+        if self._populate_fields:
+            body["populate"] = list(self._populate_fields)
+        if self._aggregates:
+            body["aggregate"] = list(self._aggregates)
+        if self._group_by:
+            body["group_by"] = list(self._group_by)
+        if self._having is not None:
+            body["having"] = self._having
+        if self._allowed_actions:
+            body["allowed_actions"] = list(self._allowed_actions)
+        if self._format is not None:
+            body["format"] = self._format
+        if self._relationship_types:
+            body["relationship_type"] = list(self._relationship_types)
+        if self._include is not None:
+            body["include"] = self._include
+        if self._depth is not None:
+            body["depth"] = self._depth
+        return body
+
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
         ordering = ",".join(self._ordering_parts) if self._ordering_parts else None
@@ -207,10 +264,10 @@ class _BaseQueryBuilder(BaseModule):
             for rel_type in self._relationship_types:
                 params.setdefault("relationship_type", []).append(rel_type)
 
+        # The platform ANDs a filter tree with flat filters, so send both.
+        params.update(self._filters)
         if self._raw_filters:
             params["filters"] = self._raw_filters
-        else:
-            params.update(self._filters)
 
         if self._allowed_actions:
             params["allowed_actions"] = ",".join(self._allowed_actions)
@@ -464,7 +521,6 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
     async def execute(self) -> dict[str, Any]:
         """Execute the staged operation (GET/POST/PATCH/DELETE)."""
         path = self._build_path()
-        params = self.build_params()
         op = self._operation or "GET"
 
         if op == "POST":
@@ -482,22 +538,63 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
                 return await self._http.delete(path, params={"ids": ids_param})
             if self._body:
                 return await self._http.delete(path, json=self._body)
-            # delete_filtered: send filters as JSON in ?filter= param
+            if self._record_id:
+                return await self._http.delete(path)
+            # delete_filtered: the endpoint reads one JSON object from ?filter=.
+            # A filter tree travels under "filters", as it does on list requests.
+            import json
+
+            conditions: dict[str, Any] = dict(self._filters)
             if self._raw_filters:
-                return await self._http.delete(path, params={"filter": self._raw_filters})
-            if self._filters:
-                import json
+                conditions["filters"] = self._raw_filters
+            if not conditions:
+                raise ValueError(
+                    "delete_filtered() requires at least one filter. Call .filter(...) first."
+                )
+            # Refuse what narrows a read but can't narrow a delete; dropping it would
+            # delete every row that matches the filters alone.
+            unsupported = [
+                name
+                for name, is_set in (
+                    ("search", self._search is not None),
+                    ("vector_search", self._vector_value is not None),
+                    ("page", self._page != 1),
+                    ("page_size", self._page_size is not None),
+                    ("aggregate", bool(self._aggregates)),
+                    ("group_by", bool(self._group_by)),
+                    ("having", self._having is not None),
+                )
+                if is_set
+            ]
+            if unsupported:
+                raise ValueError(
+                    f"delete_filtered() can't narrow a delete by {', '.join(unsupported)}; it would "
+                    "delete every row matching the filters. Remove them, or read the rows and "
+                    "delete by ID."
+                )
+            return await self._http.delete(path, params={"filter": json.dumps(conditions)})
 
-                return await self._http.delete(path, params={"filter": json.dumps(self._filters)})
-            return await self._http.delete(path)
-
-        # Default: GET
-        response = await self._http.get(path, params=params)
+        # Default: GET. An embedding does not fit in the URL, so a collection read
+        # is a POST body. A single record stays on GET …/data/{id}/, which is the
+        # route that exists; …/data/{id}/query/ does not.
+        if self._vector_value is not None and not self._record_id:
+            response = await self._http.post(f"{path}query/", json=self._vector_query_body())
+        else:
+            response = await self._http.get(path, params=self.build_params())
         return {"data": self._extract_data_list(response), "total": response.get("total", 0)}
 
     async def first(self) -> Optional[dict[str, Any]]:
-        """Get first result."""
-        result = await self.page_size(1).execute()
+        """Get the first result, of the requested page when ``page()`` is set."""
+        if self._page != 1:
+            # Shrinking the page would move the offset, so read the requested page.
+            result = await self.execute()
+        else:
+            previous_page_size = self._page_size
+            self._page_size = 1
+            try:
+                result = await self.execute()
+            finally:
+                self._page_size = previous_page_size
         data = result.get("data", [])
         if isinstance(data, list):
             return data[0] if data else None
@@ -508,6 +605,9 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
         path = self._build_path()
         params = self.build_params()
         params["_count"] = "true"
+        # One row is enough: with a page size the platform also returns the full total.
+        params["page_size"] = 1
+        params.pop("page", None)
         response = await self._http.get(path, params=params)
         return response.get("total", 0)
 

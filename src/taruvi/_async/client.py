@@ -21,21 +21,20 @@ class AsyncClient:
     External Application Mode:
         ```python
         client = Client(
-            api_url="http://localhost:8000",
-            api_key="your_jwt_token",
-            site_slug="your-site",
-            mode="async"
+            api_url="https://api.example.com",
+            app_slug="my-app",
+            mode="async",
+            api_key="your_api_key",
         )
 
         result = await client.functions.execute("my-function", {"param": "value"})
         ```
 
-    Function Runtime Mode (auto-configured):
+    Function Runtime Mode:
         ```python
-        # No configuration needed - auto-detects from environment!
-        client = Client(mode="async")
-
-        result = await client.functions.execute("other-function", {"data": 123})
+        # The platform passes an authenticated client as the third argument.
+        def main(params, user_data, sdk_client):
+            return sdk_client.functions.execute("other-function", {"data": 123})
         ```
     """
 
@@ -131,18 +130,14 @@ class AsyncClient:
             >>> # Sign in with JWT
             >>> auth_client = client.auth.signInWithToken(token='jwt_token', token_type='jwt')
 
-            >>> # Sign in with username/password
-            >>> auth_client = await client.auth.signInWithPassword(username='...', password='...')
-
-            >>> # Refresh token
-            >>> new_client = await client.auth.refreshToken(refresh_token='...')
+            >>> # Sign in with email/password
+            >>> auth_client = await client.auth.signInWithPassword(email='...', password='...')
 
             >>> # Sign out
             >>> unauth_client = auth_client.auth.signOut()
 
-            >>> # Low-level API calls
-            >>> response = await client.auth.login(username='...', password='...')
-            >>> user = await client.auth.get_current_user()
+            >>> # Current user
+            >>> user = await auth_client.auth.get_current_user()
         """
         if self._auth is None:
             from taruvi._async.modules.auth import AsyncAuthModule

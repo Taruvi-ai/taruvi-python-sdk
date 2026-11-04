@@ -6,14 +6,21 @@ Supports both external application mode and function runtime mode.
 """
 
 import os
+import platform
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # RuntimeMode is defined in the dependency-free taruvi._modes module and
 # re-exported here for backwards compatibility.
 from taruvi._modes import RuntimeMode
+from taruvi._version import __version__
+
+_CREDENTIAL_FIELDS = ("api_key", "jwt", "session_token")
+
+# Sent with every request so the platform can tell which SDK and version called it.
+CLIENT_ID = f"taruvi-python/{__version__} (python/{platform.python_version()})"
 
 
 class TaruviConfig(BaseSettings):
@@ -139,6 +146,12 @@ class TaruviConfig(BaseSettings):
         description="User JWT token (for user context switching)",
     )
 
+    @field_validator("api_url")
+    @classmethod
+    def _strip_trailing_slash(cls, value: str) -> str:
+        """Accept a site URL with or without a trailing slash."""
+        return value.rstrip("/")
+
     def __init__(self, **kwargs):
         """Initialize configuration with runtime mode detection."""
         # Auto-detect function runtime mode
@@ -176,10 +189,15 @@ class TaruviConfig(BaseSettings):
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
+            # Identify the SDK and its version to the platform.
+            "User-Agent": CLIENT_ID,
+            "X-Taruvi-Client": CLIENT_ID,
         }
 
-        # AUTHENTICATION PRIORITY:
-        # 1. Knox API-Key → Authorization: Api-Key {key}
+        # AUTHENTICATION: send exactly one credential, in this priority order.
+        # Endpoints check credentials in different orders, so sending two could
+        # make one client act as two different users.
+        # 1. API key → Authorization: Api-Key {key}
         if self.api_key:
             headers["Authorization"] = f"Api-Key {self.api_key}"
 
@@ -187,8 +205,8 @@ class TaruviConfig(BaseSettings):
         elif self.jwt:
             headers["Authorization"] = f"Bearer {self.jwt}"
 
-        # 3. Session token → X-Session-Token header (can combine with above)
-        if self.session_token:
+        # 3. Session token → X-Session-Token
+        elif self.session_token:
             headers["X-Session-Token"] = self.session_token
 
         # 4. No auth → Django session cookies (httpx automatic)
@@ -291,5 +309,13 @@ class TaruviConfig(BaseSettings):
 
             return cls(**merged)
         else:
-            # EXTERNAL mode - use explicit params + env vars (Pydantic handles it)
+            # EXTERNAL mode - use explicit params + env vars (Pydantic handles it).
+            # An explicit credential replaces every credential from the
+            # environment, so a TARUVI_API_KEY in the environment can't ride
+            # along with a session token the caller passed.
+            if any(explicit_params.get(key) is not None for key in _CREDENTIAL_FIELDS):
+                explicit_params = {
+                    **{key: None for key in _CREDENTIAL_FIELDS},
+                    **explicit_params,
+                }
             return cls(**explicit_params)

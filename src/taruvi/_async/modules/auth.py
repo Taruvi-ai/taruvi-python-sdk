@@ -38,7 +38,7 @@ class AsyncAuthModule(BaseModule):
         Example:
             ```python
             user = await client.auth.get_current_user()
-            print(f"Logged in as: {user['username']}")
+            print(f"Logged in as: {user['data']['username']}")
             ```
         """
         response = await self._http.get("/api/users/me/")

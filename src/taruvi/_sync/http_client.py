@@ -20,7 +20,7 @@ from taruvi.exceptions import (
     NetworkError,
     TimeoutError,
 )
-from taruvi.http_client_base import BaseHTTPClient
+from taruvi.http_client_base import BaseHTTPClient, can_retry
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ class HTTPClient(BaseHTTPClient):
         data: Optional[dict[str, Any]] = None,
         headers: Optional[dict[str, str]] = None,
         retry: bool = True,
+        timeout: Optional[float] = None,
     ) -> dict[str, Any]:
         """
         Make an HTTP request with retry logic.
@@ -75,7 +76,9 @@ class HTTPClient(BaseHTTPClient):
             json: JSON request body
             data: Form data
             headers: Additional headers (merged with default headers)
-            retry: Whether to retry on failure
+            retry: Whether to retry on failure. POST and PATCH are only
+                retried when the request never reached the server.
+            timeout: Per-request timeout in seconds (defaults to the client's)
 
         Returns:
             dict: Parsed JSON response
@@ -94,6 +97,9 @@ class HTTPClient(BaseHTTPClient):
 
         for attempt in range(max_retries + 1):
             try:
+                request_kwargs: dict[str, Any] = {}
+                if timeout is not None:
+                    request_kwargs["timeout"] = timeout
                 response = self.client.request(
                     method=method,
                     url=path,
@@ -101,15 +107,16 @@ class HTTPClient(BaseHTTPClient):
                     json=json,
                     data=data,
                     headers=request_headers,
+                    **request_kwargs,
                 )
 
                 # Handle response using base class method
                 return self._handle_response(response)
 
             except httpx.TimeoutException as e:
-                if attempt >= max_retries:
+                if attempt >= max_retries or not can_retry(method, e):
                     raise TimeoutError(
-                        f"Request timed out after {self.config.timeout}s",
+                        f"Request timed out after {timeout or self.config.timeout}s",
                         details={"path": path, "method": method},
                     ) from e
 
@@ -117,8 +124,8 @@ class HTTPClient(BaseHTTPClient):
                 wait_time = 2**attempt
                 time.sleep(wait_time)
 
-            except (httpx.ConnectError, httpx.NetworkError) as e:
-                if attempt >= max_retries:
+            except httpx.TransportError as e:
+                if attempt >= max_retries or not can_retry(method, e):
                     raise ConnectionError(
                         f"Failed to connect to {self.config.api_url}",
                         details={"path": path, "method": method, "error": str(e)},
@@ -150,9 +157,12 @@ class HTTPClient(BaseHTTPClient):
         json: Optional[dict[str, Any]] = None,
         data: Optional[dict[str, Any]] = None,
         headers: Optional[dict[str, str]] = None,
+        timeout: Optional[float] = None,
     ) -> dict[str, Any]:
         """Make a POST request."""
-        return self.request("POST", path, params=params, json=json, data=data, headers=headers)
+        return self.request(
+            "POST", path, params=params, json=json, data=data, headers=headers, timeout=timeout
+        )
 
     def put(
         self,

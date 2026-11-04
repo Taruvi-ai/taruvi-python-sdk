@@ -38,7 +38,7 @@ class AuthModule(BaseModule):
         Example:
             ```python
             user = client.auth.get_current_user()
-            print(f"Logged in as: {user['username']}")
+            print(f"Logged in as: {user['data']['username']}")
             ```
         """
         response = self._http.get("/api/users/me/")
