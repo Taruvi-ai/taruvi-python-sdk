@@ -1686,6 +1686,10 @@ Need help? We're here for you:
 
 ---
 
+## UTM Tracking
+
+https://taruvibase.com/?utm_source=github&utm_medium=readme&utm_campaign=taruvi-python-sdk
+
 <p align="center">
   Made with ❤️ by the <a href="https://taruvi.cloud">Taruvi Team</a>
 </p>
