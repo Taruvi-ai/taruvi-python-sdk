@@ -11,11 +11,18 @@ Provides methods for:
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Optional
 
 from taruvi.modules.base import BaseModule
 from taruvi.types import DatabaseRecord
-from taruvi.utils import build_params as build_params_util, combine_query_filters
+from taruvi.utils import (
+    build_params as build_params_util,
+)
+from taruvi.utils import (
+    combine_query_filters,
+    to_json_compatible,
+)
 
 if TYPE_CHECKING:
     from taruvi._async.client import AsyncClient
@@ -25,7 +32,7 @@ _DATATABLE_DATA = "/api/apps/{app_slug}/datatables/{table_name}/data/"
 _DATATABLE_RECORD = "/api/apps/{app_slug}/datatables/{table_name}/data/{record_id}/"
 _DATATABLE_UPSERT = "/api/apps/{app_slug}/datatables/{table_name}/data/upsert/"
 
-# Operators whose values must be comma-joined when passed as list/tuple.
+# Operators whose values must be comma-joined at legacy URL boundaries.
 # httpx serializes Python lists as repeated keys, but Django QueryDict.dict()
 # keeps only the last value — so we must send comma-separated strings.
 _LIST_OPERATORS = frozenset(
@@ -73,7 +80,7 @@ class _BaseQueryBuilder(BaseModule):
         self._delete_ids: Optional[list[int]] = None
         self._is_upsert: bool = False
         self._unique_fields: Optional[str] = None
-        self._filters: dict[str, Any] = {}
+        self._filter_conditions: list[tuple[str, str, Any]] = []
         self._ordering_parts: list[str] = []
         self._page_size: Optional[int] = None
         self._page: int = 1
@@ -102,17 +109,31 @@ class _BaseQueryBuilder(BaseModule):
         return f"{self.table_name}_edges" if self._is_edges else self.table_name
 
     def _add_filter(self, field: str, operator: str, value: Any) -> None:
-        if isinstance(value, (list, tuple)) and operator in _LIST_OPERATORS:
-            value = ",".join(str(v) for v in value)
         key = field if operator == "eq" else f"{field}__{operator}"
-        if key in self._filters:
-            existing = self._filters[key]
-            if isinstance(existing, list):
-                existing.append(value)
+        self._filter_conditions.append((key, operator, deepcopy(value)))
+
+    def _legacy_filters(self) -> dict[str, Any]:
+        """Keep the existing GET and filtered-delete query encoding."""
+        filters: dict[str, Any] = {}
+        for key, operator, value in self._filter_conditions:
+            if isinstance(value, (list, tuple)) and operator in _LIST_OPERATORS:
+                value = ",".join(str(v) for v in value)
             else:
-                self._filters[key] = [existing, value]
-        else:
-            self._filters[key] = value
+                value = deepcopy(value)
+            if key not in filters:
+                filters[key] = value
+            elif isinstance(filters[key], list):
+                filters[key].append(value)
+            else:
+                filters[key] = [filters[key], value]
+        return filters
+
+    def _query_filters(self) -> dict[str, Any]:
+        filters = {key: value for key, _, value in self._filter_conditions}
+        if len(filters) == len(self._filter_conditions):
+            return filters
+        # Repeated operators are separate conditions, not a nested list value.
+        return {"and": [{key: value} for key, _, value in self._filter_conditions]}
 
     def _set_sort(self, field: str, order: str) -> None:
         ordering = f"-{field}" if order == "desc" else field
@@ -158,7 +179,7 @@ class _BaseQueryBuilder(BaseModule):
     def _set_raw_filters(self, filters: dict | list) -> None:
         import json
 
-        self._raw_filters = json.dumps(filters)
+        self._raw_filters = json.dumps(to_json_compatible(filters))
 
     def _set_vector_search(
         self,
@@ -214,7 +235,7 @@ class _BaseQueryBuilder(BaseModule):
             body["hybrid"] = hybrid
 
         raw = json.loads(self._raw_filters) if self._raw_filters else None
-        filters = combine_query_filters(self._filters, raw)
+        filters = combine_query_filters(self._query_filters(), raw)
         if filters:
             body["filters"] = filters
         if self._ordering_parts:
@@ -241,7 +262,7 @@ class _BaseQueryBuilder(BaseModule):
             body["include"] = self._include
         if self._depth is not None:
             body["depth"] = self._depth
-        return body
+        return to_json_compatible(body)
 
     def build_params(self) -> dict[str, Any]:
         """Build query parameters for API request."""
@@ -265,7 +286,7 @@ class _BaseQueryBuilder(BaseModule):
                 params.setdefault("relationship_type", []).append(rel_type)
 
         # The platform ANDs a filter tree with flat filters, so send both.
-        params.update(self._filters)
+        params.update(self._legacy_filters())
         if self._raw_filters:
             params["filters"] = self._raw_filters
 
@@ -544,7 +565,7 @@ class AsyncQueryBuilder(_BaseQueryBuilder):
             # A filter tree travels under "filters", as it does on list requests.
             import json
 
-            conditions: dict[str, Any] = dict(self._filters)
+            conditions: dict[str, Any] = self._legacy_filters()
             if self._raw_filters:
                 conditions["filters"] = self._raw_filters
             if not conditions:

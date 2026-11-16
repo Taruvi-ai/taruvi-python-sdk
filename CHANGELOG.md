@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4b3] - 2026-11-16
+
+### Fixed
+- Vector-query POST filters preserve list and tuple values as JSON arrays, including range bounds and list elements containing commas. GET and filtered-delete requests keep their legacy encoding.
+- UUID, date and datetime values serialize in simple and nested query filters. Datetime offsets and JSON scalar types are preserved in both sync and async clients.
+
 ## [0.2.4b2] - 2026-11-03
 
 ### Fixed

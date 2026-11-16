@@ -11,6 +11,15 @@ These utilities are used internally across SDK modules to:
 from typing import Any, Optional
 from urllib.parse import urlencode
 
+from pydantic import TypeAdapter
+
+_JSON_VALUE_ADAPTER = TypeAdapter(Any)
+
+
+def to_json_compatible(value: Any) -> Any:
+    """Serialize query values without coercing JSON scalar types."""
+    return _JSON_VALUE_ADAPTER.dump_python(value, mode="json")
+
 
 def build_query_string(
     params: Optional[dict[str, Any]], *, skip_none: bool = True, skip_empty: bool = True
@@ -199,4 +208,5 @@ __all__ = [
     "build_query_string",
     "combine_query_filters",
     "safe_get_nested",
+    "to_json_compatible",
 ]
