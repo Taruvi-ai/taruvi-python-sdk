@@ -139,7 +139,9 @@ def test_simple_filter_and_crud_list_are_both_sent():
 
 def test_record_vector_search_stays_on_the_record_route():
     client = _client()
-    QueryBuilder(client, "document_chunks").get(1).vector_search("embedding", [0.1], topk=1).execute()
+    QueryBuilder(client, "document_chunks").get(1).vector_search(
+        "embedding", [0.1], topk=1
+    ).execute()
 
     client._http_client.post.assert_not_called()
     assert client._http_client.get.call_args.args[0].endswith("/data/1/")
@@ -163,7 +165,9 @@ async def test_async_simple_filter_and_crud_list_are_both_sent():
 @pytest.mark.asyncio
 async def test_async_record_vector_search_stays_on_the_record_route():
     client = _client(async_http=True)
-    await AsyncQueryBuilder(client, "document_chunks").get(1).vector_search("embedding", [0.1], topk=1).execute()
+    await AsyncQueryBuilder(client, "document_chunks").get(1).vector_search(
+        "embedding", [0.1], topk=1
+    ).execute()
 
     client._http_client.post.assert_not_called()
     assert client._http_client.get.call_args.args[0].endswith("/data/1/")
